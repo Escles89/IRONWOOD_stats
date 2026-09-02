@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ironwood RPG - Status Page
 // @namespace    https://github.com/pverbeek/IRONWOOD_stats
-// @version      1.1.2
+// @version      1.11.1
 // @description  Adds a cached live status dashboard and optional task automation to Ironwood RPG.
 // @author       pverbeek
 // @license      Copyright pverbeek
@@ -16,6 +16,7 @@
   'use strict';
   const PAGE_ID = 'iw-stats-page';
   const NAV_ID = 'iw-stats-nav';
+  const MULTIPLAYER_ID = 'iw-multiplayer-control';
   const STYLE_ID = 'iw-stats-style';
   const STATS_PATH = '/status';
   const LEGACY_STATS_PATH = '/stats';
@@ -51,13 +52,13 @@
 
   function formatDuration(seconds) {
     if (!Number.isFinite(seconds) || seconds < 0) return 'Calculating…';
-    if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
-    const total = Math.ceil(seconds);
-    const hours = Math.floor(total / 3600);
-    const minutes = Math.floor((total % 3600) / 60);
-    const secs = total % 60;
-    return [hours && `${hours}h`, minutes && `${minutes}m`, `${secs}s`].filter(Boolean).join(' ');
+    const totalMinutes = Math.ceil(seconds / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return [hours && `${hours}h`, (minutes || !hours) && `${minutes}m`].filter(Boolean).join(' ');
   }
+
+  const withoutSeconds = (value) => clean(String(value || '').replace(/\s*\d+(?:\.\d+)?s\b/gi, ' '));
 
   function findCard(title) {
     return [...document.querySelectorAll('skill-page .card')].find((card) =>
@@ -83,16 +84,22 @@
   }
 
   function readCurrentAction() {
-    const card = document.querySelector('skill-page action-component > .card');
+    const standardCard = document.querySelector('skill-page action-component > .card');
+    const combatCard = document.querySelector('skill-page combat-component .interface.monster')
+      || document.querySelector('skill-page combat-component > .card');
+    const card = standardCard || combatCard;
     if (!card) return null;
-    const fill = card.querySelector(':scope > .bars .fill');
+    const isCombat = Boolean(combatCard && card === combatCard);
+    const fill = isCombat
+      ? card.querySelector(':scope > .bars .progress-bar .fill')
+      : card.querySelector(':scope > .bars .fill');
     // Ironwood keeps the selected action card mounted while idle. The live
     // progress bars only exist after an action has actually been started.
-    if (!fill) return null;
+    if (!fill && !isCombat) return null;
     const match = location.pathname.match(/\/skill\/(\d+)\/action\/(\d+)/)
       || previousUrl.match(/\/skill\/(\d+)\/action\/(\d+)/);
     const locationButton = [...document.querySelectorAll('skill-page button.filter')]
-      .find((button) => button.disabled && /^(Village|Outskirts)$/.test(clean(button.textContent)));
+      .find((button) => button.disabled && /^(Village|Outskirts|Forest|Mountain|Ocean)$/.test(clean(button.textContent)));
     const tracker = document.querySelector('skill-page tracker-component .skill');
     const skillName = clean(tracker?.querySelector('.header .name')?.textContent);
     const skillLevel = clean(tracker?.querySelector('.header .level')?.textContent);
@@ -110,13 +117,18 @@
       estimatesTab?.click();
     }
     const xpPerHour = numberFrom(xpHourRow?.children[1]?.textContent || xpHourRow?.textContent);
+    const combatTranslate = fill?.style.transform?.match(/translateX\((-?[\d.]+)%\)/i);
+    const actionProgress = isCombat && combatTranslate
+      ? Math.max(0, Math.min(100, 100 + Number(combatTranslate[1])))
+      : fill ? Math.max(0, Math.min(100, parseFloat(fill.style.width) || 0)) : null;
     return {
       name: clean(card.querySelector(':scope > .header > .name')?.textContent) || 'Current action',
-      level: clean(card.querySelector(':scope > .header > .level')?.textContent),
+      level: clean(card.querySelector(':scope > .header > .level, :scope > .details > .level')?.textContent),
       image: card.querySelector(':scope > .body img')?.src || '',
-      progress: fill ? Math.max(0, Math.min(100, parseFloat(fill.style.width) || 0)) : null,
+      progress: actionProgress,
       actionId: match?.[2] || '',
       location: clean(locationButton?.textContent) || 'Unknown',
+      isCombat,
       skillName,
       skillLevel,
       skillProgress: Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, progressPercent)) : null,
@@ -147,14 +159,39 @@
     })).filter((item) => item.name);
   }
 
-  function readFinishedEstimate() {
-    const label = [...document.querySelectorAll('skill-page .row > .name')]
-      .find((element) => clean(element.textContent) === 'Finished');
-    const row = label?.closest('.row');
-    if (!row) return '';
-    const value = [...row.children].map((child) => clean(child.textContent))
-      .filter((part) => part && part !== 'Finished').join(' ');
-    return /NaN|Infinity/i.test(value) ? '' : value;
+  function readMaterials() {
+    const card = findCard('Materials');
+    if (!card) return [];
+    return [...card.querySelectorAll(':scope > .row')].map((row) => {
+      const amountText = clean(row.querySelector(':scope > .amount, :scope > .value')?.textContent);
+      const pair = amountText.match(/([\d,.]+\s*[KMB]?)\s*\/\s*([\d,.]+\s*[KMB]?)/i);
+      return {
+        name: clean(row.querySelector(':scope > .name')?.textContent),
+        image: row.querySelector(':scope > .image img')?.src || '',
+        available: pair ? parseCompact(pair[1]) : parseCompact(amountText)
+      };
+    }).filter((item) => item.name);
+  }
+
+  function readMastery() {
+    const row = [...document.querySelectorAll('skill-page .row')]
+      .find((item) => clean(item.querySelector(':scope > .name')?.textContent) === 'Mastery');
+    const value = clean(row?.querySelector(':scope > .value, :scope > .amount')?.textContent);
+    const pair = value.match(/([\d,.]+\s*[KMB]?)\s*\/\s*([\d,.]+\s*[KMB]?)/i);
+    const current = pair ? parseCompact(pair[1]) : 0;
+    const cap = pair ? parseCompact(pair[2]) : 0;
+    return { current, cap };
+  }
+
+  function readFiniteQueue() {
+    const lootCard = findCard('Loot');
+    const header = lootCard?.querySelector(':scope > .header');
+    const time = [...(header?.querySelectorAll(':scope > .time > *') || [])]
+      .map((part) => clean(part.textContent)).filter(Boolean).join(' ');
+    const amount = clean(header?.querySelector(':scope > .amount')?.textContent);
+    const pair = amount.match(/([\d,.]+)\s*\/\s*([\d,.]+)/);
+    if (!time || !pair) return null;
+    return { time: formatDuration(durationMs(time) / 1000), completed: numberFrom(pair[1]), total: numberFrom(pair[2]) };
   }
 
   // Ironwood's daily boundary is 02:00 CET, i.e. 01:00 UTC year-round.
@@ -172,12 +209,16 @@
   const CHALLENGE_PREFS_KEY = 'iw-stats-challenge-prefs';
   const AUTOMATION_KEY = 'iw-stats-automation-enabled';
   const CACHE_LOOKUPS_KEY = 'iw-stats-cache-lookups-enabled';
+  const PLAYER_NAME_KEY = 'iw-stats-player-name-v2';
   const CHALLENGE_SKILLS = {
     Forest: ['Woodcutting', 'Farming', 'Alchemy', 'Exploring', 'Ranged', 'Defense'],
     Mountain: ['Mining', 'Smelting', 'Smithing', 'Delving', 'One-handed', 'Defense'],
     Ocean: ['Fishing', 'Cooking', 'Enchanting', 'Imbuing', 'Two-handed', 'Defense']
   };
-  const TTL = { quests: 26 * 3600000, inventory: 3600000, equipped: Number.POSITIVE_INFINITY, adventure: 26 * 3600000, challenges: 26 * 3600000, taming: 3600000, automations: 24 * 3600000, attunement: 4 * 3600000, guildEvent: 24 * 3600000, guildTrial: 24 * 3600000 };
+  const GATHERING_SKILLS = new Set(['Woodcutting', 'Mining', 'Farming', 'Fishing', 'Delving', 'Exploring']);
+  const CRAFTING_SKILLS = new Set(['Smelting', 'Smithing', 'Enchanting', 'Alchemy', 'Cooking', 'Imbuing']);
+  const COMBAT_SKILLS = new Set(['One-handed', 'Two-handed', 'Ranged', 'Defense']);
+  const TTL = { quests: 26 * 3600000, inventory: 3600000, equipped: Number.POSITIVE_INFINITY, adventure: 26 * 3600000, challenges: 26 * 3600000, taming: 3600000, automations: 24 * 3600000, attunement: 4 * 3600000, mastery: Number.POSITIVE_INFINITY, guildEvent: 24 * 3600000, guildTrial: 24 * 3600000 };
   let syncing = false;
 
   function getCache() {
@@ -222,18 +263,19 @@
   }
   function isStale(key) {
     const entry = getCache()[key];
-    const incompleteAdventure = key === 'adventure' && entry && (entry.schema !== 8 || [
+    const incompleteAdventure = key === 'adventure' && entry && (entry.schema !== 10 || [
       entry.researchPoints, entry.mapCost, entry.dailyMapsCreated,
       entry.dailyMapsLimit, entry.mapsStored, entry.mapStorageLimit
     ].some((value) => typeof value !== 'number' || !Number.isFinite(value)));
-    const incompleteGuildEvent = key === 'guildEvent' && entry?.schema !== 4;
-    const incompleteGuildTrial = key === 'guildTrial' && entry?.schema !== 2;
+    const incompleteGuildEvent = key === 'guildEvent' && entry?.schema !== 7;
+    const incompleteGuildTrial = key === 'guildTrial' && entry?.schema !== 3;
     const incompleteQuests = key === 'quests' && (entry?.schema !== 2 || (getPrefs().length === 5 && entry?.day === dayKey() && !entry.dailyComplete));
     const incompleteAttunement = key === 'attunement' && entry?.schema !== 3;
+    const incompleteMastery = key === 'mastery' && entry?.schema !== 1;
     const incompleteChallenges = key === 'challenges' && entry?.schema !== 3;
     const incompleteTaming = key === 'taming' && entry?.schema !== 2;
     const incompleteAutomations = key === 'automations' && entry?.schema !== 3;
-    return !entry || incompleteAdventure || incompleteGuildEvent || incompleteGuildTrial || incompleteQuests || incompleteAttunement || incompleteChallenges || incompleteTaming || incompleteAutomations || (key === 'inventory' && !Array.isArray(entry.allItems)) || (entry.expiresAt ? Date.now() >= entry.expiresAt : Date.now() - entry.checkedAt > TTL[key]) || (key === 'quests' && entry.day !== dayKey());
+    return !entry || incompleteAdventure || incompleteGuildEvent || incompleteGuildTrial || incompleteQuests || incompleteAttunement || incompleteMastery || incompleteChallenges || incompleteTaming || incompleteAutomations || (key === 'inventory' && !Array.isArray(entry.allItems)) || (entry.expiresAt ? Date.now() >= entry.expiresAt : Date.now() - entry.checkedAt > TTL[key]) || (key === 'quests' && entry.day !== dayKey());
   }
   function humanAge(time) {
     if (!time) return 'Never checked';
@@ -252,20 +294,48 @@
   }
   function guildEventDetail(entry) {
     if (!entry) return 'Never checked';
-    const remaining = Number(entry.state === 'Active' ? entry.stateEndsAt : entry.expiresAt) - Date.now();
+    const remaining = Number(entry.state === 'Participating' ? entry.stateEndsAt : entry.expiresAt) - Date.now();
     const countdown = () => {
-      const total = Math.max(0, Math.ceil(remaining / 1000));
-      const days = Math.floor(total / 86400);
-      const hours = Math.floor((total % 86400) / 3600);
-      const minutes = Math.floor((total % 3600) / 60);
-      const seconds = total % 60;
-      return [days && `${days}d`, hours && `${hours}h`, minutes && `${minutes}m`, `${seconds}s`].filter(Boolean).join(' ');
+      return formatDuration(Math.max(0, remaining) / 1000);
     };
     if (remaining > 0 && entry.state === 'Cooldown') return `Ready in ${countdown()}`;
-    if (remaining > 0 && entry.state === 'Active') return `${entry.eventName || 'Guild event'}${Number.isFinite(entry.xpGained) ? ` · ${formatNumber(entry.xpGained)} XP` : ''} · ${countdown()} remaining`;
-    if (entry.state === 'Active') return entry.stateDetail || `${entry.eventName || 'Guild event'} · In progress`;
+    if (remaining > 0 && entry.state === 'Participating') return `${entry.eventName || 'Guild event'} · Participating · ${formatNumber(entry.personalXp || 0)} XP · ${countdown()} remaining`;
+    if (entry.state === 'Participating') return entry.stateDetail || `${entry.eventName || 'Guild event'} · Participating · ${formatNumber(entry.personalXp || 0)} XP`;
     if (entry.state === 'Available') return 'Ready to start';
     return entry.stateDetail || humanAge(entry.checkedAt);
+  }
+  function adventureDetail(entry) {
+    if (!entry) return 'Never checked';
+    const remaining = Number(entry.stateEndsAt) - Date.now();
+    if (entry.state === 'Active' && remaining > 0) return `In progress · ${formatDuration(remaining / 1000)} remaining`;
+    if (entry.state === 'Active') return 'Adventure ending';
+    return withoutSeconds(entry.stateDetail) || humanAge(entry.checkedAt);
+  }
+  function guildEventIncludesSkill(eventName, skillName) {
+    if (!skillName) return false;
+    const group = /gathering/i.test(eventName) ? GATHERING_SKILLS
+      : /crafting/i.test(eventName) ? CRAFTING_SKILLS
+      : /combat/i.test(eventName) ? COMBAT_SKILLS
+      : null;
+    return Boolean(group?.has(skillName));
+  }
+  function guildTrialDetail(entry) {
+    if (!entry) return 'Never checked';
+    const remaining = Number(entry.stateEndsAt) - Date.now();
+    if (entry.state === 'Active' && remaining > 0) return `${entry.activeName || 'Participating'} · ${formatDuration(remaining / 1000)} remaining`;
+    if (entry.state === 'Active') return entry.stateDetail || 'Trial participation active';
+    return withoutSeconds(entry.stateDetail) || humanAge(entry.checkedAt);
+  }
+  function playerName() {
+    const live = clean(document.querySelector('combat-component .interface.player .name')?.textContent);
+    if (live) localStorage.setItem(PLAYER_NAME_KEY, live);
+    return live || clean(localStorage.getItem(PLAYER_NAME_KEY));
+  }
+  function collectPlayerName(doc) {
+    const element = doc.querySelector('profile-page profile-card-component .name');
+    const name = clean(element?.childNodes?.[0]?.textContent || element?.textContent);
+    if (name) localStorage.setItem(PLAYER_NAME_KEY, name);
+    return name;
   }
   function titleFromSlug(slug) {
     return slug.replace(/^potion-divine-/, '').split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ');
@@ -413,7 +483,8 @@
     const menu = cards.find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Menu');
     const adventureRow = [...(menu?.querySelectorAll(':scope > button.row') || [])].find((row) => clean(row.querySelector('.name')?.textContent) === 'Adventure');
     const storageRow = [...(menu?.querySelectorAll(':scope > button.row') || [])].find((row) => clean(row.querySelector('.name')?.textContent) === 'Storage');
-    const stateText = clean(adventureRow?.querySelector('.event-icon, .amount')?.textContent) || 'Unknown';
+    const rawStateText = clean(adventureRow?.querySelector('.event-icon, .amount')?.textContent) || 'Unknown';
+    const stateText = withoutSeconds(rawStateText);
     const allRows = [...root.querySelectorAll('.row')];
     const researchRow = [...(createCard?.querySelectorAll('.row') || [])]
       .find((row) => clean(row.querySelector('.name')?.textContent) === 'Research Points');
@@ -424,9 +495,10 @@
         values[name] = clean([...row.children].filter((child) => !child.classList.contains('name')).map((child) => child.textContent).join(' '));
       }
     });
-    const active = !/^(Idle|Cooldown|Unknown)/i.test(stateText);
     const cooldown = /Cooldown/i.test(stateText);
-    const resetText = cooldown ? (values['Weekly Limit Reset'] || values['Daily Limit Reset']) : '';
+    const activeDuration = durationMs(rawStateText);
+    const active = !cooldown && activeDuration > 0;
+    const resetText = cooldown ? withoutSeconds(values['Weekly Limit Reset'] || values['Daily Limit Reset']) : '';
     const pair = (text) => {
       const match = clean(text).match(/([\d,.]+\s*[KMB]?)\s*\/\s*([\d,.]+\s*[KMB]?)/i);
       if (!match) return { current: null, max: null };
@@ -436,9 +508,10 @@
     const dailyMaps = pair(values['Daily Map Limit']);
     const storage = pair(storageRow?.querySelector('.amount')?.textContent);
     const data = {
-      schema: 8,
+      schema: 10,
       state: active ? 'Active' : cooldown ? 'Cooldown' : stateText,
-      stateDetail: active ? stateText : cooldown ? `Ready in ${resetText}` : 'No adventure running',
+      stateDetail: active ? 'In progress' : cooldown ? `Ready in ${resetText}` : 'No adventure running',
+      stateEndsAt: activeDuration ? Date.now() + activeDuration : null,
       dailyLimit: values['Daily Map Limit'] || '', weeklyLimit: values['Weekly Adventure Limit'] || '',
       dailyReset: values['Daily Limit Reset'] || '', weeklyReset: values['Weekly Limit Reset'] || '',
       researchPoints: research.current, mapCost: research.max,
@@ -446,7 +519,7 @@
       mapsStored: storage.current, mapStorageLimit: storage.max,
       mapsComplete: dailyMaps.max > 0 && dailyMaps.current >= dailyMaps.max,
       mapAutomation: getCache().adventure?.mapAutomation || null,
-      expiresAt: nextDailyReset()
+      expiresAt: active ? Date.now() + Math.min(activeDuration || 4 * 3600000, 4 * 3600000) : nextDailyReset()
     };
     setCache('adventure', data);
     return data;
@@ -480,6 +553,7 @@
 
   async function refreshChallengesSnapshot(force = false) {
     if (!cacheLookupsEnabled()) return;
+    if (getCache().challenges?.scrollsAvailable === 0) return;
     if (!force && !isStale('challenges')) return;
     if (refreshingChallenges) return;
     refreshingChallenges = true;
@@ -1000,11 +1074,10 @@
   function collectGuildEvent(doc) {
     const root = doc.querySelector('guild-page');
     const cards = [...root.querySelectorAll('.card')];
-    const eventsCard = cards.find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Events');
-    const eventName = clean(eventsCard?.querySelector(':scope > .row.row-active .name')?.textContent) || 'Guild Event';
+    const eventCard = cards.find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Event');
+    const participantsCard = cards.find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Participants');
     const rows = [...root.querySelectorAll('.row')];
     const cooldownRow = rows.find((row) => clean(row.querySelector('.name')?.textContent) === 'Event Cooldown');
-    const endRow = rows.find((row) => /Event (Ends|Remaining)|End Date/i.test(clean(row.querySelector('.name')?.textContent)));
     const rowValue = (row) => {
       if (!row) return '';
       const label = clean(row.querySelector('.name')?.textContent);
@@ -1012,24 +1085,49 @@
       return explicit || clean(row.textContent).replace(label, '').trim();
     };
     const cooldownText = rowValue(cooldownRow);
-    const remainingText = rowValue(endRow);
-    const xpRow = rows.find((row) => /^(Event )?(XP|Experience)( Gained)?$/i.test(clean(row.querySelector('.name')?.textContent)));
-    const xpGained = xpRow ? numberFrom(rowValue(xpRow)) : null;
+    const eventRow = [...(eventCard?.querySelectorAll(':scope > .row') || [])]
+      .find((row) => !/^(Guild Event XP|Guild Credits)$/.test(clean(row.querySelector('.name')?.textContent)));
+    const eventName = clean(eventRow?.querySelector(':scope > .name')?.textContent) || 'Guild Event';
+    const eventRemainingText = clean(eventRow?.querySelector(':scope > .date')?.textContent);
+    const eventXpRow = [...(eventCard?.querySelectorAll(':scope > .row') || [])]
+      .find((row) => clean(row.querySelector(':scope > .name')?.textContent) === 'Guild Event XP');
+    const eventXpMatch = rowValue(eventXpRow).match(/([\d,.]+)\s*\/\s*([\d,.]+)/);
+    const participantRows = [...(participantsCard?.querySelectorAll('button.row, .row') || [])]
+      .filter((row) => row.querySelector(':scope > .name') && row.querySelector(':scope > .amount'));
+    const ownName = playerName();
+    let ownRow = participantRows.find((row) => clean(row.querySelector(':scope > .name')?.textContent) === ownName);
+    const personalXp = ownRow ? numberFrom(ownRow.querySelector(':scope > .amount')?.textContent) : null;
+    const participationRemaining = clean(ownRow?.querySelector(':scope > .time')?.textContent);
     const cooldown = Boolean(cooldownRow && cooldownText);
-    const active = !cooldown && Boolean(endRow || /Participating|Participation|Event Progress/i.test(clean(root.textContent)));
-    const timerText = cooldown ? cooldownText : remainingText;
+    const participating = !cooldown && Boolean(ownRow);
+    const timerText = cooldown ? cooldownText : participating ? participationRemaining : eventRemainingText;
     const timer = durationMs(timerText);
     const readableTimer = timer ? formatDuration(timer / 1000) : timerText;
-    const expiresAt = active
+    const expiresAt = participating
       ? Date.now() + Math.min(timer || 3600000, 3600000)
       : Date.now() + (timer || TTL.guildEvent);
-    const xpDetail = Number.isFinite(xpGained) ? ` · ${formatNumber(xpGained)} XP` : '';
     setCache('guildEvent', {
-      schema: 4,
-      state: active ? 'Active' : cooldown ? 'Cooldown' : 'Available', eventName,
-      stateDetail: active ? `${eventName}${xpDetail} · ${readableTimer || 'In progress'}` : cooldown ? `Ready in ${readableTimer}` : 'Ready to start',
-      xpGained, remaining: timerText, stateEndsAt: timer ? Date.now() + timer : null, expiresAt
+      schema: 7,
+      state: participating ? 'Participating' : cooldown ? 'Cooldown' : 'Available', eventName,
+      stateDetail: participating ? `${eventName} · Participating · ${formatNumber(personalXp || 0)} XP · ${readableTimer || 'In progress'}` : cooldown ? `Ready in ${readableTimer}` : 'Ready to participate',
+      playerName: ownName || '', personalXp,
+      eventXp: eventXpMatch ? numberFrom(eventXpMatch[1]) : null,
+      eventXpGoal: eventXpMatch ? numberFrom(eventXpMatch[2]) : null,
+      remaining: timerText, stateEndsAt: timer ? Date.now() + timer : null, expiresAt
     });
+  }
+  function collectMastery(doc) {
+    const root = doc.querySelector('mastery-page');
+    const skillsCard = [...(root?.querySelectorAll('.card') || [])]
+      .find((card) => [...card.querySelectorAll(':scope > .row .name')]
+        .some((name) => clean(name.textContent) === 'Woodcutting'));
+    const completeSkills = [...(skillsCard?.querySelectorAll(':scope > .row') || [])]
+      .filter((row) => clean(row.textContent).endsWith('Complete'))
+      .map((row) => clean(row.querySelector(':scope > .name')?.textContent))
+      .filter(Boolean);
+    const data = { schema: 1, completeSkills };
+    setCache('mastery', data);
+    return data;
   }
   function collectGuildTrial(doc) {
     const root = doc.querySelector('guild-page');
@@ -1041,7 +1139,7 @@
     const joinableRows = rows.filter((row) => !row.disabled && row.querySelector('.plus'));
     const endRow = [...(summary?.querySelectorAll(':scope > .row') || [])]
       .find((row) => clean(row.querySelector('.name')?.textContent) === 'End Date');
-    const endText = endRow ? clean(endRow.textContent).replace('End Date', '').trim() : '';
+    const endText = endRow ? withoutSeconds(clean(endRow.textContent).replace('End Date', '').trim()) : '';
     const completedRow = [...(summary?.querySelectorAll(':scope > .row') || [])]
       .find((row) => clean(row.querySelector('.name')?.textContent) === 'Trials Completed');
     const completedMatch = clean(completedRow?.textContent).match(/(\d+)\s*\/\s*(\d+)/);
@@ -1061,13 +1159,41 @@
     const expiresAt = state === 'Active'
       ? Date.now() + Math.min(timer || 3600000, 3600000)
       : Date.now() + (timer || TTL.guildTrial);
-    setCache('guildTrial', { schema: 2, state, stateDetail: detail, available: joinableRows.length, expiresAt });
+    setCache('guildTrial', {
+      schema: 3, state, stateDetail: detail, activeName, available: joinableRows.length,
+      stateEndsAt: state === 'Active' && timer ? Date.now() + timer : null, expiresAt
+    });
   }
   async function syncStale(force = false) {
     if (!cacheLookupsEnabled()) return;
     if (syncing) return;
     syncing = true;
     try {
+      // Resolve the signed-in character and guild participation first so the
+      // visible Status row does not wait behind every other stale cache.
+      if ((force || isStale('guildEvent')) && !playerName()) {
+        await withPage('/profile', 'profile-page profile-card-component .column > .name', (doc) => collectPlayerName(doc));
+      }
+      if (force || isStale('guildEvent')) await withPage('/guild', 'guild-page', async (doc) => {
+        const menuStarted = Date.now();
+        let button = null;
+        while (Date.now() - menuStarted < 8000 && !button) {
+          button = [...doc.querySelectorAll('guild-page button')].find((el) => clean(el.textContent).startsWith('Events'));
+          if (!button) await wait(200);
+        }
+        button?.click();
+        const eventStarted = Date.now();
+        const expectedName = playerName();
+        while (Date.now() - eventStarted < 8000) {
+          const participants = [...doc.querySelectorAll('guild-page .card')]
+            .find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Participants');
+          const playerRendered = [...(participants?.querySelectorAll('button.row, .row') || [])]
+            .some((row) => clean(row.querySelector(':scope > .name')?.textContent) === expectedName);
+          if (participants && (!expectedName || playerRendered)) break;
+          await wait(200);
+        }
+        collectGuildEvent(doc);
+      });
       if (force || isStale('quests')) {
         if (automationEnabled()) { automationTask = 'quests'; lastSignature = ''; render(); }
         try { await withPage('/quests', 'quests-page', automationEnabled() ? completeSelectedQuests : collectQuests); }
@@ -1095,7 +1221,7 @@
           else collectAdventure(doc);
         }); } finally { automationTask = ''; lastSignature = ''; render(); }
       }
-      if (force || isStale('challenges')) await withPage('/challenges', 'challenges-page', async (doc) => {
+      if ((force || isStale('challenges')) && getCache().challenges?.scrollsAvailable !== 0) await withPage('/challenges', 'challenges-page', async (doc) => {
         const started = Date.now();
         while (Date.now() - started < 6000 && ![...doc.querySelectorAll('challenges-page .row .name')]
           .some((element) => clean(element.textContent) === 'Challenge Scroll')) await wait(100);
@@ -1104,17 +1230,7 @@
       if (force || isStale('taming')) await withPage('/skill/15', 'taming-page', collectTaming);
       if (force || isStale('automations')) await refreshAutomationsSnapshot(force);
       if (force || isStale('attunement')) await withPage('/attunement', 'attunement-page', collectAttunement);
-      if (force || isStale('guildEvent')) await withPage('/guild', 'guild-page', async (doc) => {
-        const menuStarted = Date.now();
-        let button = null;
-        while (Date.now() - menuStarted < 8000 && !button) {
-          button = [...doc.querySelectorAll('guild-page button')].find((el) => clean(el.textContent) === 'Events');
-          if (!button) await wait(200);
-        }
-        button?.click();
-        await wait(2500);
-        collectGuildEvent(doc);
-      });
+      if (force || isStale('mastery')) await withPage('/mastery', 'mastery-page', collectMastery);
       if (force || isStale('guildTrial')) await withPage('/guild', 'guild-page', async (doc) => {
         const button = [...doc.querySelectorAll('guild-page button')].find((el) => clean(el.textContent).startsWith('Trials'));
         button?.click();
@@ -1126,7 +1242,7 @@
     finally { syncing = false; lastSignature = ''; render(); }
   }
 
-  function updateLiveValues(action, loot, consumables) {
+  function updateLiveValues(action, loot, consumables, materials, masteryProgress) {
     if (!page) return;
     const text = (selector, value) => { const element = page.querySelector(selector); if (element && element.textContent !== String(value)) element.textContent = value; };
     if (action) {
@@ -1138,10 +1254,18 @@
       text('[data-live-xp-hour]', action.xpPerHour ? `${formatCompact(action.xpPerHour)} XP/h` : '—');
     }
     text('[data-live-loot-total]', `${formatNumber(loot.reduce((sum, item) => sum + item.amount, 0))} items waiting`);
+    text('[data-live-queue-loot]', formatCompact(loot.reduce((sum, item) => sum + item.amount, 0)));
     loot.forEach((item, index) => text(`[data-live-loot="${index}"]`, formatNumber(item.amount)));
     consumables.forEach((item, index) => {
-      text(`[data-live-consumable-amount="${index}"]`, item.amount);
+      const storedOnly = /stardust|mastery contract/i.test(item.name);
+      text(`[data-live-consumable-${storedOnly ? 'stored' : 'equipped'}="${index}"]`, formatNumber(parseCompact(item.amount)));
     });
+    const liveMasteryContract = consumables.find((item) => /mastery contract/i.test(item.name));
+    if (liveMasteryContract) text('[data-live-mastery-contract]', formatNumber(parseCompact(liveMasteryContract.amount)));
+    materials.forEach((item, index) => {
+      text(`[data-live-material-available="${index}"]`, formatNumber(item.available));
+    });
+    text('[data-live-mastery-progress]', masteryProgress.cap ? `${formatCompact(masteryProgress.current)} / ${formatCompact(masteryProgress.cap)}` : '—');
     const automationCache = getCache().automations;
     (automationCache?.structures || []).forEach((item, index) => {
       const projected = projectedAutomation(item, automationCache.checkedAt);
@@ -1149,6 +1273,8 @@
       text(`[data-live-automation-queue="${index}"]`, projected.queuedTotal ? formatNumber(Math.max(0, projected.queuedTotal - projected.queuedDone)) : '0');
     });
     text('[data-live-guild-event-detail]', guildEventDetail(getCache().guildEvent));
+    text('[data-live-adventure-detail]', adventureDetail(getCache().adventure));
+    text('[data-live-guild-trial-detail]', guildTrialDetail(getCache().guildTrial));
   }
 
   async function collectLootAndContinue() {
@@ -1195,11 +1321,34 @@
     const action = readCurrentAction();
     const loot = readLoot().sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
     const consumables = readConsumables();
-    const finished = readFinishedEstimate();
+    const materials = readMaterials();
+    const masteryProgress = readMastery();
+    const finiteQueue = readFiniteQueue();
+    const queueRemainingMs = finiteQueue ? durationMs(finiteQueue.time) : 0;
+    const queueWarning = queueRemainingMs > 0 && queueRemainingMs < 3600000
+      ? (queueRemainingMs < 600000 ? 'urgent' : 'warning') : '';
+    const lowMaterials = materials
+      .filter((item) => Number.isFinite(item.available) && item.available < 1000)
+      .sort((a, b) => a.available - b.available);
+    const materialWarning = lowMaterials.length ? (lowMaterials[0].available < 500 ? 'urgent' : 'warning') : '';
+    const materialWarningText = lowMaterials.length
+      ? `Material${lowMaterials.length > 1 ? 's' : ''} low: ${lowMaterials.map((item) => `${item.name} ${formatNumber(item.available)}`).join(', ')}`
+      : '';
     const cache = getCache();
+    const adventureActive = cache.adventure?.state === 'Active'
+      && (!cache.adventure.stateEndsAt || cache.adventure.stateEndsAt > Date.now());
+    const guildParticipationActive = cache.guildEvent?.state === 'Participating'
+      && (!cache.guildEvent.stateEndsAt || cache.guildEvent.stateEndsAt > Date.now());
+    const guildEventActionActive = guildParticipationActive
+      && guildEventIncludesSkill(cache.guildEvent?.eventName, action?.skillName);
+    const guildTrialActive = cache.guildTrial?.state === 'Active'
+      && (!cache.guildTrial.stateEndsAt || cache.guildTrial.stateEndsAt > Date.now());
     const prefs = getPrefs();
     const automationOn = automationEnabled();
     const cacheLookupsOn = cacheLookupsEnabled();
+    const masteryAchieved = (cache.mastery?.completeSkills || []).includes(action?.skillName);
+    const gatheringSkill = GATHERING_SKILLS.has(action?.skillName);
+    const craftingSkill = CRAFTING_SKILLS.has(action?.skillName);
     const automationRows = (cache.automations?.structures || [])
       .map((item) => projectedAutomation(item, cache.automations?.checkedAt));
     const questSkills = [...new Map((cache.quests?.quests || [])
@@ -1207,15 +1356,26 @@
       .map((quest) => [quest.skill, { name: quest.skill, image: skillIcon(quest.skill), done: quest.done }])).values()];
     const challengePrefs = getChallengePrefs();
     const dailyQuestComplete = (cache.quests?.completed || 0) >= 5 || cache.quests?.dailyComplete === true;
-    const adventureStatus = cache.adventure?.state === 'Active' ? 'Active' : cache.adventure?.mapsComplete ? 'Complete' : cache.adventure?.state || 'Unknown';
+    const adventureStatus = adventureActive ? 'Active' : cache.adventure?.mapsComplete ? 'Complete' : cache.adventure?.state || 'Unknown';
+    const adventureIdleAvailable = cache.adventure?.state === 'Idle' && Number(cache.adventure?.mapsStored) > 0;
     const taskIndicator = (task, complete, fallback, fallbackClass = '') => automationTask === task
       ? '<span class="iw-task-icon running" title="Automation running" aria-label="Automation running"><svg class="iw-spin" viewBox="0 0 24 24" aria-hidden="true"><circle class="iw-spin-track" cx="12" cy="12" r="8"></circle><g class="iw-spin-motion"><path d="M12 4a8 8 0 0 1 7.2 4.5"></path><path d="M19.2 5.7v2.8h-2.8"></path><path d="M12 20a8 8 0 0 1-7.2-4.5"></path><path d="M4.8 18.3v-2.8h2.8"></path></g></svg></span>'
       : complete
         ? '<span class="iw-task-icon done" title="Complete" aria-label="Complete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4 4L19 6.5"></path></svg></span>'
         : `<em class="${fallbackClass}">${escapeHtml(fallback)}</em>`;
+    const adventureIndicator = adventureActive
+      ? '<span class="iw-task-icon participating" title="Adventure in progress" aria-label="Adventure in progress"><svg class="iw-hourglass" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5"></path></svg></span>'
+      : adventureIdleAvailable
+        ? '<span class="iw-task-icon adventure-idle" title="Adventure ready to start" aria-label="Adventure ready to start"><span class="iw-idle-glyph">z<sup>Z</sup></span></span>'
+      : taskIndicator('maps', adventureStatus === 'Complete', adventureStatus);
+    const guildTrialIndicator = guildTrialActive
+      ? '<span class="iw-task-icon participating" title="Guild trial in progress" aria-label="Guild trial in progress"><svg class="iw-hourglass" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5"></path></svg></span>'
+      : `<em class="${['Available', 'Completed'].includes(cache.guildTrial?.state) ? 'complete' : ''}">${escapeHtml(cache.guildTrial?.state || 'Unknown')}</em>`;
     const guildEventIndicator = cache.guildEvent?.state === 'Cooldown'
       ? '<span class="iw-task-icon waiting" title="Guild event cooldown" aria-label="Guild event cooldown"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5"></path></svg></span>'
-      : `<em class="${cache.guildEvent?.state === 'Active' ? 'active' : cache.guildEvent?.state === 'Available' ? 'complete' : ''}">${escapeHtml(cache.guildEvent?.state || 'Unknown')}</em>`;
+      : cache.guildEvent?.state === 'Participating'
+        ? '<span class="iw-task-icon participating" title="Participating in guild event" aria-label="Participating in guild event"><svg class="iw-hourglass" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5"></path></svg></span>'
+        : `<em class="${cache.guildEvent?.state === 'Available' ? 'complete' : ''}">${escapeHtml(cache.guildEvent?.state || 'Unknown')}</em>`;
     const mapRunDetail = cache.adventure?.mapAutomation?.stoppedReason && !cache.adventure?.mapsComplete
       ? cache.adventure.mapAutomation.stoppedReason : '';
     const attunementSkills = (cache.attunement?.selected || []).map((slot) => slot.skill).filter(Boolean);
@@ -1246,8 +1406,7 @@
       : tamingClaimNoticeUntil > Date.now()
         ? '<button class="iw-small-button" disabled>Claimed</button>'
       : `<button class="iw-small-button" data-collect-taming ${automationOn && (cache.taming?.lootAvailable || !Number.isFinite(tamingSnacks)) ? '' : 'disabled'} title="${automationOn ? 'Claim Taming loot' : 'Automation is disabled'}">Claim</button>`;
-    const adventureDetails = [
-      cache.adventure?.stateDetail || humanAge(cache.adventure?.checkedAt),
+    const adventureSupplement = [
       Number.isFinite(cache.adventure?.researchPoints) ? `${formatNumber(cache.adventure.researchPoints)} RP` : '',
       cache.adventure?.dailyMapsLimit ? `Maps ${cache.adventure.dailyMapsCreated}/${cache.adventure.dailyMapsLimit} today` : '',
       mapRunDetail
@@ -1262,6 +1421,35 @@
     }
     const cachedInventory = (Array.isArray(cache.inventory?.items) ? cache.inventory.items : [])
       .filter((item) => item && typeof item.image === 'string' && item.image);
+    const cachedAllItems = Array.isArray(cache.inventory?.allItems) ? cache.inventory.allItems : [];
+    const inventoryByKey = new Map(cachedAllItems.map((item) => [item.key, item]));
+    let consumableRows = consumables.map((item, liveIndex) => {
+      const key = item.image.split('/').pop()?.split('?')[0] || '';
+      const storedItem = inventoryByKey.get(key);
+      const storedOnly = /stardust|mastery contract/i.test(item.name);
+      const masteryContract = /mastery contract/i.test(item.name);
+      return {
+        ...item,
+        liveIndex: masteryContract ? null : liveIndex,
+        storedOnly,
+        masteryContract,
+        equipped: storedOnly ? null : parseCompact(item.amount),
+        stored: storedOnly ? (item.amount ? parseCompact(item.amount) : (storedItem?.amount ?? 0)) : (storedItem?.amount ?? 0)
+      };
+    }).filter((item) => !(gatheringSkill && /stardust/i.test(item.name)));
+    if (masteryAchieved) consumableRows = consumableRows.filter((item) => !item.masteryContract);
+    [
+      ['stardust.png', 'Stardust'],
+      ['contract-mastery.png', 'Mastery Contract']
+    ].forEach(([key, name]) => {
+      const storedItem = inventoryByKey.get(key);
+      if (!storedItem || (key === 'stardust.png' && gatheringSkill) || (key === 'contract-mastery.png' && masteryAchieved) || consumableRows.some((item) => item.image.split('/').pop()?.split('?')[0] === key)) return;
+      consumableRows.push({
+        name, image: storedItem.image || `/assets/items/${key}`, amount: storedItem.amountText,
+        liveIndex: null, storedOnly: true, masteryContract: key === 'contract-mastery.png', equipped: null, stored: storedItem.amount
+      });
+    });
+    consumableRows.sort((a, b) => Number(a.storedOnly) - Number(b.storedOnly));
     const canonicalDivinePotions = [
       ['potion-divine-gather-yield.png', 'Divine Gather Yield Potion'],
       ['potion-divine-preservation.png', 'Divine Multi Craft Potion'],
@@ -1293,55 +1481,68 @@
     const inventoryCounts = new Map((Array.isArray(cache.inventory?.allItems) ? cache.inventory.allItems : [])
       .filter((item) => item?.key).map((item) => [item.key, item]));
     const totalItems = loot.reduce((sum, item) => sum + item.amount, 0);
+    const compactCraftingLoot = Boolean(craftingSkill && finiteQueue);
+    const craftedLoot = loot[0];
+    const craftedInventory = craftedLoot
+      ? inventoryCounts.get(craftedLoot.image.split('/').pop()?.split('?')[0]) : null;
     const signature = JSON.stringify({
       action: action && { name: action.name, level: action.level, image: action.image, actionId: action.actionId, location: action.location, skillName: action.skillName, skillLevel: action.skillLevel },
       loot: loot.map((item) => ({ name: item.name, image: item.image })),
       consumables: consumables.map((item) => ({ name: item.name, image: item.image })),
-      finished, cache, prefs, challengePrefs, automationOn, cacheLookupsOn, questModalOpen, automationTask, tamingClaimNoticeUntil
+      materials: materials.map((item) => ({ name: item.name, image: item.image })),
+      masteryAchieved,
+      finiteQueue, materialWarning, materialWarningText, adventureActive, adventureIdleAvailable, guildEventActionActive, guildTrialActive, cache, prefs, challengePrefs, automationOn, cacheLookupsOn, questModalOpen, automationTask, tamingClaimNoticeUntil
     });
-    if (signature === lastSignature) { updateLiveValues(action, loot, consumables); return; }
+    if (signature === lastSignature) { updateLiveValues(action, loot, consumables, materials, masteryProgress); return; }
     lastSignature = signature;
 
     page.innerHTML = `<div class="iw-stats-grid">
         ${action ? `
         <section class="iw-card iw-action-card">
           <div class="iw-card-header"><span>Current Action</span><span class="iw-action-badges">
-            <span class="iw-location-badge ${action.location === 'Outskirts' ? 'outskirts' : 'village'}" title="${escapeHtml(action.location)}" aria-label="${escapeHtml(action.location)}">${action.location === 'Outskirts' ? '<img src="/assets/misc/combat.png" alt="">' : '<img src="/assets/misc/woodcutting.png" alt="">'}</span>
+            <span class="iw-mastery-badge ${masteryAchieved ? 'achieved' : ''}" title="${escapeHtml(action.skillName || 'Skill')} Mastery ${masteryAchieved ? 'achieved' : 'not achieved'}" aria-label="${escapeHtml(action.skillName || 'Skill')} Mastery ${masteryAchieved ? 'achieved' : 'not achieved'}"><img src="/assets/misc/mastery.png" alt=""></span>
+            ${adventureActive ? '<span class="iw-adventure-badge" title="Adventure in progress" aria-label="Adventure in progress"><img src="/assets/misc/adventure.png" alt=""></span>' : ''}
+            ${guildEventActionActive ? `<span class="iw-guild-event-badge" title="${escapeHtml(cache.guildEvent.eventName)} contribution active" aria-label="${escapeHtml(cache.guildEvent.eventName)} contribution active"><img src="/assets/misc/combat.png" alt=""></span>` : ''}
+            ${guildTrialActive ? '<span class="iw-guild-trial-badge" title="Guild trial in progress" aria-label="Guild trial in progress"><img src="/assets/misc/quests.png" alt=""></span>' : ''}
+            <span class="iw-location-badge ${action.location === 'Outskirts' || action.isCombat ? 'outskirts' : 'village'}" title="${escapeHtml(action.location)}" aria-label="${escapeHtml(action.location)}">${action.location === 'Outskirts' || action.isCombat ? '<img src="/assets/misc/combat.png" alt="">' : '<img src="/assets/misc/woodcutting.png" alt="">'}</span>
             <span class="iw-active-badge" title="Action active" aria-label="Action active"><svg class="iw-spin" viewBox="0 0 24 24" aria-hidden="true"><circle class="iw-spin-track" cx="12" cy="12" r="8"></circle><g class="iw-spin-motion"><path d="M12 4a8 8 0 0 1 7.2 4.5"></path><path d="M19.2 5.7v2.8h-2.8"></path><path d="M12 20a8 8 0 0 1-7.2-4.5"></path><path d="M4.8 18.3v-2.8h2.8"></path></g></svg></span>
+            ${materialWarning ? `<span class="iw-material-warning ${materialWarning}" title="${escapeHtml(materialWarningText)}" aria-label="${escapeHtml(materialWarningText)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 20H3L12 3Z"></path><path d="M12 9v5M12 17h.01"></path></svg></span>` : ''}
+            ${queueWarning ? `<span class="iw-queue-warning ${queueWarning}" title="Queue finishes in ${escapeHtml(finiteQueue.time)}" aria-label="Queue finishes in ${escapeHtml(finiteQueue.time)}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg></span>` : ''}
           </span></div>
           <div class="iw-action-body">
             <div class="iw-action-image">${action.image ? `<img src="${escapeHtml(action.image)}" alt="">` : ''}</div>
             <div class="iw-action-name"><span class="iw-action-title"><strong>${escapeHtml(action.name)}</strong>${action.level ? `<small>(${escapeHtml(action.level.replace(/^Lv\.\s*/i, 'lvl '))})</small>` : ''}</span><span class="iw-action-meta">${action.skillName || action.skillLevel ? `<span>${escapeHtml([action.skillName, action.skillLevel].filter(Boolean).join(' '))}</span>` : ''}<span data-live-xp-hour>${action.xpPerHour ? `${formatCompact(action.xpPerHour)} XP/h` : '—'}</span><span data-live-level-remaining>${Number.isFinite(action.levelRemaining) ? `${action.levelRemaining}% remaining` : '—'}</span></span></div>
+            ${finiteQueue ? `<div class="iw-queue-summary"><span>Finishes in</span><strong>${escapeHtml(finiteQueue.time)}</strong>${compactCraftingLoot ? `<small class="iw-queue-values"><span title="Current loot"><b data-live-queue-loot>${formatCompact(totalItems)}</b> <em>loot</em></span><span title="Total craft queue"><b>${formatCompact(finiteQueue.total)}</b> <em>queued</em></span><span title="Inventory"><b>${escapeHtml(craftedInventory?.amountText || '0')}</b> <em>owned</em></span></small>` : `<small>${formatNumber(finiteQueue.completed)} / ${formatNumber(finiteQueue.total)} actions</small>`}</div>` : ''}
           </div>
           <div class="iw-progress-stack">
             <div class="iw-progress iw-action-progress" title="Current action progress"><div data-live-progress style="width:${action.progress ?? 0}%"></div></div>
             <div class="iw-progress iw-skill-progress" title="${escapeHtml(action.skillName || 'Skill')} level progress"><div data-live-skill-progress style="width:${action.skillProgress ?? 0}%"></div></div>
           </div>
-          ${finished ? `<div class="iw-finished"><span>Queue finishes in</span><strong>${escapeHtml(finished)}</strong></div>` : ''}
+          ${materials.length ? `<div class="iw-subheader">Materials</div><div class="iw-materials"><div class="iw-material-head"><span></span><span>Material</span><span>Available</span></div>${materials.map((item, index) => `<div class="iw-material"><img src="${escapeHtml(item.image)}" alt=""><span>${escapeHtml(item.name)}</span><b data-live-material-available="${index}">${formatNumber(item.available)}</b></div>`).join('')}</div>` : ''}
           <div class="iw-subheader">Consumables</div>
-          <div class="iw-consumables">${consumables.length ? consumables.map((item, index) => `<div class="iw-consumable"><img src="${escapeHtml(item.image)}" alt=""><span>${escapeHtml(item.name)}</span><b data-live-consumable-amount="${index}">${escapeHtml(item.amount)}</b></div>`).join('') : '<div class="iw-muted">No consumables equipped.</div>'}</div>
+          <div class="iw-consumables">${consumableRows.length ? `<div class="iw-consumable-head"><span></span><span>Consumable</span><span>Equipped</span><span>Stored</span></div>${consumableRows.map((item) => `<div class="iw-consumable"><img src="${escapeHtml(item.image)}" alt=""><span class="iw-consumable-name">${escapeHtml(item.name)}${item.masteryContract ? ` <small>· <span data-live-mastery-progress>${masteryProgress.cap ? `${formatCompact(masteryProgress.current)} / ${formatCompact(masteryProgress.cap)}` : '—'}</span></small>` : ''}</span>${item.storedOnly ? '<i></i>' : `<b data-live-consumable-equipped="${item.liveIndex}">${formatNumber(item.equipped || 0)}</b>`}<b class="${item.stored ? '' : 'iw-zero'}" ${item.masteryContract ? 'data-live-mastery-contract' : item.liveIndex === null ? '' : `data-live-consumable-stored="${item.liveIndex}"`}>${formatNumber(item.stored || 0)}</b></div>`).join('')}` : '<div class="iw-muted">No consumables equipped.</div>'}</div>
         </section>` : `
         <section class="iw-card iw-empty iw-action-card"><strong>No action in progress</strong><span>Start an action and its live stats will appear here.</span></section>`}
-        <section class="iw-card iw-loot-card">
+        ${compactCraftingLoot ? '' : `<section class="iw-card iw-loot-card">
           <div class="iw-card-header"><span>Current Loot</span><div class="iw-summary"><span data-live-loot-total>${formatNumber(totalItems)} items waiting</span>${action && loot.length ? `<button class="iw-collect-button" data-collect-loot ${automationOn ? '' : 'disabled'} title="${automationOn ? 'Claim loot and continue' : 'Automation is disabled'}">Claim</button>` : ''}</div></div>
           ${loot.length ? `<div class="iw-data-table iw-loot-table">
             <div class="iw-table-head"><span>Item</span><span>Loot</span><span>Inventory</span></div>${loot.map((item) => `
             <div class="iw-table-row">
               <div class="iw-table-item"><span class="iw-item-image">${item.image ? `<img src="${escapeHtml(item.image)}" alt="">` : ''}</span><span>${escapeHtml(item.name)}</span></div>
               <div class="iw-table-number" data-live-loot="${loot.indexOf(item)}">${formatNumber(item.amount)}</div>
-              <div class="iw-table-number ${inventoryCounts.get(item.image.split('/').pop()?.split('?')[0])?.amount ? '' : 'iw-zero'}">${escapeHtml(inventoryCounts.get(item.image.split('/').pop()?.split('?')[0])?.amountText || '0')}</div>
+              ${item.name === 'Coins' ? '<div class="iw-table-number iw-coin-inventory" aria-label="Not applicable"></div>' : `<div class="iw-table-number ${inventoryCounts.get(item.image.split('/').pop()?.split('?')[0])?.amount ? '' : 'iw-zero'}">${escapeHtml(inventoryCounts.get(item.image.split('/').pop()?.split('?')[0])?.amountText || '0')}</div>`}
             </div>`).join('')}</div>` : '<div class="iw-empty-loot">No loot waiting to be collected.</div>'}
-        </section>
+        </section>`}
         <section class="iw-card iw-activity-card">
           <div class="iw-card-header"><span>Status</span><button class="iw-icon-button iw-preferences-button" data-quest-modal title="Configure daily quests" aria-label="Configure daily quests"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h5m4 0h7M4 12h9m4 0h3M4 18h2m4 0h10"></path><circle cx="11" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="8" cy="18" r="2"></circle></svg></button></div>
           <div class="iw-status-list">
             <div class="iw-status-row iw-status-link" data-route="/challenges" role="link" tabindex="0"><img src="/assets/items/challenge-scroll.png"><span><b>Challenges</b><small>${escapeHtml(challengeDetails)}</small></span>${challengeIndicator}</div>
             <div class="iw-status-row"><img src="/assets/misc/quests.png"><span><b>Daily quests</b><small>${Math.min(cache.quests?.completed || 0, 5)} / 5 completed today${prefs.length === 5 ? ' · next selection ready' : ` · ${prefs.length}/5 selected for next run`}</small></span>${taskIndicator('quests', dailyQuestComplete, 'Pending')}</div>
-            <div class="iw-status-row iw-status-link" data-route="/adventure" role="link" tabindex="0"><img src="/assets/misc/adventure.png"><span><b>Adventure</b><small>${escapeHtml(adventureDetails)}</small></span>${taskIndicator('maps', adventureStatus === 'Complete', adventureStatus, adventureStatus === 'Active' ? 'active' : '')}</div>
+            <div class="iw-status-row iw-status-link" data-route="/adventure" role="link" tabindex="0"><img src="/assets/misc/adventure.png"><span><b>Adventure</b><small><span data-live-adventure-detail>${escapeHtml(adventureDetail(cache.adventure))}</span>${adventureSupplement ? ` · ${escapeHtml(adventureSupplement)}` : ''}</small></span>${adventureIndicator}</div>
             <div class="iw-status-row iw-status-link" data-route="/skill/15" role="link" tabindex="0"><img src="/assets/items/pet-snacks.png"><span><b>Taming</b><small>${escapeHtml(tamingDetails)}</small></span>${tamingIndicator}</div>
             <div class="iw-status-row iw-status-link" data-route="/attunement" role="link" tabindex="0"><img src="/assets/misc/attunement.png"><span><b>Attunement</b><small>${escapeHtml(attunementDetails)}</small></span><button class="iw-small-button" data-collect-attunement ${automationOn && attunementSkills.length ? '' : 'disabled'} title="${automationOn ? 'Claim all Attunement loot' : 'Automation is disabled'}">Claim</button></div>
             <div class="iw-status-row iw-status-link" data-route="/guild" role="link" tabindex="0"><img src="/assets/misc/combat.png"><span><b>Guild event</b><small data-live-guild-event-detail>${escapeHtml(guildEventDetail(cache.guildEvent))}</small></span>${guildEventIndicator}</div>
-            <div class="iw-status-row iw-status-link" data-route="/guild" role="link" tabindex="0"><img src="/assets/misc/quests.png"><span><b>Guild trials</b><small>${escapeHtml(cache.guildTrial?.stateDetail || humanAge(cache.guildTrial?.checkedAt))}</small></span><em class="${cache.guildTrial?.state === 'Active' ? 'active' : ['Available','Completed'].includes(cache.guildTrial?.state) ? 'complete' : ''}">${escapeHtml(cache.guildTrial?.state || 'Unknown')}</em></div>
+            <div class="iw-status-row iw-status-link" data-route="/guild" role="link" tabindex="0"><img src="/assets/misc/quests.png"><span><b>Guild trials</b><small data-live-guild-trial-detail>${escapeHtml(guildTrialDetail(cache.guildTrial))}</small></span>${guildTrialIndicator}</div>
           </div>
         </section>
         <section class="iw-card iw-potion-card">
@@ -1372,6 +1573,8 @@
             <div class="iw-card-header"><span>Automation Preferences</span><button class="iw-modal-close" data-modal-close>×</button></div>
             <label class="iw-automation-toggle"><span><b>Enable automation</b><small>${automationOn ? 'Actions may run automatically or from Status buttons.' : 'No game-changing actions will be performed.'}</small></span><input type="checkbox" data-automation-toggle ${automationOn ? 'checked' : ''}><i aria-hidden="true"></i></label>
             <label class="iw-automation-toggle"><span><b>Enable cache lookups</b><small>${cacheLookupsOn ? 'Missing or expired data may be refreshed in background pages.' : 'Only live data and pages you open manually update cached information.'}</small></span><input type="checkbox" data-cache-lookups-toggle ${cacheLookupsOn ? 'checked' : ''}><i aria-hidden="true"></i></label>
+            <div class="iw-modal-section-title">Interface</div>
+            <div class="iw-interface-actions"><button class="iw-small-button" data-open-multiplayer>Multiplayer</button><small>Open Ironwood's multiplayer controls.</small></div>
             <div class="iw-modal-section-title">Daily quests</div>
             <div class="iw-quest-help">Choose exactly five skills. The matching daily action may change, but your skill preferences remain the same.</div>
             <div class="iw-quest-grid">${questSkills.map((skill) => { const checked = prefs.includes(skill.name); return `<label class="${skill.done ? 'done' : ''}"><input type="checkbox" data-quest="${escapeHtml(skill.name)}" ${checked ? 'checked' : ''} ${!checked && prefs.length >= 5 ? 'disabled' : ''}><img src="${escapeHtml(skill.image)}"><span>${escapeHtml(skill.name)}</span><b>${skill.done ? 'Done' : 'Pending'}</b></label>`; }).join('') || '<div class="iw-muted">Open quests once to load the available skills.</div>'}</div>
@@ -1433,12 +1636,12 @@
   }
 
   async function showStatusFromCurrentAction() {
-    const shortcut = document.querySelector('nav-component action-component button.button');
+    const shortcut = document.querySelector('nav-component action-component button.button, nav-component combat-component button.button');
     if (shortcut) {
       shortcut.click();
       const started = Date.now();
       while (Date.now() - started < 5000) {
-        if (document.querySelector('skill-page action-component > .card .bars .fill')) break;
+        if (document.querySelector('skill-page action-component > .card .bars .fill, skill-page combat-component .interface.monster, skill-page combat-component > .card')) break;
         await wait(100);
       }
     }
@@ -1483,6 +1686,35 @@
     inventory.before(navButton);
   }
 
+  function installInterfaceControls() {
+    const multiplayerName = [...document.querySelectorAll('nav-component .row-button > .name')]
+      .find((name) => clean(name.textContent) === 'Multiplayer');
+    const multiplayer = multiplayerName?.closest('.row-button');
+    if (multiplayer) multiplayer.id = MULTIPLAYER_ID;
+
+    document.querySelectorAll('modal-component .modal').forEach((modal) => {
+      const craftableRow = [...modal.querySelectorAll(':scope > .row')]
+        .find((row) => clean(row.querySelector(':scope > span')?.textContent) === 'Craftable');
+      const input = modal.querySelector('form.actions input[name="quantity"], form.actions input[placeholder="Quantity"]');
+      const buttons = modal.querySelector('form.actions > .buttons');
+      const nativeCraft = [...(buttons?.querySelectorAll(':scope > button') || [])]
+        .find((button) => clean(button.textContent) === 'Craft');
+      if (!craftableRow || !input || !buttons || !nativeCraft || buttons.querySelector('[data-craft-all]')) return;
+      const craftable = numberFrom(clean(craftableRow.textContent).replace('Craftable', ''));
+      const craftAll = nativeCraft.cloneNode(false);
+      craftAll.type = 'button';
+      craftAll.className = 'craft iw-craft-all';
+      craftAll.removeAttribute('disabled');
+      craftAll.removeAttribute('style');
+      craftAll.dataset.craftAll = '';
+      craftAll.textContent = 'Craft All';
+      craftAll.disabled = craftable <= 0;
+      craftAll.title = `Craft all ${formatNumber(craftable)}`;
+      buttons.classList.add('iw-craft-buttons');
+      nativeCraft.after(craftAll);
+    });
+  }
+
   function createPage() {
     const wrapper = routeWrapper();
     if (!wrapper || document.getElementById(PAGE_ID)) return;
@@ -1500,6 +1732,17 @@
     if (!/([\d,]+)\s*\/\s*([\d,]+)/.test(researchText)) return;
     lastAdventureCapture = Date.now();
     collectAdventure(document);
+  }
+
+  function captureVisibleQuests() {
+    if (Date.now() - (visibleCaptureTimes.quests || 0) < 2000) return;
+    const root = document.querySelector('quests-page');
+    const names = [...(root?.querySelectorAll('.row .name') || [])].map((element) => clean(element.textContent));
+    const dailyCard = [...(root?.querySelectorAll('.card') || [])]
+      .find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Daily Quests');
+    if (!dailyCard || !names.includes('Auto Quest Completes') || !names.includes('Daily Quest Reset')) return;
+    visibleCaptureTimes.quests = Date.now();
+    collectQuests(document);
   }
 
   function captureVisibleAttunement() {
@@ -1580,17 +1823,19 @@
       visibleCaptureTimes[key] = Date.now();
       fn();
     };
-    if (path === '/quests') capture('quests', document.querySelector('quests-page .card'), () => collectQuests(document));
+    if (path === '/quests') captureVisibleQuests();
     else if (path === '/inventory') capture('inventory', document.querySelector('inventory-page'), () => collectInventory(document));
     else if (path === '/equipment') capture('equipped', [...document.querySelectorAll('.card')].some((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Consumables'), () => storeEquippedDivine(divineConsumables(document), true));
     else if (path === '/adventure') captureVisibleAdventure();
     else if (path === '/challenges') capture('challenges', document.querySelector('challenges-page'), () => collectChallenges(document));
     else if (path === '/skill/15') capture('taming', document.querySelector('taming-page .row .name'), () => collectTaming(document));
     else if (path === '/attunement') capture('attunement', document.querySelector('attunement-page'), captureVisibleAttunement);
+    else if (path === '/mastery') capture('mastery', document.querySelector('mastery-page'), () => collectMastery(document));
+    else if (path === '/profile') capture('playerName', document.querySelector('profile-page profile-card-component .name'), () => collectPlayerName(document));
     else if (path.startsWith('/house')) captureVisibleAutomation();
     else if (path.startsWith('/guild')) {
       const headers = [...document.querySelectorAll('guild-page .card > .header > .name')].map((element) => clean(element.textContent));
-      if (headers.includes('Events')) capture('guildEvent', true, () => collectGuildEvent(document));
+      if (headers.includes('Event') && headers.includes('Participants')) capture('guildEvent', true, () => collectGuildEvent(document));
       if (headers.some((name) => /^(Incomplete|Complete) Trials$/.test(name))) capture('guildTrial', true, () => collectGuildTrial(document));
     }
   }
@@ -1601,6 +1846,7 @@
     style.id = STYLE_ID;
     style.textContent = `
       #${PAGE_ID}[hidden] { display:none !important; }
+      #${MULTIPLAYER_ID} { display:none !important; }
       #${PAGE_ID} { display:block; width:100%; color:#fff; font-family:Jost,"Helvetica Neue",Arial,sans-serif; font-size:16px; line-height:24px; }
       .iw-stats-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:stretch; gap:10px; }
       .iw-card { overflow:hidden; margin-bottom:10px; color:#fff; background:#0d2234; border-radius:4px; box-shadow:0 6px 12px -6px rgba(0,0,0,.4); }
@@ -1612,16 +1858,25 @@
       .iw-live { display:flex; align-items:center; gap:7px; color:#31c777; font-size:12px; letter-spacing:.05em; }
       .iw-live i { width:8px; height:8px; border-radius:50%; background:#31c777; box-shadow:0 0 0 3px rgba(49,199,119,.15); }
       .iw-action-badges { display:flex; align-items:center; gap:6px; height:30px; }
-      .iw-location-badge, .iw-active-badge { position:relative; display:block; width:34px; height:34px; overflow:hidden; border:1px solid; border-radius:5px; box-sizing:border-box; }
-      .iw-location-badge img { position:absolute; top:50%; left:50%; display:block; width:24px; height:24px; object-fit:contain; transform:translate(-50%,-50%); }
+      .iw-location-badge, .iw-active-badge, .iw-mastery-badge, .iw-adventure-badge, .iw-guild-event-badge, .iw-guild-trial-badge, .iw-material-warning, .iw-queue-warning { position:relative; display:block; width:34px; height:34px; overflow:hidden; border:1px solid; border-radius:5px; box-sizing:border-box; }
+      .iw-location-badge img, .iw-mastery-badge img { position:absolute; top:50%; left:50%; display:block; width:24px; height:24px; object-fit:contain; transform:translate(-50%,-50%); }
+      .iw-mastery-badge { color:#a8b2bc; background:rgba(135,149,162,.045); border-color:rgba(154,168,181,.42); box-shadow:inset 0 0 0 1px rgba(220,228,235,.025); }
+      .iw-mastery-badge img { filter:grayscale(1); opacity:.42; }
+      .iw-mastery-badge.achieved { color:#ffe28a; background:rgba(238,181,48,.11); border-color:#e8b43e; box-shadow:inset 0 0 0 1px rgba(255,239,173,.06),0 0 8px rgba(232,180,62,.24); }
+      .iw-mastery-badge.achieved img { filter:none; opacity:1; }
       .iw-location-badge.outskirts { color:#ffc17f; background:rgba(255,145,61,.08); border-color:#ff913d; box-shadow:inset 0 0 0 1px rgba(255,205,156,.04),0 0 7px rgba(255,120,42,.16); }
       .iw-location-badge.village, .iw-active-badge { color:#78efa9; background:rgba(56,221,137,.08); border-color:#38dd89; box-shadow:inset 0 0 0 1px rgba(195,255,217,.04),0 0 7px rgba(42,220,130,.16); }
       .iw-active-badge .iw-spin { position:absolute; top:50%; left:50%; width:22px; height:22px; margin:-11px 0 0 -11px; }
+      .iw-adventure-badge, .iw-guild-event-badge, .iw-guild-trial-badge { display:grid; place-items:center; background:rgba(68,171,221,.12); border-color:#4fb7e5; box-shadow:inset 0 0 0 1px rgba(198,239,255,.04),0 0 7px rgba(79,183,229,.18); }
+      .iw-adventure-badge img, .iw-guild-event-badge img, .iw-guild-trial-badge img { width:27px; height:27px; object-fit:contain; image-rendering:auto; }
+      .iw-material-warning, .iw-queue-warning { color:#ffd078; background:rgba(231,164,45,.09); border-color:#e7a42d; box-shadow:inset 0 0 0 1px rgba(255,222,153,.04),0 0 8px rgba(231,164,45,.2); }
+      .iw-material-warning.urgent, .iw-queue-warning.urgent { color:#ff8d87; background:rgba(230,72,65,.1); border-color:#ed5a52; box-shadow:inset 0 0 0 1px rgba(255,190,184,.04),0 0 8px rgba(237,90,82,.22); }
+      .iw-material-warning svg, .iw-queue-warning svg { position:absolute; top:50%; left:50%; width:21px; height:21px; transform:translate(-50%,-50%); fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
       .iw-spin { display:block; width:18px; height:18px; overflow:visible; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
       .iw-spin-track { opacity:.2; stroke-width:1.5; }
       .iw-spin-motion { transform-origin:12px 12px; will-change:transform; backface-visibility:hidden; animation:iw-spin 1.15s linear infinite; }
       @keyframes iw-spin { from { transform:translateZ(0) rotate(0deg); } to { transform:translateZ(0) rotate(360deg); } }
-      .iw-action-body { display:grid; grid-template-columns:40px 1fr; align-items:center; gap:8px; min-height:54px; padding:6px; }
+      .iw-action-body { display:grid; grid-template-columns:40px minmax(0,1fr) auto; align-items:center; gap:8px; min-height:54px; padding:6px; }
       .iw-action-image { display:grid; place-items:center; width:40px; height:40px; background:#0b2539; border:1px solid #203a4d; border-radius:4px; }
       .iw-action-image img { width:32px; height:32px; object-fit:contain; }
       .iw-action-name { display:flex; flex-direction:column; gap:2px; }
@@ -1632,18 +1887,35 @@
       .iw-action-title small { color:#8fa1ad; font-size:12px; font-weight:400; }
       .iw-action-meta { display:flex; align-items:center; flex-wrap:wrap; line-height:20px; }
       .iw-action-meta > span + span::before { content:'·'; margin:0 6px; color:#71818d; }
+      .iw-queue-summary { display:flex; flex-direction:column; align-items:flex-end; min-width:220px; margin-left:6px; padding:1px 6px 1px 12px; white-space:nowrap; }
+      .iw-queue-summary > span { color:#71818d; font-size:10px; line-height:14px; text-transform:uppercase; letter-spacing:.04em; }
+      .iw-queue-summary > strong { font-size:15px; font-weight:500; line-height:19px; }
+      .iw-queue-summary > small { color:#71818d; font-size:10px; font-weight:400; line-height:14px; }
+      .iw-queue-values { display:flex; align-items:center; gap:7px; }
+      .iw-queue-values span + span::before { content:'·'; margin-right:7px; color:#506675; }
+      .iw-queue-values b { color:#aab6bf; font-weight:500; font-variant-numeric:tabular-nums; }
+      .iw-queue-values em { color:#71818d; font-style:normal; }
       .iw-progress { height:10px; margin:0 6px 6px; overflow:hidden; background:#142e40; border:1px solid rgba(117,157,181,.12); border-radius:999px; box-sizing:border-box; box-shadow:inset 0 1px 2px rgba(0,0,0,.28); }
       .iw-progress div { height:100%; background:linear-gradient(90deg,#4f9fce,#76c5ed); border-radius:inherit; box-shadow:0 0 5px rgba(103,187,231,.22); transition:width .2s linear; }
       .iw-progress-stack { display:grid; gap:4px; margin:1px 6px 7px; }
       .iw-progress-stack .iw-progress { margin:0; }
       .iw-skill-progress { background:#16342b; border-color:rgba(91,185,124,.13); }
       .iw-skill-progress div { background:linear-gradient(90deg,#429d62,#6bd28b); box-shadow:0 0 5px rgba(82,202,125,.2); }
-      .iw-finished { display:flex; justify-content:space-between; padding:8px 12px; border-top:1px solid #263a49; }
-      .iw-finished span, .iw-muted { color:#aab6bf; }
+      .iw-muted { color:#aab6bf; }
       .iw-subheader { padding:12px 10px; border-top:1px solid #294052; border-bottom:1px solid #294052; font-weight:600; }
-      .iw-consumable { display:grid; grid-template-columns:40px minmax(0,1fr) auto; align-items:center; min-height:37px; padding:2px 6px; border-bottom:1px solid #294052; box-sizing:border-box; font-size:16px; line-height:24px; }
-      .iw-consumable img { width:32px; height:32px; object-fit:contain; }
-      .iw-consumable b { color:#aab6bf; font-size:16px; font-weight:400; line-height:24px; }
+      .iw-consumable-head, .iw-consumable { display:grid; grid-template-columns:40px minmax(0,1fr) 82px 82px; align-items:center; }
+      .iw-material-head, .iw-material { display:grid; grid-template-columns:40px minmax(0,1fr) 100px; align-items:center; }
+      .iw-consumable-head { min-height:28px; padding:0 6px; color:#8fa1ad; border-bottom:1px solid #294052; font-size:11px; font-weight:500; text-transform:uppercase; }
+      .iw-consumable-head span:nth-child(n+3) { text-align:right; }
+      .iw-material-head { min-height:28px; padding:0 6px; color:#8fa1ad; border-bottom:1px solid #294052; font-size:11px; font-weight:500; text-transform:uppercase; }
+      .iw-material-head span:last-child { text-align:right; }
+      .iw-consumable, .iw-material { min-height:37px; padding:2px 6px; border-bottom:1px solid #294052; box-sizing:border-box; font-size:16px; line-height:24px; }
+      .iw-consumable img, .iw-material img { width:32px; height:32px; object-fit:contain; }
+      .iw-consumable b, .iw-material b { color:#aab6bf; font-size:16px; font-weight:400; line-height:24px; text-align:right; font-variant-numeric:tabular-nums; }
+      .iw-consumable b { white-space:nowrap; }
+      .iw-consumable-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .iw-consumable-name small { color:#82929e; font-size:12px; font-weight:400; }
+      .iw-consumable b.iw-zero { color:#71818d; }
       .iw-muted { padding:11px; }
       .iw-summary { display:flex; align-items:center; gap:12px; font-size:14px; font-weight:400; }
       .iw-summary span { color:#aab6bf; }
@@ -1701,9 +1973,15 @@
       .iw-task-icon { position:relative; display:block; grid-column:3; align-self:center; justify-self:end; width:25px; height:25px; margin:0; padding:0; border:1px solid; border-radius:4px; box-sizing:border-box; font-size:17px; font-weight:600; line-height:1; }
       .iw-task-icon.running { color:#ffc17f; background:rgba(255,145,61,.08); border-color:#ff913d; box-shadow:inset 0 0 0 1px rgba(255,205,156,.04),0 0 7px rgba(255,120,42,.16); }
       .iw-task-icon.done { color:#78efa9; background:rgba(56,221,137,.08); border-color:#38dd89; box-shadow:inset 0 0 0 1px rgba(195,255,217,.04),0 0 7px rgba(42,220,130,.16); }
+      .iw-task-icon.adventure-idle { display:grid; place-items:center; color:#78efa9; background:rgba(56,221,137,.08); border-color:#38dd89; box-shadow:inset 0 0 0 1px rgba(195,255,217,.04),0 0 7px rgba(42,220,130,.16); }
+      .iw-idle-glyph { display:block; font-size:13px; font-weight:500; line-height:1; transform:translate(-1px,1px); }
+      .iw-idle-glyph sup { position:relative; top:-4px; margin-left:1px; font-size:10px; }
+      .iw-task-icon.participating { color:#79d1f5; background:rgba(68,171,221,.08); border-color:#4fb7e5; box-shadow:inset 0 0 0 1px rgba(198,239,255,.04),0 0 7px rgba(79,183,229,.18); }
       .iw-task-icon.waiting { color:#ffc17f; background:rgba(255,145,61,.08); border-color:#ff913d; box-shadow:inset 0 0 0 1px rgba(255,205,156,.04),0 0 7px rgba(255,120,42,.16); }
-      .iw-task-icon .iw-spin, .iw-task-icon.done svg, .iw-task-icon.waiting svg { position:absolute; top:50%; left:50%; display:block; width:15px; height:15px; margin:-7.5px 0 0 -7.5px; }
-      .iw-task-icon.done svg, .iw-task-icon.waiting svg { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+      .iw-task-icon .iw-spin, .iw-task-icon.done svg, .iw-task-icon.waiting svg, .iw-task-icon.participating svg { position:absolute; top:50%; left:50%; display:block; width:15px; height:15px; margin:-7.5px 0 0 -7.5px; }
+      .iw-task-icon.done svg, .iw-task-icon.waiting svg, .iw-task-icon.participating svg { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+      .iw-hourglass { transform-origin:50% 50%; animation:iw-hourglass 2.4s ease-in-out infinite; }
+      @keyframes iw-hourglass { 0%,38% { transform:rotate(0deg); } 52%,88% { transform:rotate(180deg); } 100% { transform:rotate(360deg); } }
       .iw-status-link { cursor:pointer; transition:background-color .12s; }
       .iw-status-link:hover, .iw-status-link:focus-visible { background:#142c3e; outline:none; }
       .iw-potion-grid { display:grid; grid-template-columns:1fr; }
@@ -1731,6 +2009,13 @@
       .iw-challenge-config label { display:flex; flex-direction:column; gap:5px; color:#aab6bf; font-size:13px; }
       .iw-challenge-config select { min-height:34px; padding:4px 8px; color:#fff; background:#102b3f; border:1px solid #315268; border-radius:4px; font:inherit; }
       .iw-challenge-config small { grid-column:1/-1; color:#aab6bf; font-size:12px; }
+      .iw-interface-actions { display:flex; align-items:center; gap:10px; padding:10px; }
+      .iw-interface-actions small { color:#aab6bf; font-size:12px; }
+      modal-component .buttons.iw-craft-buttons { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)) !important; gap:12px !important; margin-top:12px !important; }
+      modal-component .buttons.iw-craft-buttons > button { width:100% !important; min-width:0 !important; margin:0 !important; white-space:nowrap; }
+      modal-component .buttons.iw-craft-buttons > button:first-child { order:1; }
+      modal-component .buttons.iw-craft-buttons > .iw-craft-all { order:2; }
+      modal-component .buttons.iw-craft-buttons > button:nth-child(2):not(.iw-craft-all) { order:3; }
       .iw-sync-frame { position:fixed; width:1600px; height:900px; left:-10000px; border:0; opacity:0; pointer-events:none; }
       .iw-modal { position:fixed; inset:0; z-index:2147483646; display:grid; place-items:center; padding:20px; background:rgba(0,0,0,.7); }
       .iw-modal-hidden { display:none; }
@@ -1750,6 +2035,8 @@
         .iw-challenge-config { grid-template-columns:1fr; }
         .iw-challenge-config small { grid-column:1; }
         .iw-status-row { grid-template-columns:40px minmax(0,1fr) auto; }
+        .iw-action-body { grid-template-columns:40px minmax(0,1fr); }
+        .iw-queue-summary { grid-column:2; align-items:flex-start; min-width:0; margin-left:0; padding-right:0; border-left:0; }
       }
     `;
     document.head.appendChild(style);
@@ -1760,6 +2047,7 @@
     addStyles();
     createPage();
     installNavButton();
+    installInterfaceControls();
     document.addEventListener('change', (event) => {
       if (event.target.matches?.('[data-automation-toggle]')) {
         setAutomationEnabled(event.target.checked);
@@ -1801,6 +2089,29 @@
       if (event.target.closest?.('[data-quest-modal]')) { questModalOpen = true; lastSignature = ''; render(); return; }
       if (event.target.closest?.('[data-modal-close]') || event.target.matches?.('[data-modal-backdrop]')) { questModalOpen = false; lastSignature = ''; render(); return; }
       if (event.target.closest?.('[data-sync]')) { syncStale(true); return; }
+      if (event.target.closest?.('[data-open-multiplayer]')) {
+        const multiplayer = document.getElementById(MULTIPLAYER_ID);
+        (multiplayer?.querySelector('.action') || multiplayer)?.click();
+        return;
+      }
+      const craftAll = event.target.closest?.('[data-craft-all]');
+      if (craftAll) {
+        const modal = craftAll.closest('modal-component .modal');
+        const craftableRow = [...(modal?.querySelectorAll(':scope > .row') || [])]
+          .find((row) => clean(row.querySelector(':scope > span')?.textContent) === 'Craftable');
+        const input = modal?.querySelector('form.actions input[name="quantity"], form.actions input[placeholder="Quantity"]');
+        const nativeCraft = [...(modal?.querySelectorAll('form.actions > .buttons > button') || [])]
+          .find((button) => clean(button.textContent) === 'Craft' && !button.matches('[data-craft-all]'));
+        const amount = numberFrom(clean(craftableRow?.textContent).replace('Craftable', ''));
+        if (!input || !nativeCraft || amount <= 0) return;
+        const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (valueSetter) valueSetter.call(input, String(amount));
+        else input.value = String(amount);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        requestAnimationFrame(() => nativeCraft.disabled || nativeCraft.click());
+        return;
+      }
       if (event.target.closest?.('[data-collect-loot]')) { collectLootAndContinue(); return; }
       if (event.target.closest?.('[data-collect-attunement]')) { event.stopPropagation(); collectAllAttunementLoot(); return; }
       if (event.target.closest?.('[data-collect-taming]')) { event.stopPropagation(); collectTamingLoot(); return; }
@@ -1821,7 +2132,7 @@
       if (event.target.closest('nav-component button')) leaveStats();
     }, true);
     window.addEventListener('popstate', () => location.pathname === STATS_PATH ? showStats({ push: false }) : hideStats());
-    new MutationObserver(() => { installNavButton(); createPage(); captureVisibleCaches(); })
+    new MutationObserver(() => { installNavButton(); installInterfaceControls(); createPage(); captureVisibleCaches(); })
       .observe(document.body, { childList: true, subtree: true });
     if (location.pathname === STATS_PATH) showStatusFromCurrentAction();
     setTimeout(() => syncStale(false), 1200);
