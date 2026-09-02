@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ironwood RPG - Status Page
 // @namespace    https://github.com/pverbeek/IRONWOOD_stats
-// @version      1.0.0
+// @version      1.0.1
 // @description  Adds a cached live status dashboard and optional task automation to Ironwood RPG.
 // @author       pverbeek
 // @license      Copyright pverbeek
@@ -164,6 +164,7 @@
   const EQUIPPED_KEY = 'iw-stats-equipped-divine';
   const CHALLENGE_PREFS_KEY = 'iw-stats-challenge-prefs';
   const AUTOMATION_KEY = 'iw-stats-automation-enabled';
+  const CACHE_LOOKUPS_KEY = 'iw-stats-cache-lookups-enabled';
   const CHALLENGE_SKILLS = {
     Forest: ['Woodcutting', 'Farming', 'Alchemy', 'Exploring', 'Ranged', 'Defense'],
     Mountain: ['Mining', 'Smelting', 'Smithing', 'Delving', 'One-handed', 'Defense'],
@@ -185,10 +186,17 @@
     try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '[]'); } catch { return []; }
   }
   function automationEnabled() {
-    return localStorage.getItem(AUTOMATION_KEY) !== 'false';
+    return localStorage.getItem(AUTOMATION_KEY) === 'true';
   }
   function setAutomationEnabled(enabled) {
     localStorage.setItem(AUTOMATION_KEY, enabled ? 'true' : 'false');
+    lastSignature = '';
+  }
+  function cacheLookupsEnabled() {
+    return localStorage.getItem(CACHE_LOOKUPS_KEY) === 'true';
+  }
+  function setCacheLookupsEnabled(enabled) {
+    localStorage.setItem(CACHE_LOOKUPS_KEY, enabled ? 'true' : 'false');
     lastSignature = '';
   }
   function getChallengePrefs() {
@@ -439,6 +447,7 @@
   }
 
   async function refreshAdventureSnapshot(force = false) {
+    if (!cacheLookupsEnabled()) return;
     if (!force && !isStale('adventure')) return;
     if (refreshingAdventure) return;
     refreshingAdventure = true;
@@ -464,6 +473,7 @@
   }
 
   async function refreshChallengesSnapshot(force = false) {
+    if (!cacheLookupsEnabled()) return;
     if (!force && !isStale('challenges')) return;
     if (refreshingChallenges) return;
     refreshingChallenges = true;
@@ -512,6 +522,7 @@
   }
 
   async function refreshTamingSnapshot(force = false) {
+    if (!cacheLookupsEnabled()) return;
     if (!force && !isStale('taming')) return;
     if (refreshingTaming) return;
     refreshingTaming = true;
@@ -596,6 +607,7 @@
   }
 
   async function refreshAutomationsSnapshot(force = false) {
+    if (!cacheLookupsEnabled()) return;
     if (refreshingAutomations || (!force && !isStale('automations'))) return;
     refreshingAutomations = true;
     try {
@@ -1037,6 +1049,7 @@
     setCache('guildTrial', { state, stateDetail: detail, available: joinableRows.length, expiresAt: timer ? Date.now() + timer : Date.now() + TTL.guildTrial });
   }
   async function syncStale(force = false) {
+    if (!cacheLookupsEnabled()) return;
     if (syncing) return;
     syncing = true;
     try {
@@ -1171,6 +1184,7 @@
     const cache = getCache();
     const prefs = getPrefs();
     const automationOn = automationEnabled();
+    const cacheLookupsOn = cacheLookupsEnabled();
     const automationRows = (cache.automations?.structures || [])
       .map((item) => projectedAutomation(item, cache.automations?.checkedAt));
     const questSkills = [...new Map((cache.quests?.quests || [])
@@ -1268,7 +1282,7 @@
       action: action && { name: action.name, level: action.level, image: action.image, actionId: action.actionId, location: action.location, skillName: action.skillName, skillLevel: action.skillLevel },
       loot: loot.map((item) => ({ name: item.name, image: item.image })),
       consumables: consumables.map((item) => ({ name: item.name, image: item.image })),
-      finished, cache, prefs, challengePrefs, automationOn, questModalOpen, automationTask, tamingClaimNoticeUntil
+      finished, cache, prefs, challengePrefs, automationOn, cacheLookupsOn, questModalOpen, automationTask, tamingClaimNoticeUntil
     });
     if (signature === lastSignature) { updateLiveValues(action, loot, consumables); return; }
     lastSignature = signature;
@@ -1341,7 +1355,8 @@
         <div class="iw-modal ${questModalOpen ? '' : 'iw-modal-hidden'}" data-modal-backdrop>
           <section class="iw-modal-panel" role="dialog" aria-modal="true" aria-label="Automation preferences">
             <div class="iw-card-header"><span>Automation Preferences</span><button class="iw-modal-close" data-modal-close>×</button></div>
-            <label class="iw-automation-toggle"><span><b>Enable automation</b><small>${automationOn ? 'Actions may run automatically or from Status buttons.' : 'Information collection only. No game actions will be performed.'}</small></span><input type="checkbox" data-automation-toggle ${automationOn ? 'checked' : ''}><i aria-hidden="true"></i></label>
+            <label class="iw-automation-toggle"><span><b>Enable automation</b><small>${automationOn ? 'Actions may run automatically or from Status buttons.' : 'No game-changing actions will be performed.'}</small></span><input type="checkbox" data-automation-toggle ${automationOn ? 'checked' : ''}><i aria-hidden="true"></i></label>
+            <label class="iw-automation-toggle"><span><b>Enable cache lookups</b><small>${cacheLookupsOn ? 'Missing or expired data may be refreshed in background pages.' : 'Only live data and pages you open manually update cached information.'}</small></span><input type="checkbox" data-cache-lookups-toggle ${cacheLookupsOn ? 'checked' : ''}><i aria-hidden="true"></i></label>
             <div class="iw-modal-section-title">Daily quests</div>
             <div class="iw-quest-help">Choose exactly five skills. The matching daily action may change, but your skill preferences remain the same.</div>
             <div class="iw-quest-grid">${questSkills.map((skill) => { const checked = prefs.includes(skill.name); return `<label class="${skill.done ? 'done' : ''}"><input type="checkbox" data-quest="${escapeHtml(skill.name)}" ${checked ? 'checked' : ''} ${!checked && prefs.length >= 5 ? 'disabled' : ''}><img src="${escapeHtml(skill.image)}"><span>${escapeHtml(skill.name)}</span><b>${skill.done ? 'Done' : 'Pending'}</b></label>`; }).join('') || '<div class="iw-muted">Open quests once to load the available skills.</div>'}</div>
@@ -1735,6 +1750,12 @@
         setAutomationEnabled(event.target.checked);
         automationTask = '';
         render();
+        return;
+      }
+      if (event.target.matches?.('[data-cache-lookups-toggle]')) {
+        setCacheLookupsEnabled(event.target.checked);
+        render();
+        if (event.target.checked) syncStale(false);
         return;
       }
       if (event.target.matches?.('[data-challenge-region]')) {

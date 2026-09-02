@@ -19,7 +19,7 @@ implementation; the separate loader is only for local development.
 - Divine Potion table with separate equipped and stored quantities.
 - Responsive two-column layout using the live Ironwood/Pancake visual style.
 
-The script reads Ironwood's rendered interface and runs alongside Pancake-Scripts. User-requested automations use only Ironwood's rendered native controls. The global **Enable automation** preference can turn off every game-changing action while leaving status collection active.
+The script reads Ironwood's rendered interface and runs alongside Pancake-Scripts. User-requested automations use only Ironwood's rendered native controls. **Enable automation** controls every game-changing action, while **Enable cache lookups** controls background information retrieval. Both settings are disabled by default. Cached information can still update without a background lookup when its native page is opened manually.
 
 ## Installation
 
@@ -53,7 +53,7 @@ Live action and loot data come from the currently mounted skill page. Other data
 | Guild event | `/guild` → Events | Expiry-aware, otherwise six hours |
 | Guild trials | `/guild` → Trials | Expiry-aware, otherwise six hours |
 
-Status data refreshes automatically when missing, stale, or expired. Opening a native data page manually refreshes its corresponding cache directly from the already-rendered DOM, without making a second request. Status entry uses cached values unless their expiry rules require a refresh. The Status header Preferences control opens the global automation toggle plus Daily Quest and Challenge configuration. Daily Quest preferences are stored by generic skill, so they continue to apply when that skill's specific quest action changes. When automation is disabled, refreshes only read information and all action buttons are disabled. Challenge automation defaults to **Mountain** with **Defense** as the XP reward skill. Cached data is stored in `localStorage` under `iw-stats-cache-v1`; quest, challenge, automation, and equipped-consumable preferences use their own `iw-stats-*` keys.
+When **Enable cache lookups** is on, Status data refreshes automatically when missing, stale, or expired. When it is off, no temporary background page is opened. Opening a native data page manually still refreshes its corresponding cache directly from the already-rendered DOM, without making a second request. The Status header Preferences control contains both global toggles plus Daily Quest and Challenge configuration. Daily Quest preferences are stored by generic skill, so they continue to apply when that skill's specific quest action changes. When automation is disabled, all game-changing automation and action buttons are disabled. Challenge automation defaults to **Mountain** with **Defense** as the XP reward skill. Cached data is stored in `localStorage` under `iw-stats-cache-v1`; quest, challenge, automation, cache-lookup, and equipped-consumable preferences use their own `iw-stats-*` keys.
 
 ## Local development loader
 
