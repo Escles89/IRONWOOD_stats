@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ironwood RPG - Status Page
 // @namespace    https://github.com/pverbeek/IRONWOOD_stats
-// @version      1.0.1
+// @version      1.1.2
 // @description  Adds a cached live status dashboard and optional task automation to Ironwood RPG.
 // @author       pverbeek
 // @license      Copyright pverbeek
@@ -157,7 +157,14 @@
     return /NaN|Infinity/i.test(value) ? '' : value;
   }
 
-  const dayKey = () => new Date().toLocaleDateString('en-CA');
+  // Ironwood's daily boundary is 02:00 CET, i.e. 01:00 UTC year-round.
+  const dayKey = (time = Date.now()) => new Date(time - 3600000).toISOString().slice(0, 10);
+  function nextDailyReset(time = Date.now()) {
+    const now = new Date(time);
+    let reset = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 1);
+    if (reset <= time) reset += 24 * 3600000;
+    return reset;
+  }
 
   const CACHE_KEY = 'iw-stats-cache-v1';
   const PREFS_KEY = 'iw-stats-quest-prefs';
@@ -170,7 +177,7 @@
     Mountain: ['Mining', 'Smelting', 'Smithing', 'Delving', 'One-handed', 'Defense'],
     Ocean: ['Fishing', 'Cooking', 'Enchanting', 'Imbuing', 'Two-handed', 'Defense']
   };
-  const TTL = { quests: 26 * 3600000, inventory: 3600000, equipped: 3600000, adventure: 4 * 3600000, challenges: 3600000, taming: 3600000, automations: 24 * 3600000, attunement: 3600000, guildEvent: 6 * 3600000, guildTrial: 6 * 3600000 };
+  const TTL = { quests: 26 * 3600000, inventory: 3600000, equipped: Number.POSITIVE_INFINITY, adventure: 26 * 3600000, challenges: 26 * 3600000, taming: 3600000, automations: 24 * 3600000, attunement: 4 * 3600000, guildEvent: 24 * 3600000, guildTrial: 24 * 3600000 };
   let syncing = false;
 
   function getCache() {
@@ -215,17 +222,18 @@
   }
   function isStale(key) {
     const entry = getCache()[key];
-    const incompleteAdventure = key === 'adventure' && entry && (entry.schema !== 7 || [
+    const incompleteAdventure = key === 'adventure' && entry && (entry.schema !== 8 || [
       entry.researchPoints, entry.mapCost, entry.dailyMapsCreated,
       entry.dailyMapsLimit, entry.mapsStored, entry.mapStorageLimit
     ].some((value) => typeof value !== 'number' || !Number.isFinite(value)));
-    const incompleteGuildEvent = key === 'guildEvent' && entry?.schema !== 3;
+    const incompleteGuildEvent = key === 'guildEvent' && entry?.schema !== 4;
+    const incompleteGuildTrial = key === 'guildTrial' && entry?.schema !== 2;
     const incompleteQuests = key === 'quests' && (entry?.schema !== 2 || (getPrefs().length === 5 && entry?.day === dayKey() && !entry.dailyComplete));
     const incompleteAttunement = key === 'attunement' && entry?.schema !== 3;
-    const incompleteChallenges = key === 'challenges' && entry?.schema !== 2;
+    const incompleteChallenges = key === 'challenges' && entry?.schema !== 3;
     const incompleteTaming = key === 'taming' && entry?.schema !== 2;
     const incompleteAutomations = key === 'automations' && entry?.schema !== 3;
-    return !entry || incompleteAdventure || incompleteGuildEvent || incompleteQuests || incompleteAttunement || incompleteChallenges || incompleteTaming || incompleteAutomations || (key === 'inventory' && !Array.isArray(entry.allItems)) || (entry.expiresAt ? Date.now() >= entry.expiresAt : Date.now() - entry.checkedAt > TTL[key]) || (key === 'quests' && entry.day !== dayKey());
+    return !entry || incompleteAdventure || incompleteGuildEvent || incompleteGuildTrial || incompleteQuests || incompleteAttunement || incompleteChallenges || incompleteTaming || incompleteAutomations || (key === 'inventory' && !Array.isArray(entry.allItems)) || (entry.expiresAt ? Date.now() >= entry.expiresAt : Date.now() - entry.checkedAt > TTL[key]) || (key === 'quests' && entry.day !== dayKey());
   }
   function humanAge(time) {
     if (!time) return 'Never checked';
@@ -244,7 +252,7 @@
   }
   function guildEventDetail(entry) {
     if (!entry) return 'Never checked';
-    const remaining = Number(entry.expiresAt) - Date.now();
+    const remaining = Number(entry.state === 'Active' ? entry.stateEndsAt : entry.expiresAt) - Date.now();
     const countdown = () => {
       const total = Math.max(0, Math.ceil(remaining / 1000));
       const days = Math.floor(total / 86400);
@@ -254,7 +262,8 @@
       return [days && `${days}d`, hours && `${hours}h`, minutes && `${minutes}m`, `${seconds}s`].filter(Boolean).join(' ');
     };
     if (remaining > 0 && entry.state === 'Cooldown') return `Ready in ${countdown()}`;
-    if (remaining > 0 && entry.state === 'Active') return `${entry.eventName || 'Guild event'} · ${countdown()} remaining`;
+    if (remaining > 0 && entry.state === 'Active') return `${entry.eventName || 'Guild event'}${Number.isFinite(entry.xpGained) ? ` · ${formatNumber(entry.xpGained)} XP` : ''} · ${countdown()} remaining`;
+    if (entry.state === 'Active') return entry.stateDetail || `${entry.eventName || 'Guild event'} · In progress`;
     if (entry.state === 'Available') return 'Ready to start';
     return entry.stateDetail || humanAge(entry.checkedAt);
   }
@@ -348,7 +357,7 @@
     const headerText = clean(card?.querySelector(':scope > .header > .amount')?.textContent);
     const headerProgress = headerText.match(/(\d+)\s*\/\s*(\d+)/);
     const completed = headerProgress ? Number(headerProgress[1]) : quests.filter((quest) => quest.done).length;
-    setCache('quests', { schema: 2, day: dayKey(), quests, completed, dailyComplete: completed >= 5 });
+    setCache('quests', { schema: 2, day: dayKey(), quests, completed, dailyComplete: completed >= 5, expiresAt: nextDailyReset() });
     return { card, quests };
   }
   function questMatchesPreference(quest, preference) {
@@ -389,7 +398,7 @@
     }
     const selectedDone = prefs.filter((preference) => questForPreference(state.quests, preference)?.done).length;
     const completed = state.quests.filter((q) => q.done).length;
-    setCache('quests', { schema: 2, day: dayKey(), quests: state.quests, completed, selectedDone, dailyComplete: completed >= 5 });
+    setCache('quests', { schema: 2, day: dayKey(), quests: state.quests, completed, selectedDone, dailyComplete: completed >= 5, expiresAt: nextDailyReset() });
     return state;
   }
   function pageSummary(doc, selector, key) {
@@ -418,7 +427,6 @@
     const active = !/^(Idle|Cooldown|Unknown)/i.test(stateText);
     const cooldown = /Cooldown/i.test(stateText);
     const resetText = cooldown ? (values['Weekly Limit Reset'] || values['Daily Limit Reset']) : '';
-    const countdown = durationMs(active ? stateText : resetText);
     const pair = (text) => {
       const match = clean(text).match(/([\d,.]+\s*[KMB]?)\s*\/\s*([\d,.]+\s*[KMB]?)/i);
       if (!match) return { current: null, max: null };
@@ -427,10 +435,8 @@
     const research = pair(researchRow?.querySelector('.amount')?.textContent);
     const dailyMaps = pair(values['Daily Map Limit']);
     const storage = pair(storageRow?.querySelector('.amount')?.textContent);
-    const dailyResetMs = durationMs(values['Daily Limit Reset']);
-    const expiresIn = countdown || (dailyMaps.max && dailyMaps.current >= dailyMaps.max && dailyResetMs) || TTL.adventure;
     const data = {
-      schema: 7,
+      schema: 8,
       state: active ? 'Active' : cooldown ? 'Cooldown' : stateText,
       stateDetail: active ? stateText : cooldown ? `Ready in ${resetText}` : 'No adventure running',
       dailyLimit: values['Daily Map Limit'] || '', weeklyLimit: values['Weekly Adventure Limit'] || '',
@@ -440,7 +446,7 @@
       mapsStored: storage.current, mapStorageLimit: storage.max,
       mapsComplete: dailyMaps.max > 0 && dailyMaps.current >= dailyMaps.max,
       mapAutomation: getCache().adventure?.mapAutomation || null,
-      expiresAt: Date.now() + expiresIn
+      expiresAt: nextDailyReset()
     };
     setCache('adventure', data);
     return data;
@@ -799,7 +805,7 @@
     const selectedRegion = clean(root?.querySelector('.categories button:disabled .name')?.textContent);
     const selectedChallenge = clean(root?.querySelector('.group .card button.row-active .name')?.textContent);
     const data = {
-      schema: 2,
+      schema: 3,
       scrollsAvailable: scrolls.current,
       scrollsRequired: scrolls.max,
       autoCompletesUsed: autoCompletes.current,
@@ -809,7 +815,8 @@
       dailyScrollsUsed: dailyScrolls.current,
       dailyScrollsLimit: dailyScrolls.max,
       selectedRegion,
-      selectedChallenge
+      selectedChallenge,
+      expiresAt: nextDailyReset()
     };
     setCache('challenges', data);
     return data;
@@ -1006,17 +1013,22 @@
     };
     const cooldownText = rowValue(cooldownRow);
     const remainingText = rowValue(endRow);
+    const xpRow = rows.find((row) => /^(Event )?(XP|Experience)( Gained)?$/i.test(clean(row.querySelector('.name')?.textContent)));
+    const xpGained = xpRow ? numberFrom(rowValue(xpRow)) : null;
     const cooldown = Boolean(cooldownRow && cooldownText);
     const active = !cooldown && Boolean(endRow || /Participating|Participation|Event Progress/i.test(clean(root.textContent)));
     const timerText = cooldown ? cooldownText : remainingText;
-    const fallback = active ? 36 * 3600000 : cooldown ? 24 * 3600000 : TTL.guildEvent;
-    const timer = durationMs(timerText) || fallback;
-    const readableTimer = durationMs(timerText) ? formatDuration(durationMs(timerText) / 1000) : timerText;
+    const timer = durationMs(timerText);
+    const readableTimer = timer ? formatDuration(timer / 1000) : timerText;
+    const expiresAt = active
+      ? Date.now() + Math.min(timer || 3600000, 3600000)
+      : Date.now() + (timer || TTL.guildEvent);
+    const xpDetail = Number.isFinite(xpGained) ? ` · ${formatNumber(xpGained)} XP` : '';
     setCache('guildEvent', {
-      schema: 3,
+      schema: 4,
       state: active ? 'Active' : cooldown ? 'Cooldown' : 'Available', eventName,
-      stateDetail: active ? `${eventName} · ${readableTimer || 'In progress'}` : cooldown ? `Ready in ${readableTimer}` : 'Ready to start',
-      remaining: timerText, expiresAt: Date.now() + timer
+      stateDetail: active ? `${eventName}${xpDetail} · ${readableTimer || 'In progress'}` : cooldown ? `Ready in ${readableTimer}` : 'Ready to start',
+      xpGained, remaining: timerText, stateEndsAt: timer ? Date.now() + timer : null, expiresAt
     });
   }
   function collectGuildTrial(doc) {
@@ -1046,7 +1058,10 @@
         ? `${joinableRows.length} trials available${endText ? ` · ends in ${endText}` : ''}`
         : `No trial available${endText ? ` · ends in ${endText}` : ''}`;
     const timer = durationMs(endText);
-    setCache('guildTrial', { state, stateDetail: detail, available: joinableRows.length, expiresAt: timer ? Date.now() + timer : Date.now() + TTL.guildTrial });
+    const expiresAt = state === 'Active'
+      ? Date.now() + Math.min(timer || 3600000, 3600000)
+      : Date.now() + (timer || TTL.guildTrial);
+    setCache('guildTrial', { schema: 2, state, stateDetail: detail, available: joinableRows.length, expiresAt });
   }
   async function syncStale(force = false) {
     if (!cacheLookupsEnabled()) return;

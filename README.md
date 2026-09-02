@@ -44,16 +44,18 @@ Live action and loot data come from the currently mounted skill page. Other data
 | --- | --- | --- |
 | Quests | `/quests` | Daily or when missing |
 | Inventory | `/inventory` | Hourly |
-| Equipped consumables | `/equipment` | Hourly |
-| Adventure and maps | `/adventure` | Up to four hours, or at the daily reset after reaching the map limit |
-| Challenges | `/challenges` | Hourly, after a challenge run, or when missing |
+| Equipped consumables | `/equipment` | Once when missing; afterward updated passively from the live action or Equipment page |
+| Adventure and maps | `/adventure` | Daily at the 02:00 CET reset, after map automation, or when missing |
+| Challenges | `/challenges` | Daily at the 02:00 CET reset, after a challenge run, or when missing |
 | Taming | `/skill/15` | Hourly when checked, after collection, or passively when opened manually |
 | Automations | House → Automate | Once when missing, passively when opened manually, then locally projected until the longest queue should finish (24-hour fallback) |
-| Attunement | `/attunement` | Hourly |
-| Guild event | `/guild` → Events | Expiry-aware, otherwise six hours |
-| Guild trials | `/guild` → Trials | Expiry-aware, otherwise six hours |
+| Attunement | `/attunement` | Every four hours (at most six automatic lookups per day) |
+| Guild event | `/guild` → Events | Hourly while active to update earned XP; otherwise at the known state expiry (24-hour fallback) |
+| Guild trials | `/guild` → Trials | Hourly while active; otherwise at the known state expiry (24-hour fallback) |
 
 When **Enable cache lookups** is on, Status data refreshes automatically when missing, stale, or expired. When it is off, no temporary background page is opened. Opening a native data page manually still refreshes its corresponding cache directly from the already-rendered DOM, without making a second request. The Status header Preferences control contains both global toggles plus Daily Quest and Challenge configuration. Daily Quest preferences are stored by generic skill, so they continue to apply when that skill's specific quest action changes. When automation is disabled, all game-changing automation and action buttons are disabled. Challenge automation defaults to **Mountain** with **Defense** as the XP reward skill. Cached data is stored in `localStorage` under `iw-stats-cache-v1`; quest, challenge, automation, cache-lookup, and equipped-consumable preferences use their own `iw-stats-*` keys.
+
+Daily Quest, Adventure, and Challenge caches use Ironwood's fixed 02:00 CET boundary (01:00 UTC). Other caches retain the individual refresh rules shown above. With cache lookups disabled, expired values may remain visible for reference but no background page is opened to replace them.
 
 ## Local development loader
 
