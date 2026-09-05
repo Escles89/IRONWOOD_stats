@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ironwood RPG - Status Page
 // @namespace    https://github.com/pverbeek/IRONWOOD_stats
-// @version      1.11.1
+// @version      1.13.2
 // @description  Adds a cached live status dashboard and optional task automation to Ironwood RPG.
 // @author       pverbeek
 // @license      Copyright pverbeek
@@ -24,6 +24,17 @@
   let previousUrl = '/';
   let hiddenRouteElements = [];
   let lastSignature = '';
+  let lastCombatAction = null;
+  let lastCombatSeenAt = 0;
+  let previousLootValues = new Map();
+  let previousConsumableValues = new Map();
+  const lootDeltaNotices = new Map();
+  const consumableDeltaNotices = new Map();
+  const combatEffects = new Map();
+  let combatEffectLockUntil = 0;
+  let combatUseNotice = null;
+  let combatDropNotice = null;
+  let eliteCombatDetected = false;
   let questModalOpen = false;
   let headerSnapshot = null;
   let collectingLoot = false;
@@ -37,7 +48,10 @@
   let collectingAttunementLoot = false;
   let runningChallenge = false;
   let collectingTaming = false;
+  let collectingAutomation = '';
   let tamingClaimNoticeUntil = 0;
+  let reviveUntil = 0;
+  let lastReviveObservedMs = 0;
 
   const clean = (text) => (text || '').replace(/\s+/g, ' ').trim();
   const numberFrom = (text) => Number(clean(text).replace(/[^\d.-]/g, '')) || 0;
@@ -59,6 +73,13 @@
   }
 
   const withoutSeconds = (value) => clean(String(value || '').replace(/\s*\d+(?:\.\d+)?s\b/gi, ' '));
+  const formatReviveTime = (milliseconds) => {
+    const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+    if (totalSeconds < 60) return `${totalSeconds}s`;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+  };
 
   function findCard(title) {
     return [...document.querySelectorAll('skill-page .card')].find((card) =>
@@ -85,17 +106,56 @@
 
   function readCurrentAction() {
     const standardCard = document.querySelector('skill-page action-component > .card');
+    const combatComponent = document.querySelector('skill-page combat-component');
     const combatCard = document.querySelector('skill-page combat-component .interface.monster')
-      || document.querySelector('skill-page combat-component > .card');
-    const card = standardCard || combatCard;
-    if (!card) return null;
+      || document.querySelector('skill-page combat-component > .card')
+      || (combatComponent && /\b(?:revive|respawn|resurrect|dead|defeated)\b/i.test(clean(combatComponent.textContent)) ? combatComponent : null);
+    const statusText = clean([
+      combatCard?.textContent,
+      standardCard?.textContent,
+      document.querySelector('skill-page')?.textContent,
+      document.body?.textContent
+    ].filter(Boolean).join(' '));
+    const reviveWordMatch = statusText.match(/(?:reviv(?:e|ing)|respawn(?:ing)?|resurrect(?:ing)?)[^0-9]{0,24}(\d+(?:\.\d+)?)\s*(seconds?|secs?|s|minutes?|mins?|m)\b/i);
+    const reviveBareMatch = statusText.match(/(?:reviv(?:e|ing)|respawn(?:ing)?|resurrect(?:ing)?)[^0-9]{0,24}(\d+(?:\.\d+)?)(?!\s*(?:hp|level|xp))/i);
+    const reviveClockMatch = statusText.match(/(\d+):(\d{2})[^a-z]{0,12}(?:revive|respawn|resurrect)/i)
+      || statusText.match(/(?:reviv(?:e|ing)|respawn(?:ing)?|resurrect(?:ing)?)[^0-9]{0,24}(\d+):(\d{2})/i);
+    const parsedReviveRemainingMs = reviveWordMatch
+      ? Number(reviveWordMatch[1]) * (/m(?:in(?:ute)?s?)?\b/i.test(reviveWordMatch[2]) ? 60000 : 1000)
+      : reviveClockMatch ? (Number(reviveClockMatch[1]) * 60 + Number(reviveClockMatch[2])) * 1000
+      : reviveBareMatch ? Number(reviveBareMatch[1]) * 1000 : 0;
+    const now = Date.now();
+    if (parsedReviveRemainingMs > 0) {
+      const newReviveCycle = !lastReviveObservedMs || parsedReviveRemainingMs > lastReviveObservedMs + 5000;
+      if (newReviveCycle) reviveUntil = now + parsedReviveRemainingMs;
+      lastReviveObservedMs = parsedReviveRemainingMs;
+    } else if (!/\b(?:reviving|respawning|resurrecting)\b/i.test(statusText)) {
+      reviveUntil = 0;
+      lastReviveObservedMs = 0;
+    }
+    const reviveRemainingMs = reviveUntil > now ? reviveUntil - now : 0;
+    const reviveVisible = reviveRemainingMs > 0 || /\b(?:reviving|respawning|resurrecting)\b/i.test(statusText);
+    if (!combatCard && lastCombatAction && Date.now() - lastCombatSeenAt < 2500 && !reviveVisible) {
+      return { ...lastCombatAction, reviveRemainingMs: 0, combatGrace: true };
+    }
+    const card = combatCard || standardCard;
+    if (!card) {
+      return lastCombatAction && Date.now() - lastCombatSeenAt < 2500
+        ? { ...lastCombatAction, reviveRemainingMs: 0, combatGrace: true }
+        : null;
+    }
     const isCombat = Boolean(combatCard && card === combatCard);
     const fill = isCombat
       ? card.querySelector(':scope > .bars .progress-bar .fill')
       : card.querySelector(':scope > .bars .fill');
     // Ironwood keeps the selected action card mounted while idle. The live
     // progress bars only exist after an action has actually been started.
-    if (!fill && !isCombat) return null;
+    if (!fill && !isCombat) {
+      if (reviveVisible && lastCombatAction) return { ...lastCombatAction, reviveRemainingMs, combatGrace: true };
+      return lastCombatAction && Date.now() - lastCombatSeenAt < 2500
+        ? { ...lastCombatAction, reviveRemainingMs: 0, combatGrace: true }
+        : null;
+    }
     const match = location.pathname.match(/\/skill\/(\d+)\/action\/(\d+)/)
       || previousUrl.match(/\/skill\/(\d+)\/action\/(\d+)/);
     const locationButton = [...document.querySelectorAll('skill-page button.filter')]
@@ -121,7 +181,49 @@
     const actionProgress = isCombat && combatTranslate
       ? Math.max(0, Math.min(100, 100 + Number(combatTranslate[1])))
       : fill ? Math.max(0, Math.min(100, parseFloat(fill.style.width) || 0)) : null;
-    return {
+    const combatRoots = isCombat ? [...document.querySelectorAll('combat-component .interface')] : [];
+    const playerRoot = combatRoots.find((root) => root.classList.contains('player'))
+      || combatRoots.find((root) => !root.classList.contains('monster'));
+    const monsterRoot = combatRoots.find((root) => root.classList.contains('monster'))
+      || combatRoots.find((root) => root !== playerRoot && !root.classList.contains('player'));
+    const isElite = Boolean(isCombat && (
+      /\belite\b/i.test(clean(card.textContent))
+      || card.matches('[class*="elite"], [data-elite="true"]')
+      || combatRoots.some((root) => root.matches('[class*="elite"], [data-elite="true"]')
+        || /\belite\b/i.test(clean(root.textContent))
+        || [...root.querySelectorAll('img, [aria-label], [title]')].some((element) => /\belite\b/i.test(element.alt || element.getAttribute('aria-label') || element.title || '')))
+    ));
+    const combatants = isCombat ? ['player', 'monster'].map((side) => {
+      const root = side === 'player' ? playerRoot : monsterRoot;
+      if (!root) return null;
+      const rootText = clean(root.textContent);
+      const hpPair = rootText.match(/([\d,.]+)\s*\/\s*([\d,.]+)\s*HP/i);
+      const hpText = clean(root.querySelector('.hp, .health, .health-bar .amount')?.textContent)
+        || hpPair?.[0]
+        || clean([...root.querySelectorAll('.amount, .value')].find((element) => /\d/.test(element.textContent))?.textContent);
+      const hp = numberFrom(hpText);
+      const maxHp = numberFrom(hpPair?.[2] || hpText.match(/\/\s*([\d,.]+)/)?.[1]);
+      const fill = root.querySelector('.health-bar .fill, .bars .progress-bar .fill, .bars .fill');
+      const fillWidth = parseFloat(fill?.style.width);
+      const fillTranslate = fill?.style.transform?.match(/translateX\((-?[\d.]+)%\)/i);
+      const nativePercent = Number.isFinite(fillWidth) ? fillWidth
+        : fillTranslate ? 100 + Number(fillTranslate[1]) : null;
+      const hpPercent = maxHp > 0 ? Math.max(0, Math.min(100, hp / maxHp * 100))
+        : Number.isFinite(nativePercent) ? Math.max(0, Math.min(100, nativePercent)) : null;
+      const meterFill = root.querySelector('.action-bar .fill, .energy-bar .fill, .mana-bar .fill, .stamina-bar .fill')
+        || [...root.querySelectorAll('.bars .fill, .progress-bar .fill')].find((element) => !element.closest('.health-bar'));
+      const meterWidth = parseFloat(meterFill?.style.width);
+      const meterTranslate = meterFill?.style.transform?.match(/translateX\((-?[\d.]+)%\)/i);
+      const meterPercent = Number.isFinite(meterWidth) ? meterWidth
+        : meterTranslate ? 100 + Number(meterTranslate[1]) : null;
+      return { side, name: clean(root.querySelector('.name, .header .name')?.textContent) || (side === 'player' ? 'You' : 'Enemy'), image: root.querySelector('.image img, img')?.src || '', hp, maxHp, hpPercent, meterPercent: Number.isFinite(meterPercent) ? Math.max(0, Math.min(100, meterPercent)) : null };
+    }).filter(Boolean) : [];
+    const previousCombatants = lastCombatAction?.combatants || [];
+    const playerNow = combatants.find((fighter) => fighter.side === 'player');
+    const playerBefore = previousCombatants.find((fighter) => fighter.side === 'player');
+    const monsterNow = combatants.find((fighter) => fighter.side === 'monster');
+    const monsterBefore = previousCombatants.find((fighter) => fighter.side === 'monster');
+    const result = {
       name: clean(card.querySelector(':scope > .header > .name')?.textContent) || 'Current action',
       level: clean(card.querySelector(':scope > .header > .level, :scope > .details > .level')?.textContent),
       image: card.querySelector(':scope > .body img')?.src || '',
@@ -129,12 +231,49 @@
       actionId: match?.[2] || '',
       location: clean(locationButton?.textContent) || 'Unknown',
       isCombat,
+      isElite,
       skillName,
       skillLevel,
       skillProgress: Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, progressPercent)) : null,
       levelRemaining: Number.isFinite(progressPercent) ? Math.max(0, 100 - progressPercent) : null,
-      xpPerHour: xpPerHour || null
+      xpPerHour: xpPerHour || null,
+      reviveRemainingMs: reviveRemainingMs > 0 ? reviveRemainingMs : 0,
+      combatants: combatants.map((fighter) => {
+        const previous = previousCombatants.find((item) => item.side === fighter.side);
+        const hit = Boolean(previous && fighter.hp < previous.hp);
+        const healAmount = previous && fighter.hp > previous.hp ? fighter.hp - previous.hp : 0;
+        // A defeated enemy can respawn with the same name and sprite. Detect the
+        // zero-HP to positive-HP transition as a replacement as well.
+        const spawn = fighter.side === 'monster' && Boolean(previous && (
+          previous.name !== fighter.name
+          || previous.image !== fighter.image
+          || ((previous.hpPercent === 0 || previous.hp <= 0) && (fighter.hpPercent > 0 || fighter.hp > 0))
+        ));
+        const key = fighter.side;
+        const now = Date.now();
+        const remembered = combatEffects.get(key) || {};
+        const healAlreadyActive = remembered.healUntil > now;
+        const newHeal = healAmount && !healAlreadyActive;
+        const detectedEffect = newHeal || spawn;
+        const effectWasAvailable = now >= combatEffectLockUntil;
+        if (detectedEffect && effectWasAvailable) {
+          combatEffects.clear();
+          combatEffectLockUntil = now + 1800;
+        }
+        const effectAllowed = !detectedEffect || effectWasAvailable;
+        if (effectAllowed && newHeal) combatEffects.set(key, { ...(combatEffects.get(key) || remembered), healAmount, healUntil: now + 3200 });
+        if (effectAllowed && spawn) combatEffects.set(key, { ...(combatEffects.get(key) || remembered), spawnUntil: now + 4500 });
+        const defeated = fighter.side === 'monster' && (fighter.hpPercent === 0 || fighter.hp <= 0);
+        if (defeated && (!previous || previous.hpPercent !== 0)) {
+          combatEffects.set(key, { ...(combatEffects.get(key) || remembered), deathUntil: now + 3600 });
+        }
+        const effect = combatEffects.get(key) || remembered;
+        const activeHeal = effect.healUntil > now ? effect.healAmount : 0;
+        return { ...fighter, hit, healAmount: healAmount || activeHeal, healStartPercent: healAmount && Number.isFinite(previous?.hpPercent) ? previous.hpPercent : null, spawn: spawn || effect.spawnUntil > now, lostPercent: hit && Number.isFinite(previous.hpPercent) ? Math.max(fighter.hpPercent || 0, previous.hpPercent) : null, dead: defeated || effect.deathUntil > now };
+      })
     };
+    if (isCombat) { lastCombatAction = result; lastCombatSeenAt = Date.now(); }
+    return result;
   }
 
   function readLoot() {
@@ -146,6 +285,12 @@
       worth: numberFrom(row.querySelector(':scope > .worth')?.textContent),
       image: row.querySelector(':scope > .image img')?.src || ''
     }));
+  }
+  function isHighValueDrop(item) {
+    if (!item) return false;
+    return /\brune\b/i.test(item.name)
+      || /efficiency\s+(?:wing|wings|ring|rings)\b/i.test(item.name)
+      || /loot\s+amulet\b/i.test(item.name);
   }
 
   function readConsumables() {
@@ -209,6 +354,7 @@
   const CHALLENGE_PREFS_KEY = 'iw-stats-challenge-prefs';
   const AUTOMATION_KEY = 'iw-stats-automation-enabled';
   const CACHE_LOOKUPS_KEY = 'iw-stats-cache-lookups-enabled';
+  const SUPER_POTIONS_KEY = 'iw-stats-show-super-potions';
   const PLAYER_NAME_KEY = 'iw-stats-player-name-v2';
   const CHALLENGE_SKILLS = {
     Forest: ['Woodcutting', 'Farming', 'Alchemy', 'Exploring', 'Ranged', 'Defense'],
@@ -218,6 +364,17 @@
   const GATHERING_SKILLS = new Set(['Woodcutting', 'Mining', 'Farming', 'Fishing', 'Delving', 'Exploring']);
   const CRAFTING_SKILLS = new Set(['Smelting', 'Smithing', 'Enchanting', 'Alchemy', 'Cooking', 'Imbuing']);
   const COMBAT_SKILLS = new Set(['One-handed', 'Two-handed', 'Ranged', 'Defense']);
+  const TRAIT_REGION_ORDER = [
+    'Woodcutting', 'Farming', 'Alchemy', 'Exploring', 'Ranged',
+    'Mining', 'Smelting', 'Smithing', 'Delving', 'One-handed',
+    'Fishing', 'Cooking', 'Enchanting', 'Imbuing', 'Two-handed',
+    'Defense'
+  ];
+  const TRAIT_REGIONS = [
+    { name: 'Forest', skills: ['Woodcutting', 'Farming', 'Alchemy', 'Exploring', 'Ranged', 'Defense'] },
+    { name: 'Mountain', skills: ['Mining', 'Smelting', 'Smithing', 'Delving', 'One-handed', 'Defense'] },
+    { name: 'Ocean', skills: ['Fishing', 'Cooking', 'Enchanting', 'Imbuing', 'Two-handed', 'Defense'] }
+  ];
   const TTL = { quests: 26 * 3600000, inventory: 3600000, equipped: Number.POSITIVE_INFINITY, adventure: 26 * 3600000, challenges: 26 * 3600000, taming: 3600000, automations: 24 * 3600000, attunement: 4 * 3600000, mastery: Number.POSITIVE_INFINITY, guildEvent: 24 * 3600000, guildTrial: 24 * 3600000 };
   let syncing = false;
 
@@ -269,13 +426,14 @@
     ].some((value) => typeof value !== 'number' || !Number.isFinite(value)));
     const incompleteGuildEvent = key === 'guildEvent' && entry?.schema !== 7;
     const incompleteGuildTrial = key === 'guildTrial' && entry?.schema !== 3;
+    const guildTrialRefreshDue = key === 'guildTrial' && entry && Number.isFinite(entry.refreshAt) && Date.now() >= entry.refreshAt;
     const incompleteQuests = key === 'quests' && (entry?.schema !== 2 || (getPrefs().length === 5 && entry?.day === dayKey() && !entry.dailyComplete));
     const incompleteAttunement = key === 'attunement' && entry?.schema !== 3;
     const incompleteMastery = key === 'mastery' && entry?.schema !== 1;
     const incompleteChallenges = key === 'challenges' && entry?.schema !== 3;
     const incompleteTaming = key === 'taming' && entry?.schema !== 2;
-    const incompleteAutomations = key === 'automations' && entry?.schema !== 3;
-    return !entry || incompleteAdventure || incompleteGuildEvent || incompleteGuildTrial || incompleteQuests || incompleteAttunement || incompleteMastery || incompleteChallenges || incompleteTaming || incompleteAutomations || (key === 'inventory' && !Array.isArray(entry.allItems)) || (entry.expiresAt ? Date.now() >= entry.expiresAt : Date.now() - entry.checkedAt > TTL[key]) || (key === 'quests' && entry.day !== dayKey());
+    const incompleteAutomations = key === 'automations' && entry?.schema !== 4;
+    return !entry || incompleteAdventure || incompleteGuildEvent || incompleteGuildTrial || guildTrialRefreshDue || incompleteQuests || incompleteAttunement || incompleteMastery || incompleteChallenges || incompleteTaming || incompleteAutomations || (key === 'inventory' && !Array.isArray(entry.allItems)) || (entry.expiresAt ? Date.now() >= entry.expiresAt : Date.now() - entry.checkedAt > TTL[key]) || (key === 'quests' && entry.day !== dayKey());
   }
   function humanAge(time) {
     if (!time) return 'Never checked';
@@ -283,14 +441,21 @@
     return minutes < 1 ? 'Just checked' : minutes < 60 ? `${minutes}m ago` : `${Math.floor(minutes / 60)}h ago`;
   }
   function projectedAutomation(item, checkedAt) {
+    checkedAt = item?.checkedAt || checkedAt;
     if (!item?.intervalMs || !checkedAt || item.queuedDone >= item.queuedTotal) return item;
     const elapsedActions = Math.floor(Math.max(0, Date.now() - checkedAt) / item.intervalMs);
-    const additional = Math.min(Math.max(0, item.queuedTotal - item.queuedDone), elapsedActions);
+    const remainingQueue = Math.max(0, item.queuedTotal - item.queuedDone);
+    const additional = Math.min(remainingQueue, elapsedActions);
     return {
       ...item,
       queuedDone: item.queuedDone + additional,
       lootAmount: Math.round(item.lootAmount + additional * (item.outputPerAction || 0))
     };
+  }
+  function nextGuildEventName(eventName) {
+    const order = ['Gathering', 'Crafting', 'Combat'];
+    const index = order.findIndex((name) => new RegExp(name, 'i').test(eventName || ''));
+    return index < 0 ? '' : order[(index + 1) % order.length];
   }
   function guildEventDetail(entry) {
     if (!entry) return 'Never checked';
@@ -298,7 +463,11 @@
     const countdown = () => {
       return formatDuration(Math.max(0, remaining) / 1000);
     };
-    if (remaining > 0 && entry.state === 'Cooldown') return `Ready in ${countdown()}`;
+    if (entry.state === 'Cooldown') {
+      const nextEvent = nextGuildEventName(entry.eventName);
+      const detail = remaining > 0 ? `Ready in ${countdown()}` : 'Ready to start';
+      return nextEvent ? `Next: ${nextEvent} · ${detail}` : detail;
+    }
     if (remaining > 0 && entry.state === 'Participating') return `${entry.eventName || 'Guild event'} · Participating · ${formatNumber(entry.personalXp || 0)} XP · ${countdown()} remaining`;
     if (entry.state === 'Participating') return entry.stateDetail || `${entry.eventName || 'Guild event'} · Participating · ${formatNumber(entry.personalXp || 0)} XP`;
     if (entry.state === 'Available') return 'Ready to start';
@@ -338,7 +507,7 @@
     return name;
   }
   function titleFromSlug(slug) {
-    return slug.replace(/^potion-divine-/, '').split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ');
+    return slug.replace(/^potion-(?:divine|super)-/, '').split('-').map((part) => part.toLowerCase() === 'xp' ? 'XP' : part[0].toUpperCase() + part.slice(1)).join(' ');
   }
   function parseCompact(text) {
     const match = clean(text).match(/[\d,.]+\s*[KMB]?/i);
@@ -373,7 +542,8 @@
       const src = button.querySelector('img')?.getAttribute('src') || '';
       const key = src.split('/').pop()?.split('?')[0] || '';
       const amountText = clean(button.querySelector('.amount')?.textContent);
-      return key ? { key, amount: parseCompact(amountText), amountText, image: src } : null;
+      const name = clean(button.querySelector('.name')?.textContent);
+      return key ? { key, name, amount: parseCompact(amountText), amountText, image: src } : null;
     }).filter(Boolean);
     const items = [...doc.querySelectorAll('inventory-page button.item')].map((button) => {
       const src = button.querySelector('img')?.getAttribute('src') || '';
@@ -672,39 +842,132 @@
         lootAmount: numberFrom(lootRow?.querySelector('.amount')?.textContent),
         queuedDone: queueMatch ? numberFrom(queueMatch[1]) : 0,
         queuedTotal: queueMatch ? numberFrom(queueMatch[2]) : 0,
+        checkedAt: Date.now(),
         intervalMs: baseIntervalMs ? baseIntervalMs / (1 + Math.max(0, speedBonus)) : 0
       });
     }
     structures.forEach((item) => {
       item.outputPerAction = item.queuedDone > 0 ? item.lootAmount / item.queuedDone : 0;
     });
-    const longestRemaining = Math.max(0, ...structures.map((item) =>
-      Math.max(0, item.queuedTotal - item.queuedDone) * item.intervalMs
-    ));
-    const data = { schema: 3, structures, expiresAt: Date.now() + (longestRemaining || TTL.automations) };
+    const data = automationSnapshot(structures);
     setCache('automations', data);
     return data;
   }
 
+  async function openAutomationHouse(doc) {
+    if (!doc.querySelector('home-page')) {
+      const started = Date.now();
+      let houseButton;
+      while (Date.now() - started < 10000 && !houseButton) {
+        houseButton = [...doc.querySelectorAll('nav-component button')]
+          .find((button) => clean(button.textContent) === 'House');
+        if (!houseButton) await wait(100);
+      }
+      if (!houseButton) throw new Error('Could not open the House page');
+      houseButton.click();
+    }
+    await waitFor(doc, 'home-page', 10000);
+    const started = Date.now();
+    while (Date.now() - started < 6000) {
+      if ([...doc.querySelectorAll('home-page .card > .header > .name')]
+        .some((element) => clean(element.textContent) === 'Structures')) return;
+      await wait(100);
+    }
+    throw new Error('Could not load automation structures');
+  }
+
+  async function collectAutomationStructure(doc, structure) {
+    const root = doc.querySelector('home-page');
+    const card = (name) => [...root.querySelectorAll('.card')]
+      .find((item) => clean(item.querySelector(':scope > .header > .name')?.textContent) === name);
+    const row = [...(card('Structures')?.querySelectorAll(':scope > button.row') || [])]
+      .find((candidate) => clean(candidate.querySelector(':scope > .name')?.textContent) === structure);
+    if (!row) throw new Error(`Could not find ${structure}`);
+    row.click();
+    await wait(100);
+    const selectedAt = Date.now();
+    let before;
+    while (Date.now() - selectedAt < 6000) {
+      const selected = card('Structures')?.querySelector(':scope > button.row.active-link');
+      if (clean(selected?.querySelector(':scope > .name')?.textContent) === structure) {
+        before = readVisibleAutomation(doc);
+        if (before) break;
+      }
+      await wait(100);
+    }
+    if (!before) throw new Error(`Could not load ${structure} automation loot`);
+    if (before.lootAmount <= 0) {
+      storeAutomationStructure(before);
+      return;
+    }
+    // Native controls are siblings of the Loot card inside automate-component.
+    const collectButton = [...root.querySelectorAll('automate-component > .action-buttons > button')]
+      .find((button) => !button.disabled && /^(?:collect|claim)(?:\s+loot)?$/i.test(clean(button.textContent)));
+    if (!collectButton) throw new Error(`No loot claim control for ${structure}`);
+    if (!automationEnabled()) return;
+    collectButton.click();
+    const started = Date.now();
+    while (Date.now() - started < 10000) {
+      const after = readVisibleAutomation(doc);
+      // A disabled button can mean a pending request. Confirm the actual loot
+      // reduction before replacing the snapshot or moving to another structure.
+      if (after?.structure === structure && after.lootAmount < before.lootAmount) {
+        storeAutomationStructure(after);
+        return;
+      }
+      await wait(100);
+    }
+    throw new Error(`The game did not confirm the ${structure} loot claim`);
+  }
+
+  async function collectAllAutomationLoot() {
+    if (!automationEnabled() || collectingAutomation || refreshingAutomations) return;
+    const cached = getCache().automations;
+    const structures = (cached?.structures || [])
+      .map((item) => projectedAutomation(item, cached.checkedAt))
+      .filter((item) => item.lootAmount > 0);
+    if (!structures.length) return;
+    collectingAutomation = 'all';
+    setCache('automations', { ...cached, lastError: '' });
+    lastSignature = '';
+    render();
+    try {
+      await withPage('/', 'app-component', async (doc) => {
+        await openAutomationHouse(doc);
+        for (const item of structures) {
+          if (!automationEnabled()) break;
+          collectingAutomation = item.structure;
+          await collectAutomationStructure(doc, item.structure);
+          lastSignature = '';
+          render();
+        }
+      });
+    } catch (error) {
+      console.error('[Ironwood Status] Automation collection failed', error);
+      setCache('automations', { ...getCache().automations, lastError: error.message });
+    } finally {
+      collectingAutomation = '';
+      lastSignature = '';
+      render();
+    }
+  }
+
+  function automationSnapshot(structures) {
+    const now = Date.now();
+    const oldestExpiry = Math.min(now + TTL.automations, ...structures.map((item) => item.checkedAt + TTL.automations));
+    const checkedAt = Math.min(now, ...structures.map((item) => item.checkedAt));
+    // Queue completion is projected locally from the fixed interval. Do not
+    // expire the cache at the predicted queue end and trigger a hidden lookup.
+    return { schema: 4, checkedAt, structures, expiresAt: oldestExpiry };
+  }
+
   async function refreshAutomationsSnapshot(force = false) {
     if (!cacheLookupsEnabled()) return;
-    if (refreshingAutomations || (!force && !isStale('automations'))) return;
+    if (refreshingAutomations || collectingAutomation || (!force && !isStale('automations'))) return;
     refreshingAutomations = true;
     try {
       await withPage('/', 'app-component', async (doc) => {
-        const navStarted = Date.now();
-        let houseButton = null;
-        while (Date.now() - navStarted < 10000 && !houseButton) {
-          houseButton = [...doc.querySelectorAll('nav-component button')]
-            .find((button) => clean(button.textContent) === 'House');
-          if (!houseButton) await wait(100);
-        }
-        if (!houseButton) throw new Error('Could not open the House page');
-        houseButton.click();
-        await waitFor(doc, 'home-page', 10000);
-        const started = Date.now();
-        while (Date.now() - started < 6000 && ![...doc.querySelectorAll('home-page .card > .header > .name')]
-          .some((element) => clean(element.textContent) === 'Structures')) await wait(100);
+        await openAutomationHouse(doc);
         await collectAutomations(doc);
       });
     } catch (error) {
@@ -1087,7 +1350,10 @@
     const cooldownText = rowValue(cooldownRow);
     const eventRow = [...(eventCard?.querySelectorAll(':scope > .row') || [])]
       .find((row) => !/^(Guild Event XP|Guild Credits)$/.test(clean(row.querySelector('.name')?.textContent)));
-    const eventName = clean(eventRow?.querySelector(':scope > .name')?.textContent) || 'Guild Event';
+    const observedEventName = clean(eventRow?.querySelector(':scope > .name')?.textContent);
+    const eventName = nextGuildEventName(observedEventName) ? observedEventName
+      : cooldownText ? getCache().guildEvent?.eventName || 'Guild Event'
+      : observedEventName || 'Guild Event';
     const eventRemainingText = clean(eventRow?.querySelector(':scope > .date')?.textContent);
     const eventXpRow = [...(eventCard?.querySelectorAll(':scope > .row') || [])]
       .find((row) => clean(row.querySelector(':scope > .name')?.textContent) === 'Guild Event XP');
@@ -1156,12 +1422,11 @@
         ? `${joinableRows.length} trials available${endText ? ` · ends in ${endText}` : ''}`
         : `No trial available${endText ? ` · ends in ${endText}` : ''}`;
     const timer = durationMs(endText);
-    const expiresAt = state === 'Active'
-      ? Date.now() + Math.min(timer || 3600000, 3600000)
-      : Date.now() + (timer || TTL.guildTrial);
+    const refreshAt = Date.now() + (timer || TTL.guildTrial);
+    const expiresAt = refreshAt;
     setCache('guildTrial', {
       schema: 3, state, stateDetail: detail, activeName, available: joinableRows.length,
-      stateEndsAt: state === 'Active' && timer ? Date.now() + timer : null, expiresAt
+      stateEndsAt: state === 'Active' && timer ? Date.now() + timer : null, expiresAt, refreshAt
     });
   }
   async function syncStale(force = false) {
@@ -1244,6 +1509,32 @@
 
   function updateLiveValues(action, loot, consumables, materials, masteryProgress) {
     if (!page) return;
+    if (action?.isCombat && Number.isFinite(action.progress)) {
+      page.querySelector('.iw-combat-card')?.style.setProperty('--combat-progress', `${action.progress}%`);
+      action.combatants?.forEach((fighter) => {
+        const element = page.querySelector(`.iw-fighter-${fighter.side}`);
+        const fill = element?.querySelector('.iw-hp-fill');
+        if (element) element.classList.toggle('iw-hit', Boolean(fighter.hit));
+        if (element) element.classList.toggle('iw-fighter-dead', Boolean(fighter.dead));
+        if (element) element.classList.toggle('iw-spawn', Boolean(fighter.spawn));
+        if (fill && Number.isFinite(fighter.hpPercent)) fill.style.width = `${fighter.hpPercent}%`;
+        if (element && Number.isFinite(fighter.meterPercent)) element.style.setProperty('--fighter-progress', `${fighter.meterPercent}%`);
+        const track = element?.querySelector('.iw-hp-track');
+        if (track && fighter.hit && Number.isFinite(fighter.lostPercent) && Number.isFinite(fighter.hpPercent)) {
+          const eventKey = `${fighter.hpPercent}:${fighter.lostPercent}`;
+          const existing = track.querySelector('.iw-hp-damage');
+          if (!existing || existing.dataset.eventKey !== eventKey) {
+            existing?.remove();
+            const damage = document.createElement('span');
+            damage.className = 'iw-hp-damage';
+            damage.dataset.eventKey = eventKey;
+            damage.style.left = `${fighter.hpPercent}%`;
+            damage.style.width = `${Math.max(0, fighter.lostPercent - fighter.hpPercent)}%`;
+            track.appendChild(damage);
+          }
+        }
+      });
+    }
     const text = (selector, value) => { const element = page.querySelector(selector); if (element && element.textContent !== String(value)) element.textContent = value; };
     if (action) {
       const actionFill = page.querySelector('[data-live-progress]');
@@ -1252,6 +1543,12 @@
       if (skillFill) skillFill.style.width = `${action.skillProgress ?? 0}%`;
       text('[data-live-level-remaining]', Number.isFinite(action.levelRemaining) ? `${action.levelRemaining}% remaining` : '—');
       text('[data-live-xp-hour]', action.xpPerHour ? `${formatCompact(action.xpPerHour)} XP/h` : '—');
+      const reviveElement = page.querySelector('[data-live-revive]');
+      if (reviveElement) {
+        const remaining = Number(action.reviveRemainingMs) || 0;
+        reviveElement.textContent = remaining > 0 ? `Revive in ${formatReviveTime(remaining)}` : '';
+        reviveElement.hidden = remaining <= 0;
+      }
     }
     text('[data-live-loot-total]', `${formatNumber(loot.reduce((sum, item) => sum + item.amount, 0))} items waiting`);
     text('[data-live-queue-loot]', formatCompact(loot.reduce((sum, item) => sum + item.amount, 0)));
@@ -1319,8 +1616,58 @@
     if (!page || page.hidden) return;
     try {
     const action = readCurrentAction();
+    const combatDeath = Boolean(action?.isCombat && action.combatants?.some((fighter) => fighter.side === 'monster' && fighter.hpPercent === 0));
     const loot = readLoot().sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
     const consumables = readConsumables();
+    const lootDeltas = loot.map((item) => { const key = item.image || item.name; const old = previousLootValues.get(key); return old === undefined || old === item.amount ? 0 : item.amount - old; });
+    const consumableDeltas = consumables.map((item) => { const key = item.image || item.name; const old = previousConsumableValues.get(key); return old === undefined || old === parseCompact(item.amount) ? 0 : parseCompact(item.amount) - old; });
+    const noticeNow = Date.now();
+    if (!action?.isCombat) eliteCombatDetected = false;
+    if (action?.isCombat && consumables.some((item, index) => /elite\s+key/i.test(item.name) && consumableDeltas[index] < 0)) eliteCombatDetected = true;
+    const eliteKeyEquipped = consumables.some((item) => /elite\s+key/i.test(item.name));
+    const eliteCombat = Boolean(action?.isCombat && (action.isElite || eliteCombatDetected || eliteKeyEquipped));
+      lootDeltaNotices.forEach((notice, key) => { if (notice.until <= noticeNow) lootDeltaNotices.delete(key); });
+      consumableDeltaNotices.forEach((notice, key) => { if (notice.until <= noticeNow) consumableDeltaNotices.delete(key); });
+      loot.forEach((item, index) => {
+        const delta = lootDeltas[index];
+        const key = item.image || item.name;
+        const existing = lootDeltaNotices.get(key);
+        if (delta && (!existing || existing.delta !== delta || existing.until <= noticeNow)) lootDeltaNotices.set(key, { delta, started: noticeNow, until: noticeNow + 4000 });
+      });
+      consumables.forEach((item, index) => {
+        const delta = consumableDeltas[index];
+        const key = item.image || item.name;
+        const existing = consumableDeltaNotices.get(key);
+        if (delta && (!existing || existing.delta !== delta || existing.until <= noticeNow)) consumableDeltaNotices.set(key, { delta, started: noticeNow, until: noticeNow + 4000 });
+      });
+    previousLootValues = new Map(loot.map((item) => [item.image || item.name, item.amount]));
+    previousConsumableValues = new Map(consumables.map((item) => [item.image || item.name, parseCompact(item.amount)]));
+    const isHealingConsumable = (item) => /pie|potion|elixir|food/i.test(item?.name || '');
+    const dropCandidate = action?.isCombat ? loot.find((item, index) => lootDeltas[index] > 0 && item.image) : null;
+    const useCandidate = action?.isCombat && !action.combatants?.some((fighter) => fighter.healAmount > 0)
+      ? consumables.find((item, index) => consumableDeltas[index] < 0 && item.image && !isHealingConsumable(item)) : null;
+    if (!action?.isCombat) { combatUseNotice = null; combatDropNotice = null; }
+    if (dropCandidate) {
+      const key = dropCandidate.image || dropCandidate.name;
+      if (!combatDropNotice || combatDropNotice.key !== key || combatDropNotice.until <= noticeNow) combatDropNotice = { key, item: dropCandidate, started: noticeNow, until: noticeNow + 4000 };
+    }
+    if (useCandidate) {
+      const key = useCandidate.image || useCandidate.name;
+      if (!combatUseNotice || combatUseNotice.key !== key || combatUseNotice.until <= noticeNow) combatUseNotice = { key, item: useCandidate, started: noticeNow, until: noticeNow + 4000 };
+    }
+    if (combatDropNotice?.until <= noticeNow) combatDropNotice = null;
+    if (combatUseNotice?.until <= noticeNow) combatUseNotice = null;
+    const combatDrop = combatDropNotice?.item || null;
+    const combatUse = combatUseNotice?.item || null;
+    const pieHealing = Boolean(action?.isCombat && consumables.some(isHealingConsumable));
+    const consumedHealing = action?.isCombat
+      ? consumables.find((item, index) => consumableDeltas[index] < 0 && item.image && isHealingConsumable(item)) : null;
+    const recoveryIcon = consumedHealing?.image || consumables.find(isHealingConsumable)?.image || '';
+    page.style.setProperty('--iw-recovery-icon', recoveryIcon ? `url(${JSON.stringify(recoveryIcon)})` : 'none');
+    page.style.setProperty('--iw-drop-icon', combatDrop ? `url(${JSON.stringify(combatDrop.image)})` : 'none');
+    page.style.setProperty('--iw-use-icon', combatUse ? `url(${JSON.stringify(combatUse.image)})` : 'none');
+    page.style.setProperty('--iw-drop-delay', `-${Math.min(4000, Math.max(0, noticeNow - (combatDropNotice?.started || noticeNow)))}ms`);
+    page.style.setProperty('--iw-use-delay', `-${Math.min(4000, Math.max(0, noticeNow - (combatUseNotice?.started || noticeNow)))}ms`);
     const materials = readMaterials();
     const masteryProgress = readMastery();
     const finiteQueue = readFiniteQueue();
@@ -1422,6 +1769,7 @@
     const cachedInventory = (Array.isArray(cache.inventory?.items) ? cache.inventory.items : [])
       .filter((item) => item && typeof item.image === 'string' && item.image);
     const cachedAllItems = Array.isArray(cache.inventory?.allItems) ? cache.inventory.allItems : [];
+    const showSuperPotions = localStorage.getItem(SUPER_POTIONS_KEY) === 'true';
     const inventoryByKey = new Map(cachedAllItems.map((item) => [item.key, item]));
     let consumableRows = consumables.map((item, liveIndex) => {
       const key = item.image.split('/').pop()?.split('?')[0] || '';
@@ -1436,14 +1784,14 @@
         equipped: storedOnly ? null : parseCompact(item.amount),
         stored: storedOnly ? (item.amount ? parseCompact(item.amount) : (storedItem?.amount ?? 0)) : (storedItem?.amount ?? 0)
       };
-    }).filter((item) => !(gatheringSkill && /stardust/i.test(item.name)));
+    }).filter((item) => !(!craftingSkill && /stardust/i.test(item.name)));
     if (masteryAchieved) consumableRows = consumableRows.filter((item) => !item.masteryContract);
     [
       ['stardust.png', 'Stardust'],
       ['contract-mastery.png', 'Mastery Contract']
     ].forEach(([key, name]) => {
       const storedItem = inventoryByKey.get(key);
-      if (!storedItem || (key === 'stardust.png' && gatheringSkill) || (key === 'contract-mastery.png' && masteryAchieved) || consumableRows.some((item) => item.image.split('/').pop()?.split('?')[0] === key)) return;
+      if (!storedItem || (key === 'stardust.png' && !craftingSkill) || (key === 'contract-mastery.png' && masteryAchieved) || consumableRows.some((item) => item.image.split('/').pop()?.split('?')[0] === key)) return;
       consumableRows.push({
         name, image: storedItem.image || `/assets/items/${key}`, amount: storedItem.amountText,
         liveIndex: null, storedOnly: true, masteryContract: key === 'contract-mastery.png', equipped: null, stored: storedItem.amount
@@ -1470,8 +1818,25 @@
       const existing = potionMap.get(key);
       potionMap.set(key, { key, name: item.name, image: item.image, equipped: item.amount, stored: existing?.stored ?? null });
     });
+    if (showSuperPotions) {
+      cachedAllItems.forEach((item) => {
+        const slug = item?.key?.match(/^(potion-super-[\w-]+)\.[\w]+$/)?.[1];
+        if (!slug || !(item.amount > 0)) return;
+        const equipped = consumables.find((consumable) => consumable.image.split('/').pop()?.split('?')[0] === item.key);
+        potionMap.set(item.key, {
+          key: item.key,
+          name: item.name || `Super ${titleFromSlug(slug)} Potion`,
+          image: item.image,
+          equipped: equipped ? parseCompact(equipped.amount) : null,
+          stored: item.amount,
+          superPotion: true
+        });
+      });
+    }
     const canonicalPotionOrder = new Map(canonicalDivinePotions.map(([key], index) => [key, index]));
-    const divinePotions = [...potionMap.values()].sort((a, b) => {
+    const displayedPotions = [...potionMap.values()].sort((a, b) => {
+      const tierOrder = Number(Boolean(a.superPotion)) - Number(Boolean(b.superPotion));
+      if (tierOrder) return tierOrder;
       const equippedOrder = Number(Boolean(b.equipped)) - Number(Boolean(a.equipped));
       if (equippedOrder) return equippedOrder;
       const canonicalOrder = (canonicalPotionOrder.get(a.key) ?? 99) - (canonicalPotionOrder.get(b.key) ?? 99);
@@ -1486,38 +1851,50 @@
     const craftedInventory = craftedLoot
       ? inventoryCounts.get(craftedLoot.image.split('/').pop()?.split('?')[0]) : null;
     const signature = JSON.stringify({
-      action: action && { name: action.name, level: action.level, image: action.image, actionId: action.actionId, location: action.location, skillName: action.skillName, skillLevel: action.skillLevel },
-      loot: loot.map((item) => ({ name: item.name, image: item.image })),
-      consumables: consumables.map((item) => ({ name: item.name, image: item.image })),
+      action: action && { name: action.name, level: action.level, image: action.image, actionId: action.actionId, location: action.location, skillName: action.skillName, skillLevel: action.skillLevel, isElite: eliteCombat, revive: Boolean(action.reviveRemainingMs), combatants: action.combatants?.map((fighter) => ({ side: fighter.side, name: fighter.name, image: fighter.image, healAmount: Boolean(fighter.healAmount), spawn: fighter.spawn, dead: fighter.dead })), pieHealing },
+      loot: loot.map((item) => ({ name: item.name, image: item.image, amount: item.amount })),
+      consumables: consumables.map((item) => ({ name: item.name, image: item.image, amount: item.amount })),
       materials: materials.map((item) => ({ name: item.name, image: item.image })),
       masteryAchieved,
-      finiteQueue, materialWarning, materialWarningText, adventureActive, adventureIdleAvailable, guildEventActionActive, guildTrialActive, cache, prefs, challengePrefs, automationOn, cacheLookupsOn, questModalOpen, automationTask, tamingClaimNoticeUntil
+      finiteQueue, materialWarning, materialWarningText, adventureActive, adventureIdleAvailable, guildEventActionActive, guildTrialActive, cache, prefs, challengePrefs, automationOn, cacheLookupsOn, showSuperPotions, questModalOpen, automationTask, tamingClaimNoticeUntil
     });
     if (signature === lastSignature) { updateLiveValues(action, loot, consumables, materials, masteryProgress); return; }
     lastSignature = signature;
+    const dungeonKeyIcon = consumables.find((item) => /key/i.test(item.name) && item.image)?.image || '/assets/misc/elite-key.png';
+    const dungeonCombat = Boolean(action.isCombat && (eliteCombat || /dungeon/i.test(`${action.name} ${action.location}`)));
+    const combatLocation = Boolean(action.isCombat || action.location === 'Outskirts');
+    const locationIcon = dungeonCombat ? dungeonKeyIcon : combatLocation ? '/assets/misc/combat.png' : '/assets/misc/woodcutting.png';
+    const locationClass = dungeonCombat ? 'dungeon' : combatLocation ? 'outskirts' : 'village';
+    const locationLabel = dungeonCombat ? 'Dungeons' : action.isCombat ? 'Combat' : action.location;
+    const displayActionName = action.isCombat && eliteCombat && !/^elite\b/i.test(action.name) ? `Elite ${action.name}` : action.name;
+    const locationBadges = eliteCombat
+      ? `<span class="iw-location-badge dungeon" title="Elite dungeon" aria-label="Elite dungeon"><img src="${escapeHtml(dungeonKeyIcon)}" alt=""></span><span class="iw-location-badge outskirts" title="Combat" aria-label="Combat"><img src="/assets/misc/combat.png" alt=""></span>`
+      : `<span class="iw-location-badge ${locationClass}" title="${escapeHtml(locationLabel)}" aria-label="${escapeHtml(locationLabel)}"><img src="${escapeHtml(locationIcon)}" alt=""></span>`;
 
     page.innerHTML = `<div class="iw-stats-grid">
         ${action ? `
-        <section class="iw-card iw-action-card">
-          <div class="iw-card-header"><span>Current Action</span><span class="iw-action-badges">
+        <section class="iw-card iw-action-card ${action.isCombat ? `iw-combat-card${combatDeath ? ' iw-death' : ''}` : ''}" style="--combat-progress:${action.progress ?? 0}%">
+          <div class="iw-card-header"><span>Current Action</span><span class="iw-action-badges">${action.isCombat ? '<span class="iw-combat-live"><i></i> LIVE</span>' : ''}
             <span class="iw-mastery-badge ${masteryAchieved ? 'achieved' : ''}" title="${escapeHtml(action.skillName || 'Skill')} Mastery ${masteryAchieved ? 'achieved' : 'not achieved'}" aria-label="${escapeHtml(action.skillName || 'Skill')} Mastery ${masteryAchieved ? 'achieved' : 'not achieved'}"><img src="/assets/misc/mastery.png" alt=""></span>
             ${adventureActive ? '<span class="iw-adventure-badge" title="Adventure in progress" aria-label="Adventure in progress"><img src="/assets/misc/adventure.png" alt=""></span>' : ''}
             ${guildEventActionActive ? `<span class="iw-guild-event-badge" title="${escapeHtml(cache.guildEvent.eventName)} contribution active" aria-label="${escapeHtml(cache.guildEvent.eventName)} contribution active"><img src="/assets/misc/combat.png" alt=""></span>` : ''}
             ${guildTrialActive ? '<span class="iw-guild-trial-badge" title="Guild trial in progress" aria-label="Guild trial in progress"><img src="/assets/misc/quests.png" alt=""></span>' : ''}
-            <span class="iw-location-badge ${action.location === 'Outskirts' || action.isCombat ? 'outskirts' : 'village'}" title="${escapeHtml(action.location)}" aria-label="${escapeHtml(action.location)}">${action.location === 'Outskirts' || action.isCombat ? '<img src="/assets/misc/combat.png" alt="">' : '<img src="/assets/misc/woodcutting.png" alt="">'}</span>
-            <span class="iw-active-badge" title="Action active" aria-label="Action active"><svg class="iw-spin" viewBox="0 0 24 24" aria-hidden="true"><circle class="iw-spin-track" cx="12" cy="12" r="8"></circle><g class="iw-spin-motion"><path d="M12 4a8 8 0 0 1 7.2 4.5"></path><path d="M19.2 5.7v2.8h-2.8"></path><path d="M12 20a8 8 0 0 1-7.2-4.5"></path><path d="M4.8 18.3v-2.8h2.8"></path></g></svg></span>
+            ${locationBadges}
+            <span class="iw-active-badge ${action.reviveRemainingMs > 0 ? 'revive-active' : ''}" title="${action.reviveRemainingMs > 0 ? 'Reviving' : 'Action active'}" aria-label="${action.reviveRemainingMs > 0 ? 'Reviving' : 'Action active'}"><svg class="iw-spin" viewBox="0 0 24 24" aria-hidden="true"><circle class="iw-spin-track" cx="12" cy="12" r="8"></circle><g class="iw-spin-motion"><path d="M12 4a8 8 0 0 1 7.2 4.5"></path><path d="M19.2 5.7v2.8h-2.8"></path><path d="M12 20a8 8 0 0 1-7.2-4.5"></path><path d="M4.8 18.3v-2.8h2.8"></path></g></svg></span>
             ${materialWarning ? `<span class="iw-material-warning ${materialWarning}" title="${escapeHtml(materialWarningText)}" aria-label="${escapeHtml(materialWarningText)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 20H3L12 3Z"></path><path d="M12 9v5M12 17h.01"></path></svg></span>` : ''}
             ${queueWarning ? `<span class="iw-queue-warning ${queueWarning}" title="Queue finishes in ${escapeHtml(finiteQueue.time)}" aria-label="Queue finishes in ${escapeHtml(finiteQueue.time)}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 7v5l3 2"></path></svg></span>` : ''}
+            ${action.reviveRemainingMs > 0 ? '<span class="iw-revive-badge" title="Character defeated" aria-label="Character defeated">☠</span>' : ''}
           </span></div>
           <div class="iw-action-body">
             <div class="iw-action-image">${action.image ? `<img src="${escapeHtml(action.image)}" alt="">` : ''}</div>
-            <div class="iw-action-name"><span class="iw-action-title"><strong>${escapeHtml(action.name)}</strong>${action.level ? `<small>(${escapeHtml(action.level.replace(/^Lv\.\s*/i, 'lvl '))})</small>` : ''}</span><span class="iw-action-meta">${action.skillName || action.skillLevel ? `<span>${escapeHtml([action.skillName, action.skillLevel].filter(Boolean).join(' '))}</span>` : ''}<span data-live-xp-hour>${action.xpPerHour ? `${formatCompact(action.xpPerHour)} XP/h` : '—'}</span><span data-live-level-remaining>${Number.isFinite(action.levelRemaining) ? `${action.levelRemaining}% remaining` : '—'}</span></span></div>
+            <div class="iw-action-name"><span class="iw-action-title"><strong>${escapeHtml(displayActionName)}</strong>${action.level ? `<small>(${escapeHtml(action.level.replace(/^Lv\.\s*/i, 'lvl '))})</small>` : ''}</span><span class="iw-action-meta">${action.skillName || action.skillLevel ? `<span>${escapeHtml([action.skillName, action.skillLevel].filter(Boolean).join(' '))}</span>` : ''}<span data-live-xp-hour>${action.xpPerHour ? `${formatCompact(action.xpPerHour)} XP/h` : '—'}</span><span data-live-level-remaining>${Number.isFinite(action.levelRemaining) ? `${action.levelRemaining}% remaining` : '—'}</span><span class="iw-revive-timer" data-live-revive ${action.reviveRemainingMs > 0 ? '' : 'hidden'}>${action.reviveRemainingMs > 0 ? `Revive in ${formatReviveTime(action.reviveRemainingMs)}` : ''}</span></span></div>
             ${finiteQueue ? `<div class="iw-queue-summary"><span>Finishes in</span><strong>${escapeHtml(finiteQueue.time)}</strong>${compactCraftingLoot ? `<small class="iw-queue-values"><span title="Current loot"><b data-live-queue-loot>${formatCompact(totalItems)}</b> <em>loot</em></span><span title="Total craft queue"><b>${formatCompact(finiteQueue.total)}</b> <em>queued</em></span><span title="Inventory"><b>${escapeHtml(craftedInventory?.amountText || '0')}</b> <em>owned</em></span></small>` : `<small>${formatNumber(finiteQueue.completed)} / ${formatNumber(finiteQueue.total)} actions</small>`}</div>` : ''}
           </div>
-          <div class="iw-progress-stack">
+          ${action.isCombat && action.combatants.length ? `<div class="iw-duel-board">${action.combatants.map((fighter) => { const playerDefeated = fighter.side === 'player' && action.reviveRemainingMs > 0; return `<div class="iw-fighter iw-fighter-${fighter.side}${fighter.hit ? ' iw-hit' : ''}${fighter.spawn ? ' iw-spawn' : ''}${fighter.healAmount ? ' iw-heal' : ''}${fighter.dead ? ' iw-fighter-dead' : ''}${playerDefeated ? ' iw-fighter-reviving' : ''}" style="--fighter-progress:${fighter.meterPercent ?? 0}%"><div class="iw-fighter-heading"><span>${escapeHtml(fighter.name)}</span><b>${fighter.maxHp ? `${formatNumber(fighter.hp)} / ${formatNumber(fighter.maxHp)} HP` : `${formatNumber(fighter.hp)} HP`}</b></div><div class="iw-fighter-visual"><span class="iw-fighter-glow"></span>${fighter.image ? `<img src="${escapeHtml(fighter.image)}" alt="">` : ''}${fighter.dead ? '<span class="iw-death-stamp" aria-hidden="true">✕</span><span class="iw-bone-pile" aria-hidden="true"></span>' : ''}${playerDefeated ? '<span class="iw-bone-pile iw-bone-pile-static" aria-hidden="true"></span>' : ''}${fighter.healAmount ? `<span class="iw-floating-heal ${fighter.side === 'player' ? 'iw-player-heal' : 'iw-enemy-heal'}">+${formatNumber(fighter.healAmount)} HP</span>` : ''}${fighter.spawn ? '<span class="iw-spawn-ring"></span>' : ''}</div><div class="iw-hp-track"><div class="iw-hp-fill" style="width:${fighter.hpPercent ?? 0}%"></div>${fighter.hit && fighter.lostPercent ? `<span class="iw-hp-damage" style="left:${fighter.hpPercent ?? 0}%; width:${Math.max(0, fighter.lostPercent - (fighter.hpPercent || 0))}%"></span>` : ''}</div></div>`; }).join('<span class="iw-duel-divider">VS</span>')}</div>` : ''}
+          ${action.isCombat ? '' : `<div class="iw-progress-stack">
             <div class="iw-progress iw-action-progress" title="Current action progress"><div data-live-progress style="width:${action.progress ?? 0}%"></div></div>
             <div class="iw-progress iw-skill-progress" title="${escapeHtml(action.skillName || 'Skill')} level progress"><div data-live-skill-progress style="width:${action.skillProgress ?? 0}%"></div></div>
-          </div>
+          </div>`}
           ${materials.length ? `<div class="iw-subheader">Materials</div><div class="iw-materials"><div class="iw-material-head"><span></span><span>Material</span><span>Available</span></div>${materials.map((item, index) => `<div class="iw-material"><img src="${escapeHtml(item.image)}" alt=""><span>${escapeHtml(item.name)}</span><b data-live-material-available="${index}">${formatNumber(item.available)}</b></div>`).join('')}</div>` : ''}
           <div class="iw-subheader">Consumables</div>
           <div class="iw-consumables">${consumableRows.length ? `<div class="iw-consumable-head"><span></span><span>Consumable</span><span>Equipped</span><span>Stored</span></div>${consumableRows.map((item) => `<div class="iw-consumable"><img src="${escapeHtml(item.image)}" alt=""><span class="iw-consumable-name">${escapeHtml(item.name)}${item.masteryContract ? ` <small>· <span data-live-mastery-progress>${masteryProgress.cap ? `${formatCompact(masteryProgress.current)} / ${formatCompact(masteryProgress.cap)}` : '—'}</span></small>` : ''}</span>${item.storedOnly ? '<i></i>' : `<b data-live-consumable-equipped="${item.liveIndex}">${formatNumber(item.equipped || 0)}</b>`}<b class="${item.stored ? '' : 'iw-zero'}" ${item.masteryContract ? 'data-live-mastery-contract' : item.liveIndex === null ? '' : `data-live-consumable-stored="${item.liveIndex}"`}>${formatNumber(item.stored || 0)}</b></div>`).join('')}` : '<div class="iw-muted">No consumables equipped.</div>'}</div>
@@ -1527,9 +1904,9 @@
           <div class="iw-card-header"><span>Current Loot</span><div class="iw-summary"><span data-live-loot-total>${formatNumber(totalItems)} items waiting</span>${action && loot.length ? `<button class="iw-collect-button" data-collect-loot ${automationOn ? '' : 'disabled'} title="${automationOn ? 'Claim loot and continue' : 'Automation is disabled'}">Claim</button>` : ''}</div></div>
           ${loot.length ? `<div class="iw-data-table iw-loot-table">
             <div class="iw-table-head"><span>Item</span><span>Loot</span><span>Inventory</span></div>${loot.map((item) => `
-            <div class="iw-table-row">
+            <div class="iw-table-row ${isHighValueDrop(item) ? 'iw-rare-drop' : ''}">
               <div class="iw-table-item"><span class="iw-item-image">${item.image ? `<img src="${escapeHtml(item.image)}" alt="">` : ''}</span><span>${escapeHtml(item.name)}</span></div>
-              <div class="iw-table-number" data-live-loot="${loot.indexOf(item)}">${formatNumber(item.amount)}</div>
+              <div class="iw-table-number" data-live-loot="${loot.indexOf(item)}" data-value-icon="${escapeHtml(item.image)}" data-value-delta="${lootDeltaNotices.get(item.image || item.name)?.delta ? `${lootDeltaNotices.get(item.image || item.name).delta > 0 ? '+' : ''}${formatNumber(lootDeltaNotices.get(item.image || item.name).delta)}` : ''}" style="--iw-value-delta-delay:-${Math.min(4000, Math.max(0, noticeNow - (lootDeltaNotices.get(item.image || item.name)?.started || noticeNow)))}ms">${formatNumber(item.amount)}</div>
               ${item.name === 'Coins' ? '<div class="iw-table-number iw-coin-inventory" aria-label="Not applicable"></div>' : `<div class="iw-table-number ${inventoryCounts.get(item.image.split('/').pop()?.split('?')[0])?.amount ? '' : 'iw-zero'}">${escapeHtml(inventoryCounts.get(item.image.split('/').pop()?.split('?')[0])?.amountText || '0')}</div>`}
             </div>`).join('')}</div>` : '<div class="iw-empty-loot">No loot waiting to be collected.</div>'}
         </section>`}
@@ -1546,18 +1923,19 @@
           </div>
         </section>
         <section class="iw-card iw-potion-card">
-          <div class="iw-card-header"><span>Divine Potions</span><small>${divinePotions.length} types</small></div>
-          ${divinePotions.length ? `<div class="iw-data-table iw-potion-table">
+          <div class="iw-card-header"><span>${showSuperPotions ? 'Potions' : 'Divine Potions'}</span><small>${displayedPotions.length} types</small></div>
+          ${displayedPotions.length ? `<div class="iw-data-table iw-potion-table">
             <div class="iw-table-head"><span>Potion</span><span>Equipped</span><span>Stored</span></div>
-            ${divinePotions.map((item) => `<div class="iw-table-row">
+            ${displayedPotions.map((item) => `<div class="iw-table-row">
               <div class="iw-table-item"><span class="iw-item-image"><img src="${escapeHtml(item.image)}" alt=""></span><span>${escapeHtml(item.name)}</span></div>
-              <div class="iw-table-number ${item.equipped ? '' : 'iw-zero'}">${formatNumber(item.equipped || 0)}</div>
+              <div class="iw-table-number ${item.equipped ? '' : 'iw-zero'}">${item.superPotion && item.equipped === null ? '—' : formatNumber(item.equipped || 0)}</div>
               <div class="iw-table-number ${item.stored ? '' : 'iw-zero'}">${formatNumber(item.stored || 0)}</div>
             </div>`).join('')}
           </div>` : '<div class="iw-muted">No Divine Potions found.</div>'}
         </section>
         <section class="iw-card iw-automations-card">
-          <div class="iw-card-header"><span>Automations</span><small>${refreshingAutomations ? 'Updating…' : humanAge(cache.automations?.checkedAt)}</small></div>
+          <div class="iw-card-header"><span>Automations</span><div class="iw-summary"><small>${refreshingAutomations ? 'Updating…' : humanAge(cache.automations?.checkedAt)}</small>${collectingAutomation || automationRows.some((item) => item.lootAmount > 0) ? `<button class="iw-collect-button" data-collect-automations ${automationOn && !collectingAutomation && !refreshingAutomations ? '' : 'disabled'} title="${automationOn ? 'Claim all automation loot' : 'Automation is disabled'}">${collectingAutomation ? 'Claiming…' : 'Claim'}</button>` : ''}</div></div>
+          ${cache.automations?.lastError ? `<div class="iw-muted" role="alert">${escapeHtml(cache.automations.lastError)}</div>` : ''}
           ${automationRows.length ? `<div class="iw-data-table iw-automation-table">
             <div class="iw-table-head"><span>Structure</span><span>Making</span><span>Loot</span><span>Queued</span></div>
             ${automationRows.map((item, index) => `<div class="iw-table-row">
@@ -1574,6 +1952,7 @@
             <label class="iw-automation-toggle"><span><b>Enable automation</b><small>${automationOn ? 'Actions may run automatically or from Status buttons.' : 'No game-changing actions will be performed.'}</small></span><input type="checkbox" data-automation-toggle ${automationOn ? 'checked' : ''}><i aria-hidden="true"></i></label>
             <label class="iw-automation-toggle"><span><b>Enable cache lookups</b><small>${cacheLookupsOn ? 'Missing or expired data may be refreshed in background pages.' : 'Only live data and pages you open manually update cached information.'}</small></span><input type="checkbox" data-cache-lookups-toggle ${cacheLookupsOn ? 'checked' : ''}><i aria-hidden="true"></i></label>
             <div class="iw-modal-section-title">Interface</div>
+            <label class="iw-automation-toggle"><span><b>Show Super potions</b><small>Include Super potions you have in inventory in the Potions table.</small></span><input type="checkbox" data-super-potions-toggle ${showSuperPotions ? 'checked' : ''}><i aria-hidden="true"></i></label>
             <div class="iw-interface-actions"><button class="iw-small-button" data-open-multiplayer>Multiplayer</button><small>Open Ironwood's multiplayer controls.</small></div>
             <div class="iw-modal-section-title">Daily quests</div>
             <div class="iw-quest-help">Choose exactly five skills. The matching daily action may change, but your skill preferences remain the same.</div>
@@ -1588,6 +1967,19 @@
           </section>
         </div>
       </div>`;
+      consumables.forEach((item, index) => {
+        const delta = consumableDeltas[index] || 0;
+        const notice = consumableDeltaNotices.get(item.image || item.name);
+        if (!delta && !notice) return;
+        const element = page.querySelector(`[data-live-consumable-equipped="${index}"]`);
+        if (element) {
+          const shownDelta = notice?.delta || delta;
+          element.dataset.valueDelta = `${shownDelta > 0 ? '+' : ''}${formatNumber(shownDelta)}`;
+          element.style.setProperty('--iw-value-delta-delay', `-${Math.min(4000, Math.max(0, noticeNow - (notice?.started || noticeNow)))}ms`);
+          element.dataset.valueIcon = consumables[index]?.image || '';
+          element.style.setProperty('--value-icon', consumables[index]?.image ? `url(${JSON.stringify(consumables[index].image)})` : 'none');
+        }
+      });
     } catch (error) {
       console.error('[Ironwood Status] Render failed', error);
       lastSignature = '';
@@ -1713,6 +2105,49 @@
       buttons.classList.add('iw-craft-buttons');
       nativeCraft.after(craftAll);
     });
+
+    orderTraitsByRegion();
+  }
+
+  function orderTraitsByRegion() {
+    if (!location.pathname.startsWith('/traits')) return;
+    const card = [...document.querySelectorAll('.card')]
+      .find((candidate) => clean(candidate.querySelector(':scope > .header')?.textContent) === 'Traits'
+        && [...candidate.querySelectorAll('.row .title')].some((title) => /^Woodcutting\b/.test(clean(title.textContent))));
+    const rows = [...(card?.querySelectorAll('.row') || [])]
+      .filter((row) => row.querySelector(':scope > .title'));
+    if (rows.length < 2 || !rows.every((row) => row.parentElement === rows[0].parentElement)) return;
+    const rank = new Map(TRAIT_REGION_ORDER.map((skill, index) => [skill, index]));
+    const skillFor = (row) => {
+      const name = clean(row.querySelector(':scope > .title')?.textContent);
+      return TRAIT_REGION_ORDER.find((skill) => name === skill || name.startsWith(`${skill} `)) || '';
+    };
+    const ordered = rows.map((row, index) => ({ row, index, order: rank.get(skillFor(row)) ?? TRAIT_REGION_ORDER.length }))
+      .sort((a, b) => a.order - b.order || a.index - b.index)
+      .map((entry) => entry.row);
+    const parent = rows[0].parentElement;
+    const headers = [...parent.querySelectorAll(':scope > .iw-trait-region-header')];
+    const desiredHeaders = [
+      ...TRAIT_REGIONS.map((region) => ({ name: region.name, firstSkill: region.skills[0] })),
+      { name: 'All Regions', firstSkill: 'Defense' }
+    ];
+    const orderCorrect = ordered.every((row, index) => row === rows[index]);
+    const headersCorrect = headers.length === desiredHeaders.length && desiredHeaders.every((wanted) => {
+      const header = headers.find((candidate) => candidate.dataset.region === wanted.name);
+      return header && !header.querySelector('.iw-set-tier') && skillFor(header.nextElementSibling) === wanted.firstSkill;
+    });
+    if (orderCorrect && headersCorrect) return;
+    headers.forEach((header) => header.remove());
+    ordered.forEach((row) => parent.appendChild(row));
+    desiredHeaders.forEach(({ name, firstSkill }) => {
+      const firstRow = ordered.find((row) => skillFor(row) === firstSkill);
+      if (!firstRow) return;
+      const header = document.createElement('div');
+      header.className = 'iw-trait-region-header';
+      header.dataset.region = name;
+      header.innerHTML = `<strong>${name}</strong>`;
+      parent.insertBefore(header, firstRow);
+    });
   }
 
   function createPage() {
@@ -1770,16 +2205,14 @@
     setCache('attunement', { schema: 3, selected, tributes });
   }
 
-  function captureVisibleAutomation() {
-    const root = document.querySelector('home-page');
+  function readVisibleAutomation(doc) {
+    const root = doc.querySelector('home-page');
     const cards = [...(root?.querySelectorAll('.card') || [])];
     const structuresCard = cards.find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Structures');
     const row = structuresCard?.querySelector(':scope > button.row.active-link');
     const lootCard = cards.find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Loot');
     if (!row || !lootCard) return;
     const structure = clean(row.querySelector(':scope > .name')?.textContent);
-    const captureKey = `automations:${structure}`;
-    if (Date.now() - (visibleCaptureTimes[captureKey] || 0) < 1500) return;
     const making = clean([...row.children].find((child) => !child.classList.contains('image') && !child.classList.contains('name'))?.textContent);
     const queueMatch = clean(lootCard.querySelector(':scope > .header > .amount')?.textContent).match(/([\d,.]+)\s*\/\s*([\d,.]+)/);
     if (!queueMatch) return;
@@ -1794,7 +2227,7 @@
     const queuedDone = numberFrom(queueMatch[1]);
     const queuedTotal = numberFrom(queueMatch[2]);
     const lootAmount = numberFrom(lootRow?.querySelector('.amount')?.textContent);
-    const item = {
+    return {
       structure,
       image: row.querySelector(':scope > .image img')?.getAttribute('src') || '/assets/misc/structure.png',
       making,
@@ -1803,16 +2236,31 @@
       lootAmount,
       queuedDone,
       queuedTotal,
+      checkedAt: Date.now(),
       intervalMs: durationMs(selectedAction?.querySelector('.interval')?.textContent) / (1 + Math.max(0, speedBonus)),
       outputPerAction: queuedDone > 0 ? lootAmount / queuedDone : 0
     };
+  }
+
+  function storeAutomationStructure(item) {
     const previous = getCache().automations || {};
-    const byStructure = new Map((previous.structures || []).map((entry) => [entry.structure, entry]));
-    byStructure.set(structure, item);
+    const prior = previous.structures?.find((entry) => entry.structure === item.structure);
+    if (!item.outputPerAction && prior?.making === item.making) item.outputPerAction = prior.outputPerAction || 0;
+    const byStructure = new Map((previous.structures || []).map((entry) => [entry.structure, {
+      ...entry, checkedAt: entry.checkedAt || previous.checkedAt || Date.now()
+    }]));
+    byStructure.set(item.structure, item);
     const structures = [...byStructure.values()];
-    const longestRemaining = Math.max(0, ...structures.map((entry) => Math.max(0, entry.queuedTotal - entry.queuedDone) * entry.intervalMs));
+    setCache('automations', automationSnapshot(structures));
+  }
+
+  function captureVisibleAutomation() {
+    const item = readVisibleAutomation(document);
+    if (!item) return;
+    const captureKey = `automations:${item.structure}`;
+    if (Date.now() - (visibleCaptureTimes[captureKey] || 0) < 1500) return;
     visibleCaptureTimes[captureKey] = Date.now();
-    setCache('automations', { schema: 3, structures, expiresAt: Date.now() + (longestRemaining || TTL.automations) });
+    storeAutomationStructure(item);
   }
 
   function captureVisibleCaches() {
@@ -1855,16 +2303,23 @@
       .iw-potion-card { grid-column:1; }
       .iw-card-header { display:flex; align-items:center; justify-content:space-between; height:48px; padding:8px 10px; border-bottom:1px solid #294052; box-sizing:border-box; font-size:16px; font-weight:600; line-height:24px; }
       .iw-card-header small { color:#aab6bf; font-size:14px; font-weight:400; }
+      .iw-trait-region-header { display:flex; align-items:center; justify-content:space-between; min-height:32px; padding:3px 10px; color:#dce7ec; background:#102a3d; border-top:1px solid #355064; border-bottom:1px solid #294052; box-sizing:border-box; }
+      .iw-trait-region-header strong { font-size:14px; font-weight:600; letter-spacing:.02em; }
       .iw-live { display:flex; align-items:center; gap:7px; color:#31c777; font-size:12px; letter-spacing:.05em; }
       .iw-live i { width:8px; height:8px; border-radius:50%; background:#31c777; box-shadow:0 0 0 3px rgba(49,199,119,.15); }
       .iw-action-badges { display:flex; align-items:center; gap:6px; height:30px; }
-      .iw-location-badge, .iw-active-badge, .iw-mastery-badge, .iw-adventure-badge, .iw-guild-event-badge, .iw-guild-trial-badge, .iw-material-warning, .iw-queue-warning { position:relative; display:block; width:34px; height:34px; overflow:hidden; border:1px solid; border-radius:5px; box-sizing:border-box; }
+      .iw-location-badge, .iw-active-badge, .iw-mastery-badge, .iw-adventure-badge, .iw-guild-event-badge, .iw-guild-trial-badge, .iw-material-warning, .iw-queue-warning, .iw-revive-badge { position:relative; display:block; width:34px; height:34px; overflow:hidden; border:1px solid; border-radius:5px; box-sizing:border-box; }
+      .iw-revive-badge { display:grid; place-items:center; color:#ff8178; background:rgba(224,65,58,.14); border-color:#e95f57; font-size:21px; line-height:1; text-shadow:0 0 8px rgba(255,62,48,.72); box-shadow:inset 0 0 0 1px rgba(255,180,170,.06),0 0 9px rgba(235,72,62,.3); }
+      .iw-revive-badge { margin-left:4px; animation:iw-death-badge-glow 1.8s ease-in-out infinite; }
+      .iw-active-badge.revive-active { color:#ff8178; background:rgba(224,65,58,.14); border-color:#e95f57; box-shadow:inset 0 0 0 1px rgba(255,180,170,.06),0 0 9px rgba(235,72,62,.3); }
+      .iw-active-badge.revive-active .iw-spin-motion { animation:none; }
       .iw-location-badge img, .iw-mastery-badge img { position:absolute; top:50%; left:50%; display:block; width:24px; height:24px; object-fit:contain; transform:translate(-50%,-50%); }
       .iw-mastery-badge { color:#a8b2bc; background:rgba(135,149,162,.045); border-color:rgba(154,168,181,.42); box-shadow:inset 0 0 0 1px rgba(220,228,235,.025); }
       .iw-mastery-badge img { filter:grayscale(1); opacity:.42; }
       .iw-mastery-badge.achieved { color:#ffe28a; background:rgba(238,181,48,.11); border-color:#e8b43e; box-shadow:inset 0 0 0 1px rgba(255,239,173,.06),0 0 8px rgba(232,180,62,.24); }
       .iw-mastery-badge.achieved img { filter:none; opacity:1; }
       .iw-location-badge.outskirts { color:#ffc17f; background:rgba(255,145,61,.08); border-color:#ff913d; box-shadow:inset 0 0 0 1px rgba(255,205,156,.04),0 0 7px rgba(255,120,42,.16); }
+      .iw-location-badge.dungeon { color:#ffc17f; background:rgba(255,145,61,.08); border-color:#ff913d; box-shadow:inset 0 0 0 1px rgba(255,205,156,.04),0 0 7px rgba(255,120,42,.16); }
       .iw-location-badge.village, .iw-active-badge { color:#78efa9; background:rgba(56,221,137,.08); border-color:#38dd89; box-shadow:inset 0 0 0 1px rgba(195,255,217,.04),0 0 7px rgba(42,220,130,.16); }
       .iw-active-badge .iw-spin { position:absolute; top:50%; left:50%; width:22px; height:22px; margin:-11px 0 0 -11px; }
       .iw-adventure-badge, .iw-guild-event-badge, .iw-guild-trial-badge { display:grid; place-items:center; background:rgba(68,171,221,.12); border-color:#4fb7e5; box-shadow:inset 0 0 0 1px rgba(198,239,255,.04),0 0 7px rgba(79,183,229,.18); }
@@ -1876,15 +2331,114 @@
       .iw-spin-track { opacity:.2; stroke-width:1.5; }
       .iw-spin-motion { transform-origin:12px 12px; will-change:transform; backface-visibility:hidden; animation:iw-spin 1.15s linear infinite; }
       @keyframes iw-spin { from { transform:translateZ(0) rotate(0deg); } to { transform:translateZ(0) rotate(360deg); } }
+      @keyframes iw-death-badge-glow { 0%,100% { filter:brightness(.95); box-shadow:inset 0 0 0 1px rgba(255,180,170,.06),0 0 7px rgba(235,72,62,.25); } 50% { filter:brightness(1.18); box-shadow:inset 0 0 0 1px rgba(255,180,170,.1),0 0 14px rgba(235,72,62,.5),0 0 24px rgba(235,72,62,.18); } }
       .iw-action-body { display:grid; grid-template-columns:40px minmax(0,1fr) auto; align-items:center; gap:8px; min-height:54px; padding:6px; }
       .iw-action-image { display:grid; place-items:center; width:40px; height:40px; background:#0b2539; border:1px solid #203a4d; border-radius:4px; }
       .iw-action-image img { width:32px; height:32px; object-fit:contain; }
+      .iw-combat-card { border:1px solid rgba(89,190,244,.58); background:linear-gradient(145deg,#102d45,#0b1d30 58%,#102f48); box-shadow:0 0 0 1px rgba(65,164,222,.1),0 8px 20px rgba(23,137,205,.13),inset 0 0 24px rgba(35,143,207,.06); }
+      .iw-combat-card .iw-card-header { background:linear-gradient(90deg,rgba(47,151,211,.2),transparent 65%); border-bottom-color:rgba(89,190,244,.35); }
+      .iw-combat-card .iw-action-image { border-color:rgba(74,185,236,.8); box-shadow:0 0 10px rgba(62,184,235,.24); animation:iw-combat-pulse 2.6s ease-in-out infinite; }
+      .iw-combat-card .iw-progress div { background:linear-gradient(90deg,#3b9bd2,#83cde9,#3b9bd2); background-size:200% 100%; animation:iw-bar-sheen 3.4s linear infinite; }
+      .iw-combat-live { display:inline-flex; align-items:center; gap:4px; color:#8de2ff; font-size:10px; letter-spacing:.12em; }
+      .iw-combat-live i { width:6px; height:6px; border-radius:50%; background:#65d9ff; box-shadow:0 0 7px #65d9ff; animation:iw-live-pulse 1s ease-in-out infinite; }
+      .iw-duel-board { position:relative; display:grid; grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr); align-items:center; gap:8px; padding:18px 10px 20px; background:linear-gradient(180deg,rgba(4,15,27,.18),rgba(40,104,139,.08)); border-top:1px solid rgba(109,184,218,.12); border-bottom:1px solid rgba(109,184,218,.16); }
+      .iw-duel-board::after { display:none; }
+      .iw-duel-board::before { display:none; }
+      .iw-fighter { position:relative; min-width:0; display:flex; flex-direction:column; }
+      .iw-fighter::after { content:''; position:absolute; left:20%; bottom:14px; width:var(--fighter-progress,0%); max-width:60%; height:3px; border-radius:2px; background:linear-gradient(90deg,rgba(73,181,229,.35),rgba(133,228,255,.9)); box-shadow:0 0 4px rgba(73,198,242,.3); transition:width .28s ease-out; }
+      .iw-fighter-heading { display:none; }
+      .iw-fighter-heading span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .iw-fighter-heading b { color:#f1f7f8; font-weight:500; white-space:nowrap; }
+      .iw-fighter-visual { position:relative; display:grid; place-items:center; order:1; height:84px; }
+      .iw-fighter-visual img { position:relative; z-index:1; width:82px; height:82px; object-fit:contain; image-rendering:pixelated; filter:drop-shadow(0 7px 9px rgba(0,0,0,.38)); }
+      .iw-fighter-visual img { animation:iw-fighter-float 3.8s ease-in-out infinite; }
+      .iw-fighter-monster .iw-fighter-visual img { transform:scaleX(-1); animation:iw-fighter-float-monster 3.8s ease-in-out infinite; }
+      .iw-fighter.iw-hit .iw-fighter-visual img { animation:iw-hit-reaction .48s cubic-bezier(.2,.8,.3,1) both; }
+      .iw-fighter-monster.iw-hit .iw-fighter-visual img { animation:iw-hit-reaction-monster .48s cubic-bezier(.2,.8,.3,1) both; }
+      .iw-fighter.iw-hit .iw-fighter-visual::after { content:''; position:absolute; inset:12px 22%; border-radius:50%; background:rgba(224,70,65,.12); filter:blur(7px); animation:iw-impact-flash .62s ease-out both; }
+      .iw-fighter-player .iw-fighter-visual::before { content:''; position:absolute; z-index:4; right:calc(50% + 28px); top:2px; width:27px; height:27px; background:var(--iw-use-icon, none) center/contain no-repeat; filter:drop-shadow(0 0 7px rgba(125,225,255,.45)); animation:iw-floating-event 4s ease-out both; animation-delay:var(--iw-use-delay,0ms); pointer-events:none; }
+      .iw-fighter-monster .iw-fighter-visual::before { content:''; position:absolute; z-index:4; left:calc(50% + 28px); top:2px; width:27px; height:27px; background:var(--iw-drop-icon, none) center/contain no-repeat; filter:drop-shadow(0 0 7px rgba(255,205,95,.5)); animation:iw-floating-event 4s ease-out both; animation-delay:var(--iw-drop-delay,0ms); pointer-events:none; }
+      .iw-fighter-monster.iw-fighter-dead .iw-fighter-visual::before,
+      .iw-fighter-monster.iw-spawn .iw-fighter-visual::before { opacity:0; animation:none; }
+      .iw-fighter.iw-spawn .iw-fighter-visual img { animation:iw-spawn-in 2.8s cubic-bezier(.2,.8,.25,1) both; }
+      .iw-fighter-monster.iw-spawn .iw-fighter-visual img { animation:iw-spawn-in-monster 2.8s cubic-bezier(.2,.8,.25,1) both; }
+      .iw-fighter-monster.iw-spawn .iw-fighter-visual img { animation-delay:1.15s; }
+      .iw-fighter-monster.iw-spawn .iw-fighter-visual::before { content:'✕'; display:grid; place-items:center; opacity:0; background:none; color:#ff7468; font-size:43px; font-weight:800; line-height:1; text-shadow:0 0 11px rgba(255,54,45,.9),0 0 26px rgba(255,54,45,.55); animation:iw-death-to-spawn 3.4s ease-out both; }
+      .iw-fighter.iw-spawn .iw-fighter-visual::after { content:''; position:absolute; z-index:2; inset:0 8%; border-radius:50%; background:radial-gradient(circle,rgba(126,255,176,.78) 0,rgba(63,231,145,.34) 34%,transparent 70%); filter:blur(2px); opacity:0; animation:iw-spawn-burst 2.8s ease-out both; pointer-events:none; }
+      .iw-fighter-monster.iw-spawn .iw-spawn-ring { animation-delay:1.15s; }
+      .iw-death-stamp { position:absolute; z-index:5; display:grid; place-items:center; width:44px; height:44px; border:2px solid rgba(255,92,78,.95); border-radius:50%; color:#ff786d; font-size:32px; font-weight:700; line-height:1; text-shadow:0 0 8px rgba(255,62,48,.75),0 0 18px rgba(255,62,48,.45); box-shadow:0 0 10px rgba(255,62,48,.42),0 0 24px rgba(255,62,48,.3),inset 0 0 7px rgba(255,62,48,.25); animation:iw-death-stamp 3.1s ease-out both; pointer-events:none; }
+      .iw-bone-pile { position:absolute; z-index:4; left:50%; bottom:2px; width:62px; height:34px; background:url('/assets/items/giant-bone.png') center/34px 26px no-repeat; opacity:0; filter:drop-shadow(0 3px 3px rgba(0,0,0,.55)); animation:iw-bone-pile-rise 3.1s 1s ease-out both; pointer-events:none; }
+      .iw-bone-pile::before, .iw-bone-pile::after { content:''; position:absolute; width:34px; height:26px; background:url('/assets/items/giant-bone.png') center/contain no-repeat; }
+      .iw-bone-pile::before { left:2px; bottom:0; transform:rotate(-24deg) scale(.78); }
+      .iw-bone-pile::after { right:0; bottom:1px; transform:rotate(23deg) scale(.82); }
+      .iw-fighter-reviving .iw-fighter-visual img { opacity:0; animation:none !important; transform:none !important; }
+      .iw-bone-pile-static { opacity:1; animation:none; transform:translateX(-50%); }
+      .iw-spawn-ring { position:absolute; width:56px; height:56px; border:2px solid rgba(87,225,255,.72); border-radius:50%; box-shadow:0 0 15px rgba(42,211,255,.55),0 0 30px rgba(42,211,255,.3); animation:iw-spawn-ring 3.2s ease-out both; }
+      .iw-floating-heal, .iw-spawn-ring { left:auto; right:calc(50% + 28px); }
+      .iw-fighter-monster .iw-floating-heal, .iw-fighter-monster .iw-spawn-ring { left:calc(50% + 28px); right:auto; }
+      .iw-spawn-ring::after { content:'♥'; position:absolute; inset:0; color:rgba(104,239,255,.9); font-size:31px; font-weight:300; line-height:52px; text-align:center; text-shadow:0 0 8px rgba(42,211,255,.5),0 0 18px rgba(42,211,255,.35); }
+      .iw-fighter-monster .iw-spawn-ring::after { color:rgba(104,255,153,.9); text-shadow:0 0 8px rgba(42,235,116,.58); }
+      .iw-fighter-glow { position:absolute; width:72px; height:19px; bottom:3px; border-radius:50%; background:rgba(74,190,232,.28); filter:blur(10px); }
+      .iw-floating-heal { position:absolute; z-index:3; top:0; width:27px; height:27px; color:rgba(92,255,157,.82); font-size:0; text-shadow:0 1px 4px #071923,0 0 9px rgba(53,255,140,.5); animation:iw-floating-heal 1.8s ease-out both; pointer-events:none; }
+      .iw-floating-heal::before { content:''; display:block; width:27px; height:27px; background:var(--iw-recovery-icon) center/contain no-repeat; filter:drop-shadow(0 0 5px rgba(53,255,140,.55)); }
+      .iw-enemy-heal::before { content:'♥'; display:block; width:27px; height:27px; color:rgba(104,255,153,.92); font-size:25px; font-weight:400; line-height:27px; text-align:center; text-shadow:0 0 7px rgba(42,235,116,.58); }
+      .iw-fighter-monster .iw-floating-heal::before { content:'♥'; background:none !important; color:rgba(104,255,153,.92); font-size:25px; font-weight:400; line-height:27px; text-align:center; text-shadow:0 0 7px rgba(42,235,116,.58); }
+      .iw-fighter-monster .iw-fighter-glow { background:rgba(232,91,87,.23); }
+      .iw-fighter-monster.iw-fighter-dead .iw-fighter-visual { animation:iw-death-stage 3.1s ease-out both; }
+      .iw-hp-track { position:relative; width:60%; height:9px; margin:19px auto 0; order:3; overflow:visible; background:#172d3b; border:1px solid rgba(138,179,193,.2); border-radius:5px; box-shadow:inset 0 1px 2px rgba(0,0,0,.3); box-sizing:border-box; }
+      .iw-hp-fill { position:relative; z-index:1; height:100%; border-radius:inherit; background:linear-gradient(90deg,#19b86d,#62f29a,#1acb76); background-size:180% 100%; box-shadow:0 0 6px rgba(63,235,135,.38),0 0 12px rgba(29,204,112,.16); transition:width .35s ease-out; }
+      /* Keep the live fill stable; transient hit/heal effects are layered on the track
+         so width updates do not restart a second animation on every polling tick. */
+      .iw-fighter-player .iw-hp-fill { animation:none; }
+      .iw-fighter.iw-hit .iw-hp-fill { animation:iw-hp-impact .62s ease-out both; }
+      .iw-fighter:has(.iw-shield) .iw-hp-fill { animation:iw-defense-glow .72s ease-out both; }
+      .iw-fighter-monster .iw-hp-fill { background:linear-gradient(90deg,#ca514d,#f4876b); box-shadow:0 0 7px rgba(235,95,83,.25); }
+      .iw-hp-damage { position:absolute; z-index:2; top:-2px; bottom:-2px; min-width:3px; background:linear-gradient(180deg,#f5dfb2 0%,#e99b65 28%,#d6534e 100%); box-shadow:0 0 4px rgba(255,181,111,.52),0 2px 5px rgba(180,42,39,.3); transform-origin:center bottom; animation:iw-damage-fall 1.05s cubic-bezier(.17,.72,.24,1) both; }
+      .iw-fighter.iw-hit .iw-hp-track::after { content:''; position:absolute; z-index:3; inset:-2px 0; border-radius:inherit; background:linear-gradient(90deg,transparent,rgba(235,93,83,.3),transparent); opacity:0; animation:iw-hp-flash .58s ease-out both; pointer-events:none; }
+      .iw-fighter-dead .iw-hp-track::before { content:''; position:absolute; z-index:3; inset:-1px 0; border-radius:inherit; background:linear-gradient(180deg,rgba(255,220,175,.7),rgba(87,226,128,.42),transparent); transform:scaleY(0); transform-origin:top; animation:iw-hp-heal-grow .9s .34s cubic-bezier(.2,.8,.25,1) both; pointer-events:none; }
+      .iw-fighter-dead .iw-hp-track::after { content:''; position:absolute; z-index:4; inset:-4px 0; border-radius:inherit; background:rgba(244,64,55,.9); opacity:0; animation:iw-death-bar-flash .7s ease-out both; pointer-events:none; }
+      .iw-fighter.iw-heal .iw-hp-track::before { content:''; position:absolute; z-index:3; inset:-1px 0; border-radius:inherit; background:linear-gradient(180deg,rgba(220,255,224,.9),rgba(91,231,137,.42) 55%,transparent); background-size:100% 220%; transform:scaleY(0); transform-origin:top; animation:iw-hp-heal-grow 1.8s cubic-bezier(.2,.8,.25,1) both; pointer-events:none; }
+      .iw-duel-divider { color:#d8b96b; font-size:10px; font-weight:600; letter-spacing:.12em; text-align:center; opacity:.8; }
+      @keyframes iw-fighter-in { from { opacity:.4; transform:translateY(3px); } to { opacity:1; transform:none; } }
+      @keyframes iw-fighter-float { 50% { transform:translateY(-2px); } }
+      @keyframes iw-fighter-float-monster { 50% { transform:translateY(-2px) scaleX(-1); } }
+      @keyframes iw-hit-reaction { 0% { transform:translateX(0) scale(1); filter:brightness(1); } 22% { transform:translateX(-3px) scale(.97); filter:brightness(1.1); } 55% { transform:translateX(2px) scale(1.01); filter:brightness(1.03); } 100% { transform:none; filter:none; } }
+      @keyframes iw-hit-reaction-monster { 0% { transform:translateX(0) scaleX(-1) scale(1); filter:brightness(1); } 22% { transform:translateX(3px) scaleX(-1) scale(.97); filter:brightness(1.1); } 55% { transform:translateX(-2px) scaleX(-1) scale(1.01); filter:brightness(1.03); } 100% { transform:scaleX(-1); filter:none; } }
+      @keyframes iw-impact-flash { 0% { opacity:0; transform:scale(.55); } 20% { opacity:.9; transform:scale(1); } 100% { opacity:0; transform:scale(1.35); } }
+      @keyframes iw-hp-impact { 0% { opacity:1; filter:brightness(1.3); } 24% { opacity:.52; filter:brightness(1); } 100% { opacity:.78; filter:brightness(.92); } }
+      @keyframes iw-defense-glow { 0% { filter:brightness(1); box-shadow:0 0 5px rgba(70,203,133,.2); } 24% { filter:brightness(1.35) saturate(1.2); box-shadow:0 0 13px rgba(74,187,255,.85),0 0 24px rgba(74,187,255,.32); } 100% { filter:brightness(1); box-shadow:0 0 5px rgba(70,203,133,.2); } }
+      @keyframes iw-damage-fall { 0% { opacity:1; transform:translateY(0) scaleY(1) skewX(0); filter:brightness(1.3); } 28% { opacity:.98; transform:translateY(2px) scaleY(1.03) skewX(-5deg); filter:brightness(1.15); } 62% { opacity:.72; transform:translateY(6px) scaleY(.88) skewX(3deg); } 100% { opacity:0; transform:translateY(10px) scaleY(.5) skewX(0); filter:blur(1px); } }
+      @keyframes iw-hp-flash { 0% { opacity:0; transform:scaleX(.4); } 18% { opacity:.9; transform:scaleX(1); } 100% { opacity:0; transform:scaleX(1.1); } }
+      @keyframes iw-hp-heal-grow { 0% { opacity:0; transform:scaleY(0) skewX(0); background-position:0 0; } 18% { opacity:.9; transform:scaleY(.72) skewX(-3deg); background-position:0 20%; } 40% { opacity:.78; transform:scaleY(1) skewX(3deg); background-position:0 48%; } 68% { opacity:.52; transform:scaleY(1.04) skewX(-2deg); background-position:0 76%; } 100% { opacity:0; transform:scaleY(1.1) skewX(0); background-position:0 100%; } }
+      @keyframes iw-floating-event { 0% { opacity:0; transform:translateY(5px) rotate(-4deg) scale(.8); } 18% { opacity:1; transform:translateY(0) rotate(3deg) scale(1); } 76% { opacity:.34; transform:translateY(-13px) rotate(-2deg) scale(.96); } 100% { opacity:.12; transform:translateY(-17px) rotate(-1deg) scale(.92); } }
+      @keyframes iw-death-bar-flash { 0% { opacity:0; } 20% { opacity:.88; } 100% { opacity:0; } }
+      @keyframes iw-death-stage { 0%,12% { filter:none; transform:scale(1); } 18% { filter:brightness(1.55) saturate(1.3); transform:scale(1.06); } 34% { filter:grayscale(.7) brightness(.8); transform:scale(.96) translateY(2px); } 62% { filter:grayscale(1) brightness(.55); transform:scale(.72) translateY(10px); } 100% { filter:grayscale(1) brightness(.35); transform:scale(.42) translateY(22px); opacity:.08; } }
+      @keyframes iw-neon-hp { 0%,100% { background-position:0 0; filter:brightness(.94); } 50% { background-position:100% 0; filter:brightness(1.14); } }
+      @keyframes iw-floating-heal { 0% { opacity:0; transform:translateY(5px) rotate(-6deg) scale(.8); } 18% { opacity:1; transform:translateY(0) rotate(4deg) scale(1); } 45% { transform:translateY(-4px) rotate(-3deg) scale(1.03); } 72% { opacity:.48; transform:translateY(-10px) rotate(3deg) scale(.98); } 100% { opacity:.12; transform:translateY(-18px) rotate(-1deg) scale(.92); } }
+      .iw-combat-card .iw-fighter-dead .iw-fighter-visual img { animation:iw-death 3.1s ease-in forwards; }
+      .iw-combat-card .iw-fighter-monster.iw-fighter-dead .iw-fighter-visual img { animation:iw-death-monster 3.1s ease-in forwards; }
+      .iw-combat-card .iw-fighter-dead .iw-fighter-visual::after { content:''; position:absolute; z-index:2; inset:-4px 4%; border-radius:50%; background:radial-gradient(circle,rgba(255,104,82,.82) 0,rgba(214,53,49,.38) 34%,transparent 72%); filter:blur(2px); opacity:0; animation:iw-death-burst 3.1s ease-out both; pointer-events:none; }
+      @keyframes iw-death { 0% { opacity:1; filter:none; transform:translateY(0) rotate(0) scale(1); } 24% { opacity:1; filter:brightness(1.35); transform:translateY(-2px) rotate(-3deg) scale(.92); } 52% { opacity:.68; filter:grayscale(.8) blur(1px) brightness(.82); transform:translateY(8px) rotate(5deg) scale(.58); } 78% { opacity:.16; filter:grayscale(1) blur(3px) brightness(.55) drop-shadow(0 0 0 transparent); transform:translateY(18px) rotate(10deg) scale(.2); } 100% { opacity:0; filter:grayscale(1) blur(6px) brightness(.4) drop-shadow(0 0 0 transparent); transform:translateY(26px) rotate(14deg) scale(.02); } }
+      @keyframes iw-death-monster { 0% { opacity:1; filter:none; transform:translateY(0) rotate(0) scaleX(-1) scale(1); } 24% { opacity:1; filter:brightness(1.35); transform:translateY(-2px) rotate(-3deg) scaleX(-1) scale(.92); } 52% { opacity:.68; filter:grayscale(.8) blur(1px) brightness(.82); transform:translateY(8px) rotate(5deg) scaleX(-1) scale(.58); } 78% { opacity:.16; filter:grayscale(1) blur(3px) brightness(.55) drop-shadow(0 0 0 transparent); transform:translateY(18px) rotate(10deg) scaleX(-1) scale(.2); } 100% { opacity:0; filter:grayscale(1) blur(6px) brightness(.4) drop-shadow(0 0 0 transparent); transform:translateY(26px) rotate(14deg) scaleX(-1) scale(.02); } }
+      @keyframes iw-death-burst { 0%,10% { opacity:0; transform:scale(.25); } 22% { opacity:1; transform:scale(1); } 48% { opacity:.78; transform:scale(1.14); } 100% { opacity:0; transform:scale(2.1); } }
+      @keyframes iw-death-stamp { 0% { opacity:0; transform:scale(.2) rotate(-18deg); } 12% { opacity:1; transform:scale(1.3) rotate(6deg); } 32% { opacity:1; transform:scale(1) rotate(0); } 62% { opacity:.92; transform:scale(1.08) rotate(-3deg); } 100% { opacity:0; transform:scale(1.7) rotate(12deg); } }
+      @keyframes iw-bone-pile-rise { 0%,24% { opacity:0; transform:translate(-50%,8px) scale(.55); } 42% { opacity:.9; transform:translate(-50%,0) scale(1); } 72% { opacity:.82; transform:translate(-50%,-1px) scale(1.04); } 100% { opacity:0; transform:translate(-50%,-5px) scale(1.1); } }
+      @keyframes iw-spawn-in { 0% { opacity:0; filter:blur(9px) brightness(2); transform:translateY(18px) scale(.08); } 28% { opacity:.42; filter:blur(5px) brightness(1.65); transform:translateY(9px) scale(.38); } 56% { opacity:.95; filter:blur(1px) brightness(1.25); transform:translateY(-4px) scale(1.16); } 76% { opacity:1; filter:blur(0) brightness(1.08); transform:translateY(1px) scale(.94); } 100% { opacity:1; filter:none; transform:none; } }
+      @keyframes iw-spawn-in-monster { 0% { opacity:0; filter:blur(9px) brightness(2); transform:translateY(18px) scaleX(-1) scale(.08); } 28% { opacity:.42; filter:blur(5px) brightness(1.65); transform:translateY(9px) scaleX(-1) scale(.38); } 56% { opacity:.95; filter:blur(1px) brightness(1.25); transform:translateY(-4px) scaleX(-1) scale(1.16); } 76% { opacity:1; filter:blur(0) brightness(1.08); transform:translateY(1px) scaleX(-1) scale(.94); } 100% { opacity:1; filter:none; transform:scaleX(-1); } }
+      @keyframes iw-spawn-burst { 0% { opacity:0; transform:scale(.18); } 28% { opacity:.9; transform:scale(.65); } 100% { opacity:0; transform:scale(2.1); } }
+      @keyframes iw-death-to-spawn { 0%,6% { opacity:0; transform:translateY(5px) scale(.35) rotate(-12deg); } 14% { opacity:1; transform:translateY(0) scale(1.2) rotate(6deg); } 28% { opacity:.9; transform:translateY(1px) scale(1) rotate(0); } 42% { opacity:0; transform:translateY(5px) scale(1.35) rotate(10deg); } 100% { opacity:0; transform:translateY(5px) scale(1.35) rotate(10deg); } }
+      @keyframes iw-spawn-ring { 0% { opacity:.9; transform:scale(.35); } 72% { opacity:.24; transform:scale(2.6); } 100% { opacity:.1; transform:scale(3.2); } }
+      @keyframes iw-combat-pulse { 50% { box-shadow:0 0 15px rgba(62,184,235,.4); transform:scale(1.015); } }
+      @keyframes iw-bar-sheen { to { background-position:200% 0; } }
+      @keyframes iw-live-pulse { 50% { opacity:.35; transform:scale(.7); } }
       .iw-action-name { display:flex; flex-direction:column; gap:2px; }
       .iw-action-name strong { font-size:16px; font-weight:400; }
       .iw-action-name span { color:#aab6bf; font-size:14px; }
       .iw-action-title { display:flex; align-items:baseline; gap:5px; }
       .iw-action-title strong { color:#fff; }
       .iw-action-title small { color:#8fa1ad; font-size:12px; font-weight:400; }
+      .iw-revive-timer { color:#7ff0a8; font-weight:600; }
+      .iw-action-meta .iw-revive-timer { color:#fff; font-weight:700; }
       .iw-action-meta { display:flex; align-items:center; flex-wrap:wrap; line-height:20px; }
       .iw-action-meta > span + span::before { content:'·'; margin:0 6px; color:#71818d; }
       .iw-queue-summary { display:flex; flex-direction:column; align-items:flex-end; min-width:220px; margin-left:6px; padding:1px 6px 1px 12px; white-space:nowrap; }
@@ -1935,6 +2489,22 @@
       .iw-table-head span:not(:first-child) { text-align:right; }
       .iw-table-row { min-height:37px; padding:2px 6px; border-bottom:1px solid #294052; box-sizing:border-box; font-size:16px; line-height:24px; }
       .iw-table-row:last-child { border-bottom:0; }
+      [data-value-delta] { position:relative; }
+      [data-value-delta]::before { content:''; position:absolute; right:calc(100% + 5px); top:2px; width:22px; height:22px; background:var(--value-icon, none) center/contain no-repeat; opacity:.82; filter:drop-shadow(0 0 4px rgba(196,225,235,.25)); pointer-events:none; animation:iw-value-delta-icon 6s ease-out both; }
+      .iw-loot-table [data-value-delta]::before { display:none; }
+      .iw-consumables [data-value-delta]::before { display:none; }
+      [data-value-delta]::after { content:attr(data-value-delta); position:absolute; right:2px; top:-10px; z-index:4; color:#8af0ad; font-size:14px; font-weight:800; line-height:18px; letter-spacing:.01em; white-space:nowrap; text-shadow:0 0 5px rgba(76,224,133,.55),0 1px 2px rgba(0,0,0,.75); pointer-events:none; animation:iw-value-delta 4s cubic-bezier(.22,.72,.3,1) both; animation-delay:var(--iw-value-delta-delay,0ms); }
+      [data-value-delta^="-"]::after { color:#ff9289; text-shadow:0 0 5px rgba(232,83,76,.5),0 1px 2px rgba(0,0,0,.75); }
+      @keyframes iw-value-delta { 0% { opacity:0; transform:translateY(5px) scale(.92); } 5% { opacity:1; transform:translateY(0) scale(1); } 86% { opacity:1; transform:translateY(-5px) scale(1); } 100% { opacity:0; transform:translateY(-14px) scale(.98); } }
+      @keyframes iw-value-delta-icon { 0% { opacity:0; transform:translateY(7px) scale(.8); } 8% { opacity:.82; transform:none; } 84% { opacity:.3; transform:translateY(-4px) scale(1); } 100% { opacity:.1; transform:translateY(-8px) scale(.9); } }
+      .iw-loot-table .iw-table-row { position:relative; overflow:visible; }
+      .iw-loot-table .iw-table-row.iw-rare-drop { border:1px solid rgba(211,164,61,.72); border-radius:4px; margin:2px 4px; background:linear-gradient(90deg,rgba(132,91,21,.14),rgba(255,213,92,.055),rgba(132,91,21,.14)); box-shadow:inset 0 0 10px rgba(255,204,82,.07),0 0 7px rgba(238,180,48,.12); }
+      .iw-loot-table .iw-table-row.iw-rare-drop::before { content:''; position:absolute; inset:-1px; pointer-events:none; border:1px solid rgba(255,215,112,.28); border-radius:inherit; opacity:.45; animation:iw-drop-aura 2.8s ease-in-out infinite; }
+      .iw-loot-table .iw-table-row.iw-rare-drop::after { content:''; position:absolute; inset:0; pointer-events:none; background:linear-gradient(108deg,transparent 35%,rgba(255,244,190,.2) 48%,transparent 61%); transform:translateX(-130%); animation:iw-drop-sheen 5.5s cubic-bezier(.2,.65,.3,1) infinite; }
+      .iw-loot-table .iw-rare-drop .iw-table-item { color:#f4d991; }
+      @keyframes iw-drop-sheen { 0%,62% { transform:translateX(-130%); } 78%,100% { transform:translateX(130%); } }
+      @keyframes iw-drop-aura { 0%,100% { opacity:.3; box-shadow:0 0 3px rgba(238,180,48,.08); } 50% { opacity:.75; box-shadow:0 0 9px rgba(238,180,48,.22); } }
+      @media (prefers-reduced-motion: reduce) { .iw-combat-card .iw-action-image, .iw-combat-card .iw-progress div, .iw-loot-table .iw-table-row.iw-rare-drop::before, .iw-loot-table .iw-table-row.iw-rare-drop::after, .iw-combat-live i, .iw-fighter, .iw-fighter-visual img, .iw-fighter.iw-hit .iw-fighter-visual::after, .iw-floating-heal, .iw-spawn-ring, .iw-fighter.iw-heal .iw-hp-track::before, .iw-hp-track, .iw-meter-ready .iw-hp-track, [data-value-delta]::before, [data-value-delta]::after { animation:none; } }
       .iw-table-item { display:flex; align-items:center; min-width:0; gap:8px; font-weight:400; }
       .iw-table-item > span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .iw-table-number { color:#aab6bf; font-size:16px; font-weight:400; line-height:24px; text-align:right; font-variant-numeric:tabular-nums; }
@@ -2049,6 +2619,12 @@
     installNavButton();
     installInterfaceControls();
     document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-super-potions-toggle]')) {
+        localStorage.setItem(SUPER_POTIONS_KEY, event.target.checked ? 'true' : 'false');
+        lastSignature = '';
+        render();
+        return;
+      }
       if (event.target.matches?.('[data-automation-toggle]')) {
         setAutomationEnabled(event.target.checked);
         automationTask = '';
@@ -2113,6 +2689,12 @@
         return;
       }
       if (event.target.closest?.('[data-collect-loot]')) { collectLootAndContinue(); return; }
+      const automationClaim = event.target.closest?.('[data-collect-automations]');
+      if (automationClaim) {
+        event.stopPropagation();
+        collectAllAutomationLoot();
+        return;
+      }
       if (event.target.closest?.('[data-collect-attunement]')) { event.stopPropagation(); collectAllAttunementLoot(); return; }
       if (event.target.closest?.('[data-collect-taming]')) { event.stopPropagation(); collectTamingLoot(); return; }
       if (event.target.closest?.('[data-run-challenge]')) { event.stopPropagation(); automateChallenge(); return; }

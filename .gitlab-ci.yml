@@ -6,6 +6,7 @@ validate-userscript:
   image: node:22-alpine
   script:
     - node --check ironwood-stats.user.js
+    - node --test tests/*.test.cjs
     - grep -q '^// ==UserScript==$' ironwood-stats.user.js
     - grep -q '^// @name ' ironwood-stats.user.js
     - grep -q '^// @namespace ' ironwood-stats.user.js

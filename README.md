@@ -8,6 +8,7 @@ implementation; the separate loader is only for local development.
 ## Features
 
 - Live current action, Village/Outskirts location, compact action/skill levels, native XP/hour, green skill-level progress, finite-queue finish estimate, action materials, and consumables with equipped/stored quantities.
+- Combat actions show both fighters with live HP bars, restrained hit motion, and a brief death animation when an enemy reaches zero HP.
 - Current loot table with pending and cached inventory quantities, plus native collect-and-continue control.
 - Daily quest status and a modal for selecting five quests for Ironwood auto-completion.
 - Cached Adventure, Guild Event, and Guild Trial status.
@@ -16,7 +17,9 @@ implementation; the separate loader is only for local development.
 - Challenge Scroll status with configurable region/reward skill and button-triggered start, auto-complete, and reward claim automation.
 - Taming status with the selected expedition, current Pet Snack inventory, and native expedition-loot collection.
 - Automation tracking for all structures, including the selected action, projected loot, and queue progress.
-- Divine Potion table with separate equipped and stored quantities.
+- Divine Potion table with separate equipped and stored quantities. Enable **Show Super potions** under **Automation Preferences → Interface** to also show Super potions with positive inventory quantities; the preference is saved and defaults to off.
+- Stardust is shown only while a crafting skill is active.
+- Native Traits rows grouped under Forest, Mountain, Ocean, and shared Defense headers while keeping each skill's traits together.
 - Responsive two-column layout using the live Ironwood/Pancake visual style.
 
 The script reads Ironwood's rendered interface and runs alongside Pancake-Scripts. User-requested automations use only Ironwood's rendered native controls. **Enable automation** controls every game-changing action, while **Enable cache lookups** controls background information retrieval. Both settings are disabled by default. Cached information can still update without a background lookup when its native page is opened manually.
@@ -48,7 +51,7 @@ Live action and loot data come from the currently mounted skill page. Other data
 | Adventure and maps | `/adventure` | Daily at the 02:00 CET reset, after map automation, or when missing |
 | Challenges | `/challenges` | Daily at the 02:00 CET reset, after a challenge run, or when missing; background lookup is skipped while the cached Scroll count is zero |
 | Taming | `/skill/15` | Hourly when checked, after collection, or passively when opened manually |
-| Automations | House → Automate | Once when missing, passively when opened manually, then locally projected until the longest queue should finish (24-hour fallback) |
+| Automations | House → Automate | Once when missing, passively when opened manually, then locally projected from each structure's own capture time until the longest queue should finish (at most 24 hours). The table age reflects the oldest structure snapshot. |
 | Attunement | `/attunement` | Every four hours (at most six automatic lookups per day) |
 | Guild event | `/guild` → Events | Hourly while participating to update personal earned XP; otherwise at the known state expiry (24-hour fallback) |
 | Guild trials | `/guild` → Trials | Hourly while active; otherwise at the known state expiry (24-hour fallback) |
@@ -74,6 +77,8 @@ When Ironwood exposes a finite action queue, the right side of Current Action pr
 Mastery Contract shows the live contract count from the active skill page in the Stored column, falling back to the inventory cache when the native row is unavailable. The active skill's native Mastery `current / cap` value appears as smaller secondary text beside its name. The progress is informational only. The mastery badge is transparent gray until the skill is complete, then becomes gold; its state and contract visibility are controlled by the completed Skills list on Ironwood's Mastery page. Opening Mastery passively refreshes that list; when cache lookups are enabled it is also loaded once when missing.
 
 Daily Quest, Adventure, and Challenge caches use Ironwood's fixed 02:00 CET boundary (01:00 UTC). Other caches retain the individual refresh rules shown above. With cache lookups disabled, expired values may remain visible for reference but no background page is opened to replace them.
+
+The Automations **Claim** button opens House once for the batch and collects each structure in sequence. Each table row refreshes as soon as the native loot amount confirms collection. If a claim cannot be confirmed, the batch stops and displays the error in the pane; completed rows remain updated. Local loot projection keeps the known production rate after collection.
 
 ## Local development loader
 
