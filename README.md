@@ -5,6 +5,12 @@ A Tampermonkey userscript that adds a Pancake-Scripts-compatible **Status** page
 The public installation file is `ironwood-stats.user.js`. It contains the full
 implementation; the separate loader is only for local development.
 
+Licensed under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
+You may use, share, and modify this project for noncommercial purposes.
+Commercial use is not permitted under this license. Retain the license
+terms or their URL and the required copyright notice when sharing copies.
+This is source-available software, rather than OSI-approved open source.
+
 ## Features
 
 - Live current action, Village/Outskirts location, compact action/skill levels, native XP/hour, green skill-level progress, finite-queue finish estimate, action materials, and consumables with equipped/stored quantities.
@@ -82,9 +88,9 @@ The Automations **Claim** button opens House once for the batch and collects eac
 
 ## Local development loader
 
-Install `ironwood-stats-loader.user.js` in Tampermonkey and disable the full installed copy of `ironwood-stats.user.js`. The loader uses `@require` to execute the repository copy directly, so subsequent edits only require refreshing the Ironwood tab.
+Before installing `ironwood-stats-loader.user.js`, replace `/ABSOLUTE/PATH/TO/IRONWOOD_stats` in its `@require` line with your local checkout path. Keep that personalized copy in Tampermonkey rather than committing it to the repository. Install the customized loader in Tampermonkey and disable the full installed copy of `ironwood-stats.user.js`. The loader uses `@require` to execute the repository copy directly, so subsequent edits only require refreshing the Ironwood tab.
 
-In Chrome, open **Extensions → Tampermonkey → Details** and enable **Allow access to file URLs**. Tampermonkey may also expose a local-file access option in its own settings; enable it if present. The loader contains an absolute path for this checkout and must be updated if the repository is moved.
+In Chrome, open **Extensions → Tampermonkey → Details** and enable **Allow access to file URLs**. Tampermonkey may also expose a local-file access option in its own settings; enable it if present. Update the installed loader’s local path if you move the repository.
 
 ## Challenge automation
 

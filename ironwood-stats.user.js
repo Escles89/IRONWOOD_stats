@@ -1,16 +1,22 @@
 // ==UserScript==
 // @name         Ironwood RPG - Status Page
-// @namespace    https://github.com/pverbeek/IRONWOOD_stats
+// @namespace    ironwood-rpg-status
 // @version      1.13.2
 // @description  Adds a cached live status dashboard and optional task automation to Ironwood RPG.
-// @author       pverbeek
-// @license      Copyright pverbeek
+// @license      PolyForm-Noncommercial-1.0.0
 // @match        https://ironwoodrpg.com/*
 // @icon         https://ironwoodrpg.com/favicon.ico
 // @grant        none
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
+
+/*
+PolyForm Noncommercial License 1.0.0
+https://polyformproject.org/licenses/noncommercial/1.0.0
+
+Required Notice: Copyright (c) 2026 Ironwood Status contributors
+*/
 
 (() => {
   'use strict';
