@@ -1,0 +1,45 @@
+  function createAppState() {
+    return {
+      live: { action: null, loot: [], consumables: [], materials: [], combatants: [], observations: {},
+        lastCombatAction: null,
+        lastCombatSeenAt: 0,
+        previousLootValues: new Map(),
+        previousConsumableValues: new Map(),
+        reviveUntil: 0,
+        lastReviveObservedMs: 0
+      },
+      cache: { schemaVersion: 2, records: {} },
+      derived: { automationRows: [], displayedPotions: [], countdowns: {} },
+      ui: { activeRoute: '/', pendingActions: new Map(), events: new Map(),
+        previousUrl: '/',
+        hiddenRouteElements: [],
+        lastSignature: '',
+        lootDeltaNotices: new Map(),
+        consumableDeltaNotices: new Map(),
+        combatEffects: new Map(),
+        combatEffectLockUntil: 0,
+        combatUseNotice: null,
+        combatDropNotice: null,
+        eliteCombatDetected: false,
+        questModalOpen: false,
+        headerSnapshot: null,
+        collectingLoot: false,
+        lastAdventureCapture: 0,
+        visibleCaptureTimes: {},
+        refreshingAdventure: false,
+        refreshingChallenges: false,
+        refreshingTaming: false,
+        refreshingAutomations: false,
+        automationTask: '',
+        collectingAttunementLoot: false,
+        runningChallenge: false,
+        collectingTaming: false,
+        collectingAutomation: '',
+        tamingClaimNoticeUntil: 0,
+        syncing: false,
+        page: null,
+        navButton: null
+      }
+    };
+  }
+  const AppState = createAppState();

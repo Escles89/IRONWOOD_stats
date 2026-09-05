@@ -13,7 +13,7 @@ test('idle dashboard renders empty action and remaining panels without a cache r
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
     panel });
   const setup = `
-    page = panel;
+    AppState.ui.page = panel;
     readCurrentAction = () => null;
     render();
   `;

@@ -4,15 +4,7 @@ stages:
 validate-userscript:
   stage: test
   image: node:22-alpine
+  before_script:
+    - apk add --no-cache git
   script:
-    - node --check ironwood-stats.user.js
-    - node --test tests/*.test.cjs
-    - grep -q '^// ==UserScript==$' ironwood-stats.user.js
-    - grep -q '^// @name ' ironwood-stats.user.js
-    - grep -q '^// @namespace ' ironwood-stats.user.js
-    - grep -q '^// @version ' ironwood-stats.user.js
-    - grep -q '^// @description ' ironwood-stats.user.js
-    - grep -q '^// @license ' ironwood-stats.user.js
-    - grep -q '^// @match ' ironwood-stats.user.js
-    - test "$(wc -c < ironwood-stats.user.js)" -lt 2097152
-
+    - node src/build/check.js

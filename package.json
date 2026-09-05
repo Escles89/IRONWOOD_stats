@@ -1,0 +1,12 @@
+{
+  "name": "ironwood-status",
+  "private": true,
+  "version": "1.13.2",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node src/build/assemble-userscript.js",
+    "build:check": "node src/build/assemble-userscript.js --check",
+    "test": "node --test tests/*.test.cjs tests/core/*.test.cjs tests/apps/*.test.cjs tests/build/*.test.cjs",
+    "check": "node src/build/check.js"
+  }
+}
