@@ -5,6 +5,9 @@
     throw new Error(`Timed out waiting for ${selector}`);
   }
   async function withPage(path, selector, task) {
+    const activity = { path, startedAt: Date.now(), state: 'Running' };
+    AppState.ui.lookupActivity.push(activity);
+    if (AppState.ui.lookupActivity.length > 20) AppState.ui.lookupActivity.shift();
     const frame = document.createElement('iframe');
     frame.className = 'iw-sync-frame';
     frame.src = path;
@@ -12,6 +15,12 @@
     try {
       await new Promise((resolve, reject) => { frame.onload = resolve; setTimeout(() => reject(new Error(`Could not load ${path}`)), 15000); });
       await waitFor(frame.contentDocument, selector);
-      return await task(frame.contentDocument, frame.contentWindow);
-    } finally { frame.remove(); }
+      const result = await task(frame.contentDocument, frame.contentWindow);
+      activity.state = 'Finished';
+      return result;
+    } catch (error) {
+      activity.state = 'Failed';
+      activity.error = error.message;
+      throw error;
+    } finally { activity.finishedAt = Date.now(); frame.remove(); }
   }

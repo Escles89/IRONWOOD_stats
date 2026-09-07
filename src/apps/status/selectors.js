@@ -1,3 +1,22 @@
+  function projectStatusCache(cache, now = Date.now()) {
+    const projected = { ...cache };
+    if (cache.quests?.day && cache.quests.day !== dayKey(now)) {
+      projected.quests = { ...cache.quests, completed: 0, selectedDone: 0, dailyComplete: false, quests: [] };
+    }
+    if (Number.isFinite(cache.challenges?.checkedAt) && nextDailyReset(cache.challenges.checkedAt) <= now) {
+      projected.challenges = { ...cache.challenges, autoCompletesUsed: 0,
+        autoCompletesRemaining: cache.challenges.autoCompletesLimit, dailyScrollsUsed: 0 };
+    }
+    if (Number.isFinite(cache.adventure?.checkedAt) && nextDailyReset(cache.adventure.checkedAt) <= now) {
+      projected.adventure = { ...cache.adventure, dailyMapsCreated: 0, mapsComplete: false };
+    }
+    return projected;
+  }
+
+  function lootItemCount(loot) {
+    return loot.reduce((sum, item) => sum + (item.name === 'Coins' ? 0 : item.amount), 0);
+  }
+
   function isHighValueDrop(item) {
     if (!item) return false;
     return /\brune\b/i.test(item.name)

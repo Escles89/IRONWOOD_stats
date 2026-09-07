@@ -1,11 +1,6 @@
   function captureVisibleAdventure() {
     if (location.pathname !== '/adventure' || Date.now() - AppState.ui.lastAdventureCapture < 2000) return;
-    const researchRow = [...document.querySelectorAll('adventure-page .row')]
-      .find((row) => clean(row.querySelector('.name')?.textContent) === 'Research Points');
-    const researchText = clean(researchRow?.querySelector('.amount')?.textContent);
-    if (!/([\d,]+)\s*\/\s*([\d,]+)/.test(researchText)) return;
-    AppState.ui.lastAdventureCapture = Date.now();
-    collectAdventure(document);
+    if (collectAdventure(document)) AppState.ui.lastAdventureCapture = Date.now();
   }
 
   function captureVisibleQuests() {
@@ -58,8 +53,7 @@
     const path = location.pathname;
     const capture = (key, ready, fn) => {
       if (!ready || Date.now() - (AppState.ui.visibleCaptureTimes[key] || 0) < 2000) return;
-      AppState.ui.visibleCaptureTimes[key] = Date.now();
-      fn();
+      if (fn() !== false) AppState.ui.visibleCaptureTimes[key] = Date.now();
     };
     if (path === '/quests') captureVisibleQuests();
     else if (path === '/inventory') capture('inventory', document.querySelector('inventory-page'), () => collectInventory(document));

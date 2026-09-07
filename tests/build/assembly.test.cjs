@@ -25,3 +25,10 @@ test('every runtime module is listed exactly once and startup comes last', () =>
   assert.deepEqual([...modules].sort(), runtime);
   assert.equal(modules.at(-1), 'entrypoint.js');
 });
+
+test('displayed runtime version is generated from publication metadata', () => {
+  const output = assemble();
+  const version = output.match(/^\/\/ @version\s+(\S+)$/m)[1];
+  assert.ok(output.includes(`const USERSCRIPT_VERSION = ${JSON.stringify(version)};`));
+  assert.equal(version, require('../../package.json').version);
+});

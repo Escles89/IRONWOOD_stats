@@ -1,9 +1,49 @@
   function installEventDelegation() {
-    document.addEventListener('change', (event) => {
-      if (event.target.matches?.('[data-super-potions-toggle]')) {
-        localStorage.setItem(SUPER_POTIONS_KEY, event.target.checked ? 'true' : 'false');
+    document.addEventListener('toggle', event => {
+      if (event.target.matches?.('[data-quest-options]')) AppState.ui.questOptionsExpanded = event.target.open;
+      if (event.target.matches?.('[data-debug-section]')) { AppState.ui.debugUpdatedAt = 0; scheduleStatusRender(); }
+    }, true);
+    document.addEventListener('click', event => {
+      const potionTypeButton = event.target.closest?.('[data-potion-type-remove]');
+      if (potionTypeButton) {
+        localStorage.setItem(POTION_TYPES_KEY, JSON.stringify(getPotionTypes().filter(type => type !== potionTypeButton.dataset.potionTypeRemove)));
         AppState.ui.lastSignature = '';
         render();
+        document.querySelector('[data-potion-type-add]')?.focus();
+        return;
+      }
+      const stop = event.target.closest?.('skill-page button.action-stop');
+      if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
+    }, true);
+    document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-debug-toggle]')) {
+        localStorage.setItem(DEBUG_KEY, event.target.checked ? 'true' : 'false');
+        AppState.ui.debugUpdatedAt = 0;
+        AppState.ui.lastSignature = '';
+        render();
+        return;
+      }
+      if (event.target.matches?.('[data-multiplayer-toggle]')) {
+        localStorage.setItem(MULTIPLAYER_VISIBLE_KEY, event.target.checked ? 'true' : 'false');
+        installInterfaceControls();
+        AppState.ui.lastSignature = '';
+        render();
+        return;
+      }
+      if (event.target.matches?.('[data-header-icons-toggle]')) {
+        localStorage.setItem(HEADER_ICONS_KEY, event.target.checked ? 'true' : 'false');
+        AppState.ui.lastSignature = '';
+        render();
+        return;
+      }
+      if (event.target.matches?.('[data-potion-type-add]')) {
+        const value = event.target.value;
+        if (value !== 'all' && !POTION_TYPES.includes(value)) return;
+        event.target.value = '';
+        localStorage.setItem(POTION_TYPES_KEY, JSON.stringify(value === 'all' ? POTION_TYPES : [...new Set([...getPotionTypes(), value])]));
+        AppState.ui.lastSignature = '';
+        render();
+        document.querySelector('[data-potion-type-add]')?.focus();
         return;
       }
       if (event.target.matches?.('[data-automation-toggle]')) {
@@ -43,14 +83,9 @@
       }
     });
     document.addEventListener('click', (event) => {
-      if (event.target.closest?.('[data-quest-modal]')) { AppState.ui.questModalOpen = true; AppState.ui.lastSignature = ''; render(); return; }
-      if (event.target.closest?.('[data-modal-close]') || event.target.matches?.('[data-modal-backdrop]')) { AppState.ui.questModalOpen = false; AppState.ui.lastSignature = ''; render(); return; }
+      if (event.target.closest?.('[data-quest-modal]')) { openPreferences(event.target.closest('[data-quest-modal]')); return; }
+      if (event.target.closest?.('[data-modal-close]') || event.target.matches?.('[data-modal-backdrop]')) { closePreferences(); return; }
       if (event.target.closest?.('[data-sync]')) { syncStale(true); return; }
-      if (event.target.closest?.('[data-open-multiplayer]')) {
-        const multiplayer = document.getElementById(MULTIPLAYER_ID);
-        (multiplayer?.querySelector('.action') || multiplayer)?.click();
-        return;
-      }
       const craftAll = event.target.closest?.('[data-craft-all]');
       if (craftAll) {
         NativeControlAdapter.run(document, { type: 'craft', button: craftAll });
@@ -71,6 +106,7 @@
       location.href = launch.dataset.route;
     });
     document.addEventListener('keydown', (event) => {
+      if (handlePreferencesKey(event)) return;
       if (event.target.closest?.('button')) return;
       const launch = event.target.closest?.('.iw-status-link[data-route]');
       if (!launch || (event.key !== 'Enter' && event.key !== ' ')) return;

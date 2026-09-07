@@ -21,8 +21,7 @@
     const statusText = clean([
       combatCard?.textContent,
       standardCard?.textContent,
-      document.querySelector('skill-page')?.textContent,
-      document.body?.textContent
+      document.querySelector('skill-page')?.textContent
     ].filter(Boolean).join(' '));
     const parsedReviveRemainingMs = parseReviveRemaining(statusText);
     const now = Date.now();
@@ -36,13 +35,13 @@
     }
     const reviveRemainingMs = AppState.live.reviveUntil > now ? AppState.live.reviveUntil - now : 0;
     const reviveVisible = reviveRemainingMs > 0 || /\b(?:reviving|respawning|resurrecting)\b/i.test(statusText);
-    if (!combatCard && AppState.live.lastCombatAction && Date.now() - AppState.live.lastCombatSeenAt < 2500 && !reviveVisible) {
-      return { ...lastCombatAction, reviveRemainingMs: 0, combatGrace: true };
+    if (!combatCard && !standardCard && AppState.live.lastCombatAction && Date.now() - AppState.live.lastCombatSeenAt < 2500 && !reviveVisible) {
+      return { ...AppState.live.lastCombatAction, reviveRemainingMs: 0, combatGrace: true };
     }
     const card = combatCard || standardCard;
     if (!card) {
       return AppState.live.lastCombatAction && Date.now() - AppState.live.lastCombatSeenAt < 2500
-        ? { ...lastCombatAction, reviveRemainingMs: 0, combatGrace: true }
+        ? { ...AppState.live.lastCombatAction, reviveRemainingMs: 0, combatGrace: true }
         : null;
     }
     const isCombat = Boolean(combatCard && card === combatCard);
@@ -52,9 +51,9 @@
     // Ironwood keeps the selected action card mounted while idle. The live
     // progress bars only exist after an action has actually been started.
     if (!fill && !isCombat) {
-      if (reviveVisible && AppState.live.lastCombatAction) return { ...lastCombatAction, reviveRemainingMs, combatGrace: true };
+      if (reviveVisible && AppState.live.lastCombatAction) return { ...AppState.live.lastCombatAction, reviveRemainingMs, combatGrace: true };
       return AppState.live.lastCombatAction && Date.now() - AppState.live.lastCombatSeenAt < 2500
-        ? { ...lastCombatAction, reviveRemainingMs: 0, combatGrace: true }
+        ? { ...AppState.live.lastCombatAction, reviveRemainingMs: 0, combatGrace: true }
         : null;
     }
     const match = location.pathname.match(/\/skill\/(\d+)\/action\/(\d+)/)
@@ -62,7 +61,9 @@
     const locationButton = [...document.querySelectorAll('skill-page button.filter')]
       .find((button) => button.disabled && /^(Village|Outskirts|Forest|Mountain|Ocean)$/.test(clean(button.textContent)));
     const tracker = document.querySelector('skill-page tracker-component .skill');
-    const skillName = clean(tracker?.querySelector('.header .name')?.textContent);
+    // Some combat layouts omit the tracker; the native active-action shortcut still names the skill.
+    const skillName = clean(tracker?.querySelector('.header .name')?.textContent)
+      || clean(document.querySelector('nav-component action-component button.button .details > .skill, nav-component combat-component button.button .details > .skill')?.textContent);
     const skillLevel = clean(tracker?.querySelector('.header .level')?.textContent);
     const progressText = clean(tracker?.querySelector('.percent')?.textContent);
     const progressPercent = progressText ? numberFrom(progressText) : null;

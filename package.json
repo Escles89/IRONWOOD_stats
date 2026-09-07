@@ -1,8 +1,11 @@
 {
   "name": "ironwood-status",
   "private": true,
-  "version": "1.13.2",
-  "engines": { "node": ">=22" },
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "version": "1.13.25",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node src/build/assemble-userscript.js",
     "build:check": "node src/build/assemble-userscript.js --check",

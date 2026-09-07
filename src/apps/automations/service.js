@@ -160,7 +160,7 @@
 
   async function refreshAutomationsSnapshot(force = false) {
     if (!cacheLookupsEnabled()) return;
-    if (AppState.ui.refreshingAutomations || AppState.ui.collectingAutomation || (!force && !isStale('automations'))) return;
+    if (AppState.ui.refreshingAutomations || AppState.ui.collectingAutomation || (!force && !needsLookup('automations'))) return;
     AppState.ui.refreshingAutomations = true;
     try {
       await withPage('/', 'app-component', async (doc) => {

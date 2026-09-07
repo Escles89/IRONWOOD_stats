@@ -11,7 +11,10 @@
     const multiplayerName = [...document.querySelectorAll('nav-component .row-button > .name')]
       .find((name) => clean(name.textContent) === 'Multiplayer');
     const multiplayer = multiplayerName?.closest('.row-button');
-    if (multiplayer) multiplayer.id = MULTIPLAYER_ID;
+    if (multiplayer) {
+      multiplayer.id = MULTIPLAYER_ID;
+      multiplayer.classList.toggle('iw-multiplayer-visible', multiplayerControlEnabled());
+    }
 
     document.querySelectorAll('modal-component .modal').forEach((modal) => {
       const craftableRow = [...modal.querySelectorAll(':scope > .row')]

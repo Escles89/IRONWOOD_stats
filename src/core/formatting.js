@@ -1,6 +1,7 @@
   const clean = (text) => (text || '').replace(/\s+/g, ' ').trim();
   const numberFrom = (text) => Number(clean(text).replace(/[^\d.-]/g, '')) || 0;
-  const formatNumber = (value) => new Intl.NumberFormat().format(value);
+  const quantityFormatter = new Intl.NumberFormat();
+  const formatNumber = (value) => quantityFormatter.format(value);
   const formatCompact = (value) => value >= 1000
     ? `${(value / 1000).toFixed(value >= 100000 ? 0 : 1).replace(/\.0$/, '')}K`
     : formatNumber(Math.round(value));

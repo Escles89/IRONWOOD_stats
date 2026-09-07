@@ -23,7 +23,7 @@
 
   async function refreshTamingSnapshot(force = false) {
     if (!cacheLookupsEnabled()) return;
-    if (!force && !isStale('taming')) return;
+    if (!force && !needsLookup('taming')) return;
     if (AppState.ui.refreshingTaming) return;
     AppState.ui.refreshingTaming = true;
     try {

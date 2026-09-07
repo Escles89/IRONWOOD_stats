@@ -17,14 +17,14 @@ test('new schema ignores old and malformed data; reset preserves explicit prefer
     h.storage.set('iw-stats-cache-v2', value);
     assert.equal(h.run('Object.keys(CacheStore.get()).length'), 0);
   }
-  h.run(`CacheStore.set('inventory', { allItems: [] }); CacheStore.reset()`);
+  h.run(`CacheStore.set('inventory', { schema: 1, allItems: [] }); CacheStore.reset()`);
   assert.equal(h.run('Object.keys(CacheStore.get()).length'), 0);
   assert.equal(h.storage.get('iw-stats-automation-enabled'), 'true');
   assert.equal(h.storage.get('iw-stats-cache-lookups-enabled'), 'true');
 });
 test('cache tracks timestamps, metadata, TTL, explicit expiry, schema and invalidation', () => {
   const h = harness();
-  h.run(`CacheStore.set('inventory', { allItems: [] }, { source: '/inventory' })`);
+  h.run(`CacheStore.set('inventory', { schema: 1, allItems: [] }, { source: '/inventory' })`);
   assert.equal(h.run(`CacheStore.get('inventory').source`), '/inventory');
   assert.equal(h.run(`CacheStore.get('inventory').checkedAt`), 100000);
   assert.equal(h.run(`CacheStore.isFresh('inventory')`), true);
@@ -51,7 +51,7 @@ test('event ledger deduplicates without extending TTL and permits events after e
 });
 test('coordinator blocks lookups while disabled, uses fresh cache and joins concurrent loads', async () => {
   const h = harness();
-  h.run(`globalThis.loads = 0; globalThis.loader = () => { loads++; CacheStore.set('inventory', { allItems: [] }); };`);
+  h.run(`globalThis.loads = 0; globalThis.loader = () => { loads++; CacheStore.set('inventory', { schema: 1, allItems: [] }); };`);
   await h.run(`SyncCoordinator.refresh('inventory', { force: true, load: loader })`);
   assert.equal(h.run('loads'), 0);
   h.storage.set('iw-stats-cache-lookups-enabled', 'true');
@@ -61,4 +61,15 @@ test('coordinator blocks lookups while disabled, uses fresh cache and joins conc
   assert.equal(h.run('loads'), 1);
   await assert.rejects(h.run(`SyncCoordinator.refresh('inventory', { force: true, load: () => { throw new Error('offline'); } })`), /offline/);
   assert.equal(h.run('AppState.ui.pendingActions.size'), 0);
+});
+
+
+test('unchanged cache snapshots reuse parsed data and pick up external writes', () => {
+  const h = harness();
+  h.run("CacheStore.set('inventory', { schema: 1, allItems: [{ key: 'wood', amount: 5 }] })");
+  const first = h.run("CacheStore.get('inventory')");
+  assert.equal(h.run("CacheStore.get('inventory')"), first);
+  h.run("localStorage.setItem(CACHE_KEY, JSON.stringify({ schemaVersion: 2, records: { inventory: { allItems: [{ key: 'wood', amount: 8 }] } } }))");
+  assert.equal(h.run("CacheStore.get('inventory').allItems[0].amount"), 8);
+  assert.notEqual(h.run("CacheStore.get('inventory')"), first);
 });

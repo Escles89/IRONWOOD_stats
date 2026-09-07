@@ -5,6 +5,7 @@
   "core/event-ledger.js",
   "core/cache-store.js",
   "core/scheduler.js",
+  "core/update-checker.js",
   "integrations/ironwood/dom-reader.js",
   "integrations/ironwood/native-controls.js",
   "integrations/ironwood/route-loader.js",
@@ -29,6 +30,8 @@
   "apps/status/service.js",
   "apps/status/view.js",
   "ui/components.js",
+  "ui/preferences.js",
+  "ui/debug.js",
   "ui/layout.js",
   "ui/event-delegation.js",
   "entrypoint.js"

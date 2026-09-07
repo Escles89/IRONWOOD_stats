@@ -81,3 +81,44 @@ test('source adapter uses the supplied document, including card lookups', () => 
   assert.equal(live.loot[0].amount, 1234);
   assert.equal(live.consumables[0].name, 'Elite Key');
 });
+
+test('active skill falls back to the native sidebar shortcut when the tracker is absent', () => {
+  const document = nativeFixture();
+  const originalQuery = document.querySelector;
+  document.querySelector = selector => {
+    if (selector === 'skill-page tracker-component .skill') return null;
+    if (selector === 'nav-component action-component button.button .details > .skill, nav-component combat-component button.button .details > .skill') return { textContent: 'Defense' };
+    return originalQuery(selector);
+  };
+  const h = harness({ document });
+  assert.equal(h.run('SourceAdapter.capture(document).action.skillName'), 'Defense');
+  assert.equal(h.run(`guildTrialBonusActive({ schema: 4, state: 'Active', activeName: 'Defense Trial', stateEndsAt: 200000 }, AppState.live.action.skillName)`), true);
+});
+
+test('enemy remount gaps preserve combat briefly, expire to idle, and do not override a new action', () => {
+  const document = element('', {}, {}, { body: { textContent: 'Revive in 20 seconds' } });
+  const h = harness({ document });
+  h.run(`AppState.live.lastCombatAction = { name: 'Treant', isCombat: true, combatants: [] }; AppState.live.lastCombatSeenAt = Date.now()`);
+  h.time(100250);
+  assert.equal(h.context.readCurrentAction().name, 'Treant');
+  assert.equal(h.context.readCurrentAction().combatGrace, true);
+  // Our own dashboard text must not be reinterpreted as native revive state.
+  assert.equal(h.context.readCurrentAction().reviveRemainingMs, 0);
+  h.time(102500);
+  assert.equal(h.context.readCurrentAction(), null);
+  h.time(100500);
+  h.context.document = nativeFixture();
+  assert.equal(h.context.readCurrentAction().name, 'Ancient Tree');
+});
+
+test('native revive state with an idle action card uses the retained combat snapshot', () => {
+  const document = element('', {
+    'skill-page': element('Reviving in 20 seconds'),
+    'skill-page action-component > .card': element('Selected action')
+  });
+  const h = harness({ document });
+  h.run(`AppState.live.lastCombatAction = { name: 'Treant', isCombat: true, combatants: [] }; AppState.live.lastCombatSeenAt = Date.now()`);
+  const action = h.context.readCurrentAction();
+  assert.equal(action.name, 'Treant');
+  assert.equal(action.reviveRemainingMs, 20000);
+});

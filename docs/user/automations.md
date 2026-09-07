@@ -18,7 +18,7 @@ Native crafting dialogs include **Craft All**. It reads the current Craftable am
 
 The Challenges row shows the cached number of available Challenge Scrolls and remaining Ironwood auto-completes. Its **Run** button opens a temporary same-origin Challenges page, selects the configured region, starts the currently selected challenge tier, uses an available auto-complete, selects the configured reward skill, and claims the reward. It repeats up to `min(scrolls available, auto-completes remaining)`. The default is Mountain + Defense.
 
-The displayed `used / limit` Auto Challenge Completes value is converted to a remaining allowance with `limit - used`. Accounts without an auto-complete allowance run zero challenges. The run is bounded and fails closed if no scroll or auto-complete remains, a native control does not appear, or the scroll reduction cannot be confirmed. Region and skill can be changed from **Automation Preferences**; only skills supported by the selected region are offered.
+The displayed `used / limit` Auto Challenge Completes value is converted to a remaining allowance with `limit - used`. Accounts without an auto-complete allowance run zero challenges. The run is bounded and fails closed if no scroll or auto-complete remains, a native control does not appear, or the scroll reduction cannot be confirmed. Region and skill can be changed from **Dashboard options → Challenges**; only skills supported by the selected region are offered.
 
 ## Automatic map creation
 

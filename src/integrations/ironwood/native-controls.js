@@ -1,3 +1,9 @@
+  function findSkillStartButton() {
+    const start = document.querySelector('skill-page button.action-start, skill-page button[class*="action-start"]');
+    if (start && !start.disabled) return start;
+    return [...document.querySelectorAll('skill-page button')].find(button => !button.disabled
+      && !button.classList.contains('row') && /^(Gather|Mine|Craft|Smelt|Smith|Enchant|Farm|Brew|Fish|Cook|Delve|Imbue|Explore|Tame|Fight|Start)$/i.test(clean(button.textContent)));
+  }
   async function collectLootAndContinue() {
     if (!automationEnabled()) return;
     if (AppState.ui.collectingLoot) return;
@@ -5,6 +11,7 @@
       .find((button) => /Stop\s*&\s*Loot/i.test(clean(button.textContent)) && !button.disabled);
     if (!stopButton) return;
     AppState.ui.collectingLoot = true;
+    const inventoryClaim = beginInventoryLootClaim();
     const control = AppState.ui.page?.querySelector('[data-collect-loot]');
     if (control) { control.disabled = true; control.textContent = 'Claiming…'; }
     try {
@@ -12,14 +19,12 @@
       const start = Date.now();
       let startButton = null;
       while (Date.now() - start < 8000) {
-        startButton = document.querySelector('skill-page button.action-start, skill-page button[class*="action-start"]');
-        if (!startButton) startButton = [...document.querySelectorAll('skill-page button')].find((button) =>
-          !button.disabled && !button.classList.contains('row') && /^(Gather|Mine|Craft|Smelt|Smith|Enchant|Farm|Brew|Fish|Cook|Delve|Imbue|Explore|Tame|Fight|Start)$/i.test(clean(button.textContent))
-        );
+        startButton = findSkillStartButton();
         if (startButton && !startButton.disabled) break;
         await wait(100);
       }
       if (!startButton || startButton.disabled) throw new Error('Ironwood did not expose the continue-action button');
+      applyInventoryLootClaim(inventoryClaim);
       startButton.click();
       const restart = Date.now();
       while (Date.now() - restart < 8000 && !document.querySelector('skill-page action-component > .card .bars .fill')) await wait(100);
@@ -31,6 +36,7 @@
       if (control) { control.textContent = 'Claim'; control.title = error.message; }
     } finally {
       AppState.ui.collectingLoot = false;
+      if (AppState.ui.pendingLootClaim === inventoryClaim) AppState.ui.pendingLootClaim = null;
       const current = AppState.ui.page?.querySelector('[data-collect-loot]');
       if (current) { current.disabled = false; if (current.textContent === 'Claiming…') current.textContent = 'Claim'; }
     }

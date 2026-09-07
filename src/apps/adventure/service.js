@@ -1,18 +1,25 @@
+  function adventureBonusActive(entry, skillName, now = Date.now()) {
+    return Boolean(entry?.schema === 11 && entry.state === 'Active' && entry.stateEndsAt > now
+      && clean(entry.mapSkill) && clean(skillName)
+      && clean(entry.mapSkill).toLowerCase() === clean(skillName).toLowerCase());
+  }
   function adventureDetail(entry) {
-    if (!entry) return 'Never checked';
+    if (!entry || entry.schema !== 11) return 'Adventure needs checking';
     const remaining = Number(entry.stateEndsAt) - Date.now();
-    if (entry.state === 'Active' && remaining > 0) return `In progress · ${formatDuration(remaining / 1000)} remaining`;
-    if (entry.state === 'Active') return 'Adventure ending';
+    if (entry.state === 'Active' && remaining > 0) return `${entry.mapName || 'Adventure'} · ${formatDuration(remaining / 1000)} remaining`;
+    if (entry.state === 'Active') return `${entry.mapName || 'Adventure'} ending`;
     return withoutSeconds(entry.stateDetail) || humanAge(entry.checkedAt);
   }
   function collectAdventure(doc) {
     const root = doc.querySelector('adventure-page');
+    if (!root) return null;
+    const previous = getCache().adventure || {};
     const cards = [...root.querySelectorAll('.card')];
     const createCard = cards.find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Create Map');
     const menu = cards.find((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Menu');
     const adventureRow = [...(menu?.querySelectorAll(':scope > button.row') || [])].find((row) => clean(row.querySelector('.name')?.textContent) === 'Adventure');
     const storageRow = [...(menu?.querySelectorAll(':scope > button.row') || [])].find((row) => clean(row.querySelector('.name')?.textContent) === 'Storage');
-    const rawStateText = clean(adventureRow?.querySelector('.event-icon, .amount')?.textContent) || 'Unknown';
+    const rawStateText = clean(adventureRow?.querySelector('.time')?.textContent) || clean(adventureRow?.querySelector('.event-icon, .amount')?.textContent) || 'Unknown';
     const stateText = withoutSeconds(rawStateText);
     const allRows = [...root.querySelectorAll('.row')];
     const researchRow = [...(createCard?.querySelectorAll('.row') || [])]
@@ -27,28 +34,43 @@
     const cooldown = /Cooldown/i.test(stateText);
     const activeDuration = durationMs(rawStateText);
     const active = !cooldown && activeDuration > 0;
+    if (!active && !cooldown && !/^(Idle|Available|Ready)$/i.test(stateText)) return null;
     const resetText = cooldown ? withoutSeconds(values['Weekly Limit Reset'] || values['Daily Limit Reset']) : '';
     const pair = (text) => {
       const match = clean(text).match(/([\d,.]+\s*[KMB]?)\s*\/\s*([\d,.]+\s*[KMB]?)/i);
       if (!match) return { current: null, max: null };
       return { current: parseCompact(match[1]), max: parseCompact(match[2]) };
     };
-    const research = pair(researchRow?.querySelector('.amount')?.textContent);
+    const researchSource = researchRow || allRows.find(row => clean(row.querySelector('.name')?.textContent) === 'Research Points');
+    const research = pair(researchSource?.querySelector('.amount')?.textContent);
     const dailyMaps = pair(values['Daily Map Limit']);
     const storage = pair(storageRow?.querySelector('.amount')?.textContent);
+    const endsAt = activeDuration ? Date.now() + activeDuration : null;
+    const sameRun = active && previous.state === 'Active' && previous.stateEndsAt > Date.now()
+      && Math.abs(previous.stateEndsAt - endsAt) < 60000;
+    const adventureCard = cards.find(card => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Adventure');
+    const remainingRow = [...(adventureCard?.querySelectorAll('.row') || [])]
+      .find(row => clean(row.querySelector('.name')?.textContent) === 'Remaining Time');
+    // Storage can display a selected map as well. Only the running-adventure
+    // view, with its Remaining Time row, identifies the active map.
+    const mapCard = active && remainingRow && adventureRow?.classList.contains('row-active')
+      ? cards.find(card => / Map$/.test(clean(card.querySelector(':scope > .header > .name')?.textContent))) : null;
+    const mapName = mapCard ? clean(mapCard.querySelector(':scope > .header > .name')?.textContent)
+      : sameRun ? previous.mapName || '' : '';
     const data = {
-      schema: 10,
+      schema: 11,
+      mapName: active ? mapName : '', mapSkill: active ? mapName.replace(/ Map$/, '') : '',
       state: active ? 'Active' : cooldown ? 'Cooldown' : stateText,
       stateDetail: active ? 'In progress' : cooldown ? `Ready in ${resetText}` : 'No adventure running',
-      stateEndsAt: activeDuration ? Date.now() + activeDuration : null,
+      stateEndsAt: endsAt,
       dailyLimit: values['Daily Map Limit'] || '', weeklyLimit: values['Weekly Adventure Limit'] || '',
       dailyReset: values['Daily Limit Reset'] || '', weeklyReset: values['Weekly Limit Reset'] || '',
-      researchPoints: research.current, mapCost: research.max,
-      dailyMapsCreated: dailyMaps.current, dailyMapsLimit: dailyMaps.max,
-      mapsStored: storage.current, mapStorageLimit: storage.max,
-      mapsComplete: dailyMaps.max > 0 && dailyMaps.current >= dailyMaps.max,
+      researchPoints: research.current ?? previous.researchPoints ?? null, mapCost: research.max ?? previous.mapCost ?? null,
+      dailyMapsCreated: dailyMaps.current ?? previous.dailyMapsCreated ?? null, dailyMapsLimit: dailyMaps.max ?? previous.dailyMapsLimit ?? null,
+      mapsStored: storage.current ?? previous.mapsStored ?? null, mapStorageLimit: storage.max ?? previous.mapStorageLimit ?? null,
+      mapsComplete: dailyMaps.max > 0 ? dailyMaps.current >= dailyMaps.max : Boolean(previous.mapsComplete),
       mapAutomation: getCache().adventure?.mapAutomation || null,
-      expiresAt: active ? Date.now() + Math.min(activeDuration || 4 * 3600000, 4 * 3600000) : nextDailyReset()
+      expiresAt: active ? Date.now() + Math.min(activeDuration || 4 * 3600000, 4 * 3600000) : Math.min(nextDailyReset(), Date.now() + 300000)
     };
     setCache('adventure', data);
     return data;
@@ -56,20 +78,24 @@
 
   async function refreshAdventureSnapshot(force = false) {
     if (!cacheLookupsEnabled()) return;
-    if (!force && !isStale('adventure')) return;
+    if (!force && !needsLookup('adventure')) return;
     if (AppState.ui.refreshingAdventure) return;
     AppState.ui.refreshingAdventure = true;
     try {
       await withPage('/adventure', 'adventure-page', async (doc) => {
         const started = Date.now();
-        let researchRow = null;
+        let opened = false;
         while (Date.now() - started < 8000) {
-          researchRow = [...doc.querySelectorAll('adventure-page .row')]
-            .find((row) => clean(row.querySelector('.name')?.textContent) === 'Research Points');
-          if (researchRow && /\//.test(clean(researchRow.querySelector('.amount')?.textContent))) break;
+          const storage = [...doc.querySelectorAll('adventure-page button.row')]
+            .find(button => clean(button.querySelector('.name')?.textContent) === 'Storage');
+          if (storage && !opened) { storage.click(); opened = true; }
+          const data = opened ? collectAdventure(doc) : null;
+          const research = [...doc.querySelectorAll('adventure-page .row')]
+            .find(row => clean(row.querySelector('.name')?.textContent) === 'Research Points');
+          if (data && research && Number.isFinite(data.researchPoints)) break;
           await wait(100);
         }
-        if (researchRow) collectAdventure(doc);
+        await captureAdventureMapDetails(doc);
       });
     } catch (error) {
       console.error('[Ironwood Status] Adventure snapshot refresh failed', error);
@@ -78,6 +104,22 @@
       AppState.ui.lastSignature = '';
       render();
     }
+  }
+
+  async function captureAdventureMapDetails(doc) {
+    const data = collectAdventure(doc);
+    if (data?.state !== 'Active') return data;
+    const button = [...doc.querySelectorAll('adventure-page button.row')]
+      .find(element => clean(element.querySelector('.name')?.textContent) === 'Adventure');
+    if (!button) return data;
+    button.click();
+    const started = Date.now();
+    while (Date.now() - started < 6000) {
+      const current = collectAdventure(doc);
+      if (current?.state === 'Active' && current.mapSkill) return current;
+      await wait(100);
+    }
+    return getCache().adventure;
   }
 
   function selectedMapRarity(doc) {
@@ -96,6 +138,7 @@
   async function automateMaps(doc) {
     if (!automationEnabled()) return collectAdventure(doc);
     let state = collectAdventure(doc);
+    if (!state) throw new Error('Adventure data has not loaded');
     let created = 0;
     let sold = 0;
     let kept = 0;
@@ -118,7 +161,7 @@
       const expectedRP = Math.max(0, previousRP - state.mapCost);
       createButton.click();
       const createStarted = Date.now();
-      do { await wait(200); state = collectAdventure(doc); }
+      do { await wait(200); state = collectAdventure(doc) || state; }
       while (Date.now() - createStarted < 6000 &&
         (state.dailyMapsCreated <= previousCreated || state.researchPoints > expectedRP));
       if (state.dailyMapsCreated <= previousCreated) { stoppedReason = 'Map creation was not confirmed'; break; }
@@ -136,16 +179,16 @@
         if (!sellButton) { stoppedReason = `Could not sell ${rarity} map`; break; }
         sellButton.click();
         const sellStarted = Date.now();
-        do { await wait(200); state = collectAdventure(doc); }
+        do { await wait(200); state = collectAdventure(doc) || state; }
         while (Date.now() - sellStarted < 5000 && state.mapsStored >= previousStored + 1);
         if (state.mapsStored >= previousStored + 1) { stoppedReason = `${rarity} map sale was not confirmed`; break; }
         sold++;
       }
-      state = collectAdventure(doc);
+      state = collectAdventure(doc) || state;
       if (!rpConfirmed) { stoppedReason = 'RP balance update was not confirmed'; break; }
     }
     const finalReadStarted = Date.now();
-    do { await wait(150); state = collectAdventure(doc); }
+    do { await wait(150); state = collectAdventure(doc) || state; }
     while (Date.now() - finalReadStarted < 1200 && !Number.isFinite(state.researchPoints));
     const complete = state.dailyMapsLimit > 0 && state.dailyMapsCreated >= state.dailyMapsLimit;
     const current = getCache().adventure || state;

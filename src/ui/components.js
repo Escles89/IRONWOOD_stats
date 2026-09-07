@@ -1,3 +1,17 @@
+  function headerIconsEnabled() { return localStorage.getItem(HEADER_ICONS_KEY) === 'true'; }
+  function multiplayerControlEnabled() { return localStorage.getItem(MULTIPLAYER_VISIBLE_KEY) === 'true'; }
+  function getPotionTypes() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(POTION_TYPES_KEY));
+      if (Array.isArray(saved)) return [...new Set(saved.filter(type => POTION_TYPES.includes(type)))];
+    } catch {}
+    return localStorage.getItem(SUPER_POTIONS_KEY) === 'true' ? ['Divine', 'Super'] : ['Divine'];
+  }
+  function potionType(item) {
+    const key = item.key || item.image?.split('/').pop()?.split('?')[0] || '';
+    if (!/^potion-[\w-]+\.[\w]+$/.test(key)) return null;
+    return /^potion-divine-/.test(key) ? 'Divine' : /^potion-super-/.test(key) ? 'Super' : 'Regular';
+  }
   function getPrefs() {
     try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '[]'); } catch { return []; }
   }

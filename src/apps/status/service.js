@@ -4,13 +4,14 @@
     setCache(key, { summary: text || 'No active information found' });
   }
   function render() {
-    if (!AppState.ui.page || AppState.ui.page.hidden) return;
+    if (document.hidden || !AppState.ui.page || AppState.ui.page.hidden) return;
     try {
     const { action, loot, consumables, materials, masteryProgress, finiteQueue } = SourceAdapter.capture(document);
     const combatDeath = Boolean(action?.isCombat && action.combatants?.some((fighter) => fighter.side === 'monster' && fighter.hpPercent === 0));
     const lootDeltas = loot.map((item) => { const key = item.image || item.name; const old = AppState.live.previousLootValues.get(key); return old === undefined || old === item.amount ? 0 : item.amount - old; });
     const consumableDeltas = consumables.map((item) => { const key = item.image || item.name; const old = AppState.live.previousConsumableValues.get(key); return old === undefined || old === parseCompact(item.amount) ? 0 : parseCompact(item.amount) - old; });
     const noticeNow = Date.now();
+    recordMaterialChanges(materials, noticeNow);
     if (!action?.isCombat) AppState.ui.eliteCombatDetected = false;
     if (action?.isCombat && consumables.some((item, index) => /elite\s+key/i.test(item.name) && consumableDeltas[index] < 0)) AppState.ui.eliteCombatDetected = true;
     const eliteKeyEquipped = consumables.some((item) => /elite\s+key/i.test(item.name));
@@ -55,11 +56,9 @@
     AppState.ui.page.style.setProperty('--iw-recovery-icon', recoveryIcon ? `url(${JSON.stringify(recoveryIcon)})` : 'none');
     AppState.ui.page.style.setProperty('--iw-drop-icon', combatDrop ? `url(${JSON.stringify(combatDrop.image)})` : 'none');
     AppState.ui.page.style.setProperty('--iw-use-icon', combatUse ? `url(${JSON.stringify(combatUse.image)})` : 'none');
-    AppState.ui.page.style.setProperty('--iw-drop-delay', `-${Math.min(4000, Math.max(0, noticeNow - (AppState.ui.combatDropNotice?.started || noticeNow)))}ms`);
-    AppState.ui.page.style.setProperty('--iw-use-delay', `-${Math.min(4000, Math.max(0, noticeNow - (AppState.ui.combatUseNotice?.started || noticeNow)))}ms`);
     const queueRemainingMs = finiteQueue ? durationMs(finiteQueue.time) : 0;
     const queueWarning = queueRemainingMs > 0 && queueRemainingMs < 3600000
-      ? (queueRemainingMs < 600000 ? 'urgent' : 'warning') : '';
+      ? (queueRemainingMs < 600000 ? 'urgent' : 'warning') : queueRemainingMs >= 3600000 && CRAFTING_SKILLS.has(action?.skillName) ? 'sufficient' : '';
     const lowMaterials = materials
       .filter((item) => Number.isFinite(item.available) && item.available < 1000)
       .sort((a, b) => a.available - b.available);
@@ -67,30 +66,55 @@
     const materialWarningText = lowMaterials.length
       ? `Material${lowMaterials.length > 1 ? 's' : ''} low: ${lowMaterials.map((item) => `${item.name} ${formatNumber(item.available)}`).join(', ')}`
       : '';
-    const cache = getCache();
-    const adventureActive = cache.adventure?.state === 'Active'
+    const liveEquippedDivine = divineConsumables(document);
+    let equippedDivine = [];
+    try { equippedDivine = JSON.parse(localStorage.getItem(EQUIPPED_KEY) || '[]'); } catch { equippedDivine = []; }
+    if (!Array.isArray(equippedDivine)) equippedDivine = [];
+    equippedDivine = equippedDivine.filter((item) => item && typeof item.image === 'string' && item.image);
+    if (liveEquippedDivine.length) {
+      equippedDivine = storeEquippedDivine(liveEquippedDivine);
+    }
+    const cache = projectStatusCache(getCache());
+    const adventureActive = cache.adventure?.schema === 11 && cache.adventure.state === 'Active'
       && (!cache.adventure.stateEndsAt || cache.adventure.stateEndsAt > Date.now());
-    const guildParticipationActive = cache.guildEvent?.state === 'Participating'
-      && (!cache.guildEvent.stateEndsAt || cache.guildEvent.stateEndsAt > Date.now());
+    const adventureActionActive = adventureBonusActive(cache.adventure, action?.skillName);
+    const eventState = guildEventState(cache.guildEvent);
+    const guildParticipationActive = eventState === 'Participating';
     const guildEventActionActive = guildParticipationActive
       && guildEventIncludesSkill(cache.guildEvent?.eventName, action?.skillName);
-    const guildTrialActive = cache.guildTrial?.state === 'Active'
-      && (!cache.guildTrial.stateEndsAt || cache.guildTrial.stateEndsAt > Date.now());
+    const trialState = guildTrialState(cache.guildTrial);
+    const guildTrialActionActive = guildTrialBonusActive(cache.guildTrial, action?.skillName);
     const prefs = getPrefs();
     const automationOn = automationEnabled();
     const cacheLookupsOn = cacheLookupsEnabled();
     const masteryAchieved = (cache.mastery?.completeSkills || []).includes(action?.skillName);
     const gatheringSkill = GATHERING_SKILLS.has(action?.skillName);
     const craftingSkill = CRAFTING_SKILLS.has(action?.skillName);
+    const challengePrefs = getChallengePrefs();
+    const headerIcons = headerIconsEnabled();
+    const potionTypes = getPotionTypes();
+    const adventureIdleAvailable = cache.adventure?.state === 'Idle' && Number(cache.adventure?.mapsStored) > 0;
+    Object.assign(AppState.derived, { eliteCombat,
+      countdowns: { revive: action?.reviveRemainingMs || 0, queue: queueRemainingMs },
+      panels: { adventureActive, adventureActionActive, guildTrialActionActive, guildEventActionActive, masteryAchieved } });
+    const signature = JSON.stringify({
+      action: action && { name: action.name, level: action.level, image: action.image, actionId: action.actionId, location: action.location, skillName: action.skillName, skillLevel: action.skillLevel, isElite: eliteCombat, revive: Boolean(action.reviveRemainingMs), combatants: action.combatants?.map((fighter) => ({ side: fighter.side, name: fighter.name, image: fighter.image, healAmount: Boolean(fighter.healAmount), spawn: fighter.spawn, dead: fighter.dead })), pieHealing },
+      loot: loot.map((item) => ({ name: item.name, image: item.image })),
+      consumables: consumables.map((item) => ({ name: item.name, image: item.image, amount: item.amount })),
+      materials: materials.map((item) => ({ name: item.name, image: item.image })),
+      combatDropStarted: AppState.ui.combatDropNotice?.started, combatUseStarted: AppState.ui.combatUseNotice?.started,
+      masteryAchieved,
+      finiteQueue, trialState, eventState, day: dayKey(), materialWarning, materialWarningText, adventureActive, adventureActionActive, adventureIdleAvailable, guildEventActionActive, guildTrialActionActive, cacheRevision: AppState.ui.cacheRevision, prefs, challengePrefs, automationOn, cacheLookupsOn, potionTypes, headerIcons, questModalOpen: AppState.ui.questModalOpen, automationTask: AppState.ui.automationTask, tamingClaimNoticeUntil: AppState.ui.tamingClaimNoticeUntil
+    });
+    if (signature === AppState.ui.lastSignature) { StatusRenderer.updateLive(AppState); syncHeaderActionBadges(); updateDebugPanel(); return; }
+    AppState.ui.lastSignature = signature;
     const automationRows = (cache.automations?.structures || [])
       .map((item) => projectedAutomation(item, cache.automations?.checkedAt));
     const questSkills = [...new Map((cache.quests?.quests || [])
       .filter((quest) => quest.skill)
       .map((quest) => [quest.skill, { name: quest.skill, image: skillIcon(quest.skill), done: quest.done }])).values()];
-    const challengePrefs = getChallengePrefs();
     const dailyQuestComplete = (cache.quests?.completed || 0) >= 5 || cache.quests?.dailyComplete === true;
     const adventureStatus = adventureActive ? 'Active' : cache.adventure?.mapsComplete ? 'Complete' : cache.adventure?.state || 'Unknown';
-    const adventureIdleAvailable = cache.adventure?.state === 'Idle' && Number(cache.adventure?.mapsStored) > 0;
     const taskIndicator = (task, complete, fallback, fallbackClass = '') => AppState.ui.automationTask === task
       ? '<span class="iw-task-icon running" title="Automation running" aria-label="Automation running"><svg class="iw-spin" viewBox="0 0 24 24" aria-hidden="true"><circle class="iw-spin-track" cx="12" cy="12" r="8"></circle><g class="iw-spin-motion"><path d="M12 4a8 8 0 0 1 7.2 4.5"></path><path d="M19.2 5.7v2.8h-2.8"></path><path d="M12 20a8 8 0 0 1-7.2-4.5"></path><path d="M4.8 18.3v-2.8h2.8"></path></g></svg></span>'
       : complete
@@ -101,14 +125,8 @@
       : adventureIdleAvailable
         ? '<span class="iw-task-icon adventure-idle" title="Adventure ready to start" aria-label="Adventure ready to start"><span class="iw-idle-glyph">z<sup>Z</sup></span></span>'
       : taskIndicator('maps', adventureStatus === 'Complete', adventureStatus);
-    const guildTrialIndicator = guildTrialActive
-      ? '<span class="iw-task-icon participating" title="Guild trial in progress" aria-label="Guild trial in progress"><svg class="iw-hourglass" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5"></path></svg></span>'
-      : `<em class="${['Available', 'Completed'].includes(cache.guildTrial?.state) ? 'complete' : ''}">${escapeHtml(cache.guildTrial?.state || 'Unknown')}</em>`;
-    const guildEventIndicator = cache.guildEvent?.state === 'Cooldown'
-      ? '<span class="iw-task-icon waiting" title="Guild event cooldown" aria-label="Guild event cooldown"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5"></path></svg></span>'
-      : cache.guildEvent?.state === 'Participating'
-        ? '<span class="iw-task-icon participating" title="Participating in guild event" aria-label="Participating in guild event"><svg class="iw-hourglass" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5"></path></svg></span>'
-        : `<em class="${cache.guildEvent?.state === 'Available' ? 'complete' : ''}">${escapeHtml(cache.guildEvent?.state || 'Unknown')}</em>`;
+    const guildTrialIndicator = guildTrialStatusIcon(cache.guildTrial);
+    const guildEventIndicator = guildEventStatusIcon(cache.guildEvent);
     const mapRunDetail = cache.adventure?.mapAutomation?.stoppedReason && !cache.adventure?.mapsComplete
       ? cache.adventure.mapAutomation.stoppedReason : '';
     const attunementSkills = (cache.attunement?.selected || []).map((slot) => slot.skill).filter(Boolean);
@@ -122,7 +140,7 @@
     const challengeLastError = cache.challenges?.lastRun?.successful === false ? cache.challenges.lastRun.result : '';
     const challengeDetails = Number.isFinite(challengeScrolls)
       ? `${formatNumber(challengeScrolls)} ${challengeScrolls === 1 ? 'scroll' : 'scrolls'} · ${challengePrefs.region} · ${challengePrefs.skill}${challengeLastError ? ` · ${challengeLastError}` : ''}`
-      : `Scrolls unknown · ${challengePrefs.region} · ${challengePrefs.skill}`;
+      : `Scrolls unknown · ${challengePrefs.region} · ${challengePrefs.skill}${challengeLastError ? ` · ${challengeLastError}` : ''}`;
     const challengeIndicator = AppState.ui.automationTask === 'challenges'
       ? taskIndicator('challenges', false, '')
       : challengeScrolls === 0 || challengeAutoRemaining === 0
@@ -144,18 +162,9 @@
       cache.adventure?.dailyMapsLimit ? `Maps ${cache.adventure.dailyMapsCreated}/${cache.adventure.dailyMapsLimit} today` : '',
       mapRunDetail
     ].filter(Boolean).join(' · ');
-    const liveEquippedDivine = divineConsumables(document);
-    let equippedDivine = [];
-    try { equippedDivine = JSON.parse(localStorage.getItem(EQUIPPED_KEY) || '[]'); } catch { equippedDivine = []; }
-    if (!Array.isArray(equippedDivine)) equippedDivine = [];
-    equippedDivine = equippedDivine.filter((item) => item && typeof item.image === 'string' && item.image);
-    if (liveEquippedDivine.length) {
-      equippedDivine = storeEquippedDivine(liveEquippedDivine);
-    }
     const cachedInventory = (Array.isArray(cache.inventory?.items) ? cache.inventory.items : [])
       .filter((item) => item && typeof item.image === 'string' && item.image);
     const cachedAllItems = Array.isArray(cache.inventory?.allItems) ? cache.inventory.allItems : [];
-    const showSuperPotions = localStorage.getItem(SUPER_POTIONS_KEY) === 'true';
     const inventoryByKey = new Map(cachedAllItems.map((item) => [item.key, item]));
     let consumableRows = consumables.map((item, liveIndex) => {
       const key = item.image.split('/').pop()?.split('?')[0] || '';
@@ -192,36 +201,29 @@
       ['potion-divine-combat-efficiency.png', 'Divine Combat Efficiency Potion']
     ];
     const potionMap = new Map();
-    canonicalDivinePotions.forEach(([key, name]) => potionMap.set(key, {
-      key, name, image: `/assets/items/${key}`, equipped: null, stored: null
+    if (potionTypes.includes('Divine')) canonicalDivinePotions.forEach(([key, name]) => potionMap.set(key, {
+      key, name, image: `/assets/items/${key}`, equipped: null, stored: null, tier: 'Divine'
     }));
-    cachedInventory.forEach((item) => {
-      const key = item.image.split('/').pop();
-      potionMap.set(key, { key, name: item.name, image: item.image, equipped: null, stored: item.amount });
-    });
-    equippedDivine.forEach((item) => {
-      const key = item.image.split('/').pop();
+    for (const item of [...cachedInventory, ...cachedAllItems]) {
+      const tier = potionType(item);
+      if (!potionTypes.includes(tier)) continue;
+      const key = item.key || item.image.split('/').pop()?.split('?')[0];
       const existing = potionMap.get(key);
-      potionMap.set(key, { key, name: item.name, image: item.image, equipped: item.amount, stored: existing?.stored ?? null });
-    });
-    if (showSuperPotions) {
-      cachedAllItems.forEach((item) => {
-        const slug = item?.key?.match(/^(potion-super-[\w-]+)\.[\w]+$/)?.[1];
-        if (!slug || !(item.amount > 0)) return;
-        const equipped = consumables.find((consumable) => consumable.image.split('/').pop()?.split('?')[0] === item.key);
-        potionMap.set(item.key, {
-          key: item.key,
-          name: item.name || `Super ${titleFromSlug(slug)} Potion`,
-          image: item.image,
-          equipped: equipped ? parseCompact(equipped.amount) : null,
-          stored: item.amount,
-          superPotion: true
-        });
-      });
+      potionMap.set(key, { ...existing, key, tier,
+        name: item.name || existing?.name || `${titleFromSlug(key.replace(/\.[^.]+$/, '').replace(/^potion-/, ''))} Potion`,
+        image: item.image || `/assets/items/${key}`, equipped: null, stored: item.amount });
+    }
+    for (const item of [...equippedDivine, ...consumables]) {
+      const tier = potionType(item);
+      if (!potionTypes.includes(tier)) continue;
+      const key = item.image.split('/').pop()?.split('?')[0];
+      const existing = potionMap.get(key);
+      potionMap.set(key, { ...existing, key, tier, name: item.name, image: item.image,
+        equipped: typeof item.amount === 'number' ? item.amount : parseCompact(item.amount), stored: existing?.stored ?? null });
     }
     const canonicalPotionOrder = new Map(canonicalDivinePotions.map(([key], index) => [key, index]));
-    const displayedPotions = [...potionMap.values()].sort((a, b) => {
-      const tierOrder = Number(Boolean(a.superPotion)) - Number(Boolean(b.superPotion));
+    const displayedPotions = [...potionMap.values()].filter(item => item.tier === 'Divine' || item.stored > 0 || item.equipped > 0).sort((a, b) => {
+      const tierOrder = POTION_TYPES.indexOf(b.tier) - POTION_TYPES.indexOf(a.tier);
       if (tierOrder) return tierOrder;
       const equippedOrder = Number(Boolean(b.equipped)) - Number(Boolean(a.equipped));
       if (equippedOrder) return equippedOrder;
@@ -231,40 +233,22 @@
     });
     const inventoryCounts = new Map((Array.isArray(cache.inventory?.allItems) ? cache.inventory.allItems : [])
       .filter((item) => item?.key).map((item) => [item.key, item]));
-    const totalItems = loot.reduce((sum, item) => sum + item.amount, 0);
+    const totalItems = lootItemCount(loot);
     const compactCraftingLoot = Boolean(craftingSkill && finiteQueue);
     const craftedLoot = loot[0];
     const craftedInventory = craftedLoot
       ? inventoryCounts.get(craftedLoot.image.split('/').pop()?.split('?')[0]) : null;
     Object.assign(AppState.derived, { automationRows, displayedPotions, consumableRows, eliteCombat,
       countdowns: { revive: action?.reviveRemainingMs || 0, queue: queueRemainingMs },
-      panels: { adventureActive, guildTrialActive, guildEventActionActive, masteryAchieved } });
-    const signature = JSON.stringify({
-      action: action && { name: action.name, level: action.level, image: action.image, actionId: action.actionId, location: action.location, skillName: action.skillName, skillLevel: action.skillLevel, isElite: eliteCombat, revive: Boolean(action.reviveRemainingMs), combatants: action.combatants?.map((fighter) => ({ side: fighter.side, name: fighter.name, image: fighter.image, healAmount: Boolean(fighter.healAmount), spawn: fighter.spawn, dead: fighter.dead })), pieHealing },
-      loot: loot.map((item) => ({ name: item.name, image: item.image, amount: item.amount })),
-      consumables: consumables.map((item) => ({ name: item.name, image: item.image, amount: item.amount })),
-      materials: materials.map((item) => ({ name: item.name, image: item.image })),
-      masteryAchieved,
-      finiteQueue, materialWarning, materialWarningText, adventureActive, adventureIdleAvailable, guildEventActionActive, guildTrialActive, cache, prefs, challengePrefs, automationOn, cacheLookupsOn, showSuperPotions, questModalOpen: AppState.ui.questModalOpen, automationTask: AppState.ui.automationTask, tamingClaimNoticeUntil: AppState.ui.tamingClaimNoticeUntil
-    });
-    if (signature === AppState.ui.lastSignature) { StatusRenderer.updateLive(AppState); return; }
-    AppState.ui.lastSignature = signature;
+      panels: { adventureActive, adventureActionActive, guildTrialActionActive, guildEventActionActive, masteryAchieved } });
     const { locationBadges, displayActionName } = selectLocationBadges(action, consumables, eliteCombat);
 
-    AppState.ui.page.innerHTML = renderStatusMarkup({ combatDeath, noticeNow, queueWarning, materialWarning, materialWarningText, cache, adventureActive, guildEventActionActive, guildTrialActive, prefs, automationOn, cacheLookupsOn, masteryAchieved, automationRows, questSkills, challengePrefs, dailyQuestComplete, taskIndicator, adventureIndicator, guildTrialIndicator, guildEventIndicator, attunementSkills, attunementDetails, challengeDetails, challengeIndicator, tamingDetails, tamingIndicator, adventureSupplement, showSuperPotions, consumableRows, displayedPotions, inventoryCounts, totalItems, compactCraftingLoot, craftedInventory, action, loot, consumables, materials, masteryProgress, finiteQueue, locationBadges, displayActionName });
-      consumables.forEach((item, index) => {
-        const delta = consumableDeltas[index] || 0;
-        const notice = AppState.ui.consumableDeltaNotices.get(item.image || item.name);
-        if (!delta && !notice) return;
-        const element = AppState.ui.page.querySelector(`[data-live-consumable-equipped="${index}"]`);
-        if (element) {
-          const shownDelta = notice?.delta || delta;
-          element.dataset.valueDelta = `${shownDelta > 0 ? '+' : ''}${formatNumber(shownDelta)}`;
-          element.style.setProperty('--iw-value-delta-delay', `-${Math.min(4000, Math.max(0, noticeNow - (notice?.started || noticeNow)))}ms`);
-          element.dataset.valueIcon = consumables[index]?.image || '';
-          element.style.setProperty('--value-icon', consumables[index]?.image ? `url(${JSON.stringify(consumables[index].image)})` : 'none');
-        }
-      });
+    const actionBadges = renderActionBadges({ action, masteryAchieved, adventureActionActive, guildEventActionActive, guildTrialActionActive, cache, locationBadges, materialWarning, materialWarningText, queueWarning, finiteQueue });
+    AppState.ui.headerBadgeMarkup = actionBadges;
+    updateStatusMarkup(renderStatusMarkup({ actionBadges, headerIcons, combatDeath, noticeNow, queueWarning, materialWarning, materialWarningText, cache, adventureActive, adventureActionActive, guildEventActionActive, guildTrialActionActive, prefs, automationOn, cacheLookupsOn, masteryAchieved, automationRows, questSkills, challengePrefs, dailyQuestComplete, taskIndicator, adventureIndicator, guildTrialIndicator, guildEventIndicator, attunementSkills, attunementDetails, challengeDetails, challengeIndicator, tamingDetails, tamingIndicator, adventureSupplement, potionTypes, consumableRows, displayedPotions, inventoryCounts, totalItems, compactCraftingLoot, craftedInventory, action, loot, consumables, materials, masteryProgress, finiteQueue, locationBadges, displayActionName }));
+    syncHeaderActionBadges();
+    StatusRenderer.updateLive(AppState);
+    updateDebugPanel();
     } catch (error) {
       console.error('[Ironwood Status] Render failed', error);
       AppState.ui.lastSignature = '';

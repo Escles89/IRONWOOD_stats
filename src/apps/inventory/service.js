@@ -1,4 +1,6 @@
   function collectInventory(doc) {
+    // A mounted route with no item tiles is usually still loading. Never cache it as empty.
+    if (AppState.ui.pendingLootClaim || !doc.querySelectorAll('inventory-page button.item').length) return false;
     const allItems = [...doc.querySelectorAll('inventory-page button.item')].map((button) => {
       const src = button.querySelector('img')?.getAttribute('src') || '';
       const key = src.split('/').pop()?.split('?')[0] || '';
@@ -11,7 +13,96 @@
       const slug = src.match(/potion-divine-[\w-]+/)?.[0];
       return slug ? { slug, name: `Divine ${titleFromSlug(slug)} Potion`, amount: parseCompact(button.querySelector('.amount')?.textContent), image: src } : null;
     }).filter(Boolean);
-    setCache('inventory', { items, allItems });
+    setCache('inventory', { schema: 1, items, allItems });
+    return true;
+  }
+
+  async function refreshInventorySnapshot(force = false) {
+    return SyncCoordinator.refresh('inventory', { force, load: () => withPage('/inventory', 'inventory-page', async doc => {
+      const started = Date.now();
+      while (Date.now() - started < 10000) {
+        if (collectInventory(doc)) return;
+        await wait(100);
+      }
+      throw new Error('Inventory items did not finish loading');
+    }) });
+  }
+
+  function beginInventoryLootClaim(loot = readLoot(document)) {
+    if (AppState.ui.pendingLootClaim) return AppState.ui.pendingLootClaim;
+    const inventory = getCache().inventory;
+    const claim = { loot: loot.map(item => ({ ...item })), inventoryCheckedAt: inventory?.checkedAt, applied: false };
+    AppState.ui.pendingLootClaim = claim;
+    return claim;
+  }
+
+  function setCachedInventoryQuantity(key, amount, name, image) {
+    setCachedInventoryQuantities([{ key, amount, name, image }]);
+  }
+
+  function setCachedInventoryQuantities(observations) {
+    if (!observations.length) return;
+    const inventory = getCache().inventory;
+    if (!Array.isArray(inventory?.allItems)) return;
+    const counts = new Map(inventory.allItems.map(item => [item.key, item]));
+    let changed = false;
+    for (const { key, amount, name, image } of observations) {
+      if (!key || !Number.isFinite(amount)) continue;
+      const previous = counts.get(key);
+      if (previous?.amount === amount || (!previous && amount === 0)) continue;
+      counts.set(key, { ...previous, key, name: previous?.name || name, image: previous?.image || image, amount, amountText: formatNumber(amount) });
+      changed = true;
+    }
+    if (changed) setCache('inventory', { ...inventory, allItems: [...counts.values()] });
+  }
+
+  function applyInventoryLootClaim(claim) {
+    if (!claim || claim.applied) return false;
+    claim.applied = true;
+    const inventory = getCache().inventory;
+    if (!Array.isArray(inventory?.allItems)) return false;
+    // A different tab may have captured inventory during the claim. Avoid double counting it.
+    if (inventory.checkedAt !== claim.inventoryCheckedAt) {
+      setCache('inventory', { ...inventory, needsReconcile: true, expiresAt: Date.now() });
+      return false;
+    }
+    const counts = new Map(inventory.allItems.map(item => [item.key, { ...item }]));
+    let changed = false;
+    for (const item of claim.loot) {
+      const key = item.image?.split('/').pop()?.split('?')[0];
+      if (!key || item.name === 'Coins' || key === 'coin.png' || !Number.isFinite(item.amount) || item.amount <= 0) continue;
+      const previous = counts.get(key);
+      const amount = (previous?.amount || 0) + item.amount;
+      counts.set(key, { ...previous, key, name: previous?.name || item.name, image: previous?.image || item.image, amount, amountText: formatNumber(amount) });
+      changed = true;
+    }
+    if (!changed) return false;
+    const allItems = [...counts.values()];
+    const items = allItems.filter(item => /potion-divine-[\w-]+/.test(item.key)).map(item => ({
+      ...item, slug: item.key.match(/potion-divine-[\w-]+/)[0]
+    }));
+    // Keep the full snapshot's age: collecting one item does not refresh every other item.
+    setCache('inventory', { ...inventory, allItems, items, lootUpdatedAt: Date.now() });
+    const scrolls = counts.get('challenge-scroll.png');
+    if (scrolls && claim.loot.some(item => item.image?.split('/').pop()?.split('?')[0] === 'challenge-scroll.png') && getCache().challenges) {
+      setCache('challenges', { ...getCache().challenges, scrollsAvailable: scrolls.amount });
+    }
+    return true;
+  }
+
+  async function observeNativeLootClaim() {
+    if (AppState.ui.collectingLoot || AppState.ui.pendingLootClaim) return;
+    const claim = beginInventoryLootClaim();
+    const route = location.pathname;
+    try {
+      const started = Date.now();
+      while (Date.now() - started < 8000 && location.pathname === route) {
+        await wait(100);
+        if (findSkillStartButton()) { applyInventoryLootClaim(claim); render(); return; }
+      }
+    } finally {
+      if (AppState.ui.pendingLootClaim === claim) AppState.ui.pendingLootClaim = null;
+    }
   }
   function divineConsumables(doc) {
     const card = [...doc.querySelectorAll('.card')].find((item) =>
@@ -56,4 +147,27 @@
     const data = { schema: 1, completeSkills };
     setCache('mastery', data);
     return data;
+  }
+
+  function recordMaterialChanges(materials, now = Date.now()) {
+    const previous = AppState.live.previousMaterialValues;
+    const notices = AppState.ui.materialDeltaNotices;
+    const current = new Map();
+    const inventoryUpdates = [];
+    for (const item of materials) {
+      if (!Number.isFinite(item.available)) continue;
+      const key = item.image || item.name;
+      current.set(key, item.available);
+      const before = previous.get(key);
+      const delta = before === undefined ? 0 : item.available - before;
+      if (before === undefined || delta) inventoryUpdates.push({ key: item.image?.split('/').pop()?.split('?')[0], amount: item.available, name: item.name, image: item.image });
+      if (delta && EventLedger.record(`material:${key}:${now}`, { delta }, 4000)) {
+        notices.set(key, { delta, started: now, until: now + 4000 });
+      }
+    }
+    for (const [key, notice] of notices) {
+      if (notice.until <= now || !current.has(key)) notices.delete(key);
+    }
+    AppState.live.previousMaterialValues = current;
+    setCachedInventoryQuantities(inventoryUpdates);
   }

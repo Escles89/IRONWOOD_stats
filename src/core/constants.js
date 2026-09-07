@@ -11,6 +11,11 @@
   const AUTOMATION_KEY = 'iw-stats-automation-enabled';
   const CACHE_LOOKUPS_KEY = 'iw-stats-cache-lookups-enabled';
   const SUPER_POTIONS_KEY = 'iw-stats-show-super-potions';
+  const POTION_TYPES_KEY = 'iw-stats-potion-types';
+  const POTION_TYPES = ['Regular', 'Super', 'Divine'];
+  const HEADER_ICONS_KEY = 'iw-stats-header-icons';
+  const MULTIPLAYER_VISIBLE_KEY = 'iw-stats-show-multiplayer';
+  const DEBUG_KEY = 'iw-stats-debug';
   const PLAYER_NAME_KEY = 'iw-stats-player-name-v2';
   const CHALLENGE_SKILLS = {
     Forest: ['Woodcutting', 'Farming', 'Alchemy', 'Exploring', 'Ranged', 'Defense'],

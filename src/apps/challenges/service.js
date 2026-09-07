@@ -1,20 +1,12 @@
   async function refreshChallengesSnapshot(force = false) {
     if (!cacheLookupsEnabled()) return;
-    if (getCache().challenges?.scrollsAvailable === 0) return;
-    if (!force && !isStale('challenges')) return;
+    if (AppState.ui.runningChallenge) return;
+    if (!force && !needsLookup('challenges')) return;
     if (AppState.ui.refreshingChallenges) return;
     AppState.ui.refreshingChallenges = true;
     try {
       await withPage('/challenges', 'challenges-page', async (doc) => {
-        const started = Date.now();
-        let scrollRow = null;
-        while (Date.now() - started < 6000) {
-          scrollRow = [...doc.querySelectorAll('challenges-page .row')]
-            .find((item) => clean(item.querySelector(':scope > .name')?.textContent) === 'Challenge Scroll');
-          if (scrollRow && /\//.test(clean(scrollRow.querySelector('.amount')?.textContent))) break;
-          await wait(100);
-        }
-        if (scrollRow) collectChallenges(doc);
+        await waitForChallengeValue(() => collectChallenges(doc), 'Challenge counts did not finish loading');
       });
     } catch (error) {
       console.error('[Ironwood Status] Challenge snapshot refresh failed', error);
@@ -25,7 +17,7 @@
     }
   }
 
-  function collectChallenges(doc) {
+  function readChallenges(doc) {
     const root = doc.querySelector('challenges-page');
     const rows = [...(root?.querySelectorAll('.card .row') || [])];
     const row = (name) => rows.find((item) => clean(item.querySelector(':scope > .name')?.textContent) === name);
@@ -36,10 +28,11 @@
     const scrolls = pair(row('Challenge Scroll')?.querySelector('.amount')?.textContent);
     const autoCompletes = pair(row('Auto Challenge Completes')?.querySelector('.amount')?.textContent);
     const dailyScrolls = pair(row('Daily Scroll Limit')?.querySelector('.amount')?.textContent);
+    if (![scrolls.current, scrolls.max, autoCompletes.current, autoCompletes.max, dailyScrolls.current, dailyScrolls.max].every(Number.isFinite)) return false;
     const selectedRegion = clean(root?.querySelector('.categories button:disabled .name')?.textContent);
     const selectedChallenge = clean(root?.querySelector('.group .card button.row-active .name')?.textContent);
     const data = {
-      schema: 3,
+      schema: 4,
       scrollsAvailable: scrolls.current,
       scrollsRequired: scrolls.max,
       autoCompletesUsed: autoCompletes.current,
@@ -50,10 +43,27 @@
       dailyScrollsLimit: dailyScrolls.max,
       selectedRegion,
       selectedChallenge,
-      expiresAt: nextDailyReset()
+      expiresAt: Math.min(nextDailyReset(), Date.now() + 300000)
     };
-    setCache('challenges', data);
     return data;
+  }
+
+  function collectChallenges(doc) {
+    const data = readChallenges(doc);
+    if (!data) return false;
+    setCache('challenges', { ...getCache().challenges, ...data, checkedAt: Date.now() });
+    setCachedInventoryQuantity('challenge-scroll.png', data.scrollsAvailable, 'Challenge Scroll', '/assets/items/challenge-scroll.png');
+    return data;
+  }
+
+  async function waitForChallengeValue(read, message, timeout = 8000) {
+    const started = Date.now();
+    while (Date.now() - started < timeout) {
+      const value = read();
+      if (value) return value;
+      await wait(100);
+    }
+    throw new Error(message);
   }
 
   async function automateChallenge() {
@@ -68,57 +78,51 @@
     let successful = false;
     try {
       await withPage('/challenges', 'challenges-page', async (doc) => {
-        const root = doc.querySelector('challenges-page');
-        const button = (pattern) => [...root.querySelectorAll('button')]
-          .find((item) => pattern.test(clean(item.textContent)) && !item.disabled);
-        const regionButton = [...root.querySelectorAll('.categories button')]
-          .find((item) => clean(item.textContent) === preferences.region);
-        regionButton?.click();
-        const regionStarted = Date.now();
-        while (Date.now() - regionStarted < 3000 && ![...root.querySelectorAll('.categories button:disabled')]
-          .some((item) => clean(item.textContent) === preferences.region)) await wait(100);
-
-        let state = collectChallenges(doc);
-        if (!(state.scrollsAvailable > 0)) throw new Error('No Challenge Scrolls available');
+        // Re-query the root: Angular can replace it between challenge phases.
+        const buttons = (selector = 'button') => [...(doc.querySelector('challenges-page')?.querySelectorAll(selector) || [])];
+        const button = (pattern, includeDisabled = false) => buttons()
+          .find(item => pattern.test(clean(item.textContent)) && (includeDisabled || !item.disabled));
+        await waitForChallengeValue(() => collectChallenges(doc), 'Challenge counts did not finish loading');
+        const regionButton = await waitForChallengeValue(() => buttons('.categories button')
+          .find(item => clean(item.textContent) === preferences.region), `Could not find ${preferences.region} challenges`);
+        if (!regionButton.disabled) regionButton.click();
+        await waitForChallengeValue(() => buttons('.categories button:disabled')
+          .some(item => clean(item.textContent) === preferences.region), `Could not select ${preferences.region} challenges`);
+        let state = await waitForChallengeValue(() => {
+          const snapshot = readChallenges(doc);
+          return snapshot && snapshot.selectedRegion === preferences.region && button(/^Start$/i, true) && snapshot;
+        }, 'Selected challenge did not finish loading');
+        collectChallenges(doc);
+        if (!(state.scrollsRequired > 0) || state.scrollsAvailable < state.scrollsRequired) throw new Error('No Challenge Scrolls available');
         if (!(state.autoCompletesRemaining > 0)) throw new Error('No Auto Challenge Completes remaining');
-        const runLimit = Math.min(state.scrollsAvailable, state.autoCompletesRemaining);
+        const runLimit = Math.min(Math.floor(state.scrollsAvailable / state.scrollsRequired), state.autoCompletesRemaining);
         let completed = 0;
 
         while (completed < runLimit) {
           const startingScrolls = state.scrollsAvailable;
           const startingAutoUsed = state.autoCompletesUsed;
-          const start = button(/^Start$/i);
-          if (!start) throw new Error(`Challenge Start is unavailable after ${completed} completed`);
+          const required = state.scrollsRequired;
+          const start = await waitForChallengeValue(() => button(/^Start$/i), `Challenge Start is unavailable after ${completed} completed`);
           start.click();
-
-          const autoStarted = Date.now();
-          let autoComplete = null;
-          while (Date.now() - autoStarted < 6000 && !autoComplete) {
-            autoComplete = button(/Auto.*Complete/i);
-            if (!autoComplete) await wait(100);
-          }
-          if (!autoComplete) throw new Error(`Auto Complete did not become available after ${completed} completed`);
+          const autoComplete = await waitForChallengeValue(() => button(/^Auto.*Complete/i),
+            `Auto Complete did not become available after ${completed} completed`);
           autoComplete.click();
-
-          const rewardStarted = Date.now();
-          let claimButton = null;
-          while (Date.now() - rewardStarted < 6000 && !claimButton) {
-            const skillButton = [...root.querySelectorAll('button')]
-              .find((item) => clean(item.textContent) === preferences.skill && !item.disabled);
-            skillButton?.click();
-            claimButton = button(/^Claim(?: Reward)?$/i);
-            if (!claimButton) await wait(100);
-          }
-          if (!claimButton) throw new Error(`Could not select ${preferences.skill} after ${completed} completed`);
+          const skillButton = await waitForChallengeValue(() => buttons()
+            .find(item => clean(item.textContent) === preferences.skill), `Could not select ${preferences.skill} after ${completed} completed`);
+          if (!skillButton.disabled) skillButton.click();
+          const claimButton = await waitForChallengeValue(() => button(/^Claim(?: Reward)?$/i),
+            `Reward claim did not become available after ${completed} completed`);
           claimButton.click();
 
-          const claimStarted = Date.now();
-          do { await wait(150); state = collectChallenges(doc); }
-          while (Date.now() - claimStarted < 8000 &&
-            state.scrollsAvailable >= startingScrolls && state.autoCompletesUsed <= startingAutoUsed);
-          if (state.scrollsAvailable >= startingScrolls) throw new Error(`Reward claim was not confirmed after ${completed} completed`);
+          state = await waitForChallengeValue(() => {
+            const snapshot = readChallenges(doc);
+            return snapshot && button(/^Start$/i, true)
+              && !button(/^Claim(?: Reward)?$/i, true)
+              && snapshot.scrollsAvailable <= startingScrolls - required
+              && snapshot.autoCompletesUsed > startingAutoUsed && snapshot;
+          }, `Reward claim was not confirmed after ${completed} completed`);
+          collectChallenges(doc);
           completed++;
-          await wait(150);
         }
         result = `Completed ${completed} · ${preferences.region} · ${preferences.skill}`;
         successful = true;
