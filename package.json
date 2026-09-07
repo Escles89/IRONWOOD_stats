@@ -1,0 +1,15 @@
+{
+  "name": "ironwood-status",
+  "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "version": "1.13.25",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node src/build/assemble-userscript.js",
+    "build:check": "node src/build/assemble-userscript.js --check",
+    "test": "node --test tests/*.test.cjs tests/core/*.test.cjs tests/apps/*.test.cjs tests/build/*.test.cjs",
+    "check": "node src/build/check.js"
+  }
+}

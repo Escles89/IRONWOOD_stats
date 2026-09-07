@@ -5,11 +5,12 @@ const vm = require('node:vm');
 const source = fs.readFileSync(`${__dirname}/../ironwood-stats.user.js`, 'utf8');
 function harness(names, overrides = {}) {
   const ctx = vm.createContext({ console: { error() {} }, ...overrides });
+  ctx.AppState = { ui: ctx, live: ctx };
   for (const name of names) {
     const start = source.search(new RegExp(`  (?:async )?function ${name}\\(`));
     assert.ok(start >= 0);
     const rest = source.slice(start + 1);
-    const end = rest.search(/\n  (?:async )?function /);
+    const end = rest.indexOf('\n  }') + 4;
     vm.runInContext(rest.slice(0, end), ctx);
   }
   return ctx;

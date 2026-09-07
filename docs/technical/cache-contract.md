@@ -1,0 +1,23 @@
+# Cache contract
+
+The new key is `iw-stats-cache-v2`. Its envelope is `{ schemaVersion: 2, records: { ... } }`. The old `iw-stats-cache-v1` is deliberately ignored. Invalid JSON, an incompatible envelope, or a non-object records container starts empty.
+
+`CacheStore.get(key)` reads a feature record; omitting the key returns all records. `set(key, value, metadata)` merges a default `checkedAt` and native source with feature fields and optional metadata, persists the envelope, and invalidates the rendering signature. `isFresh(key)` applies existing feature schemas, daily boundaries, explicit expiry, refresh times and TTLs. `invalidate(key)` removes one record; `reset()` clears all data records. Neither operation removes preferences.
+
+Feature schemas are quests 2, adventure 11, challenges 4, taming 2, automations 4, attunement 3, mastery 1, guild event 9 and guild trial 4. Inventory schema 1 requires an `allItems` array. Missing or invalid capture timestamps are stale. Equipped data and mastery have infinite normal TTL, while explicit expiry takes precedence.
+
+[User refresh table](../user/cache-and-refresh.md) documents the actual cadence. Daily boundaries use 01:00 UTC throughout the year. Automation records retain per-structure capture times; a batch snapshot uses the oldest capture time and bounds expiry by queue completion and the 24-hour limit.
+
+`SyncCoordinator.refresh(key, { force, load })` returns cached data when fresh or lookups are disabled, joins a pending same-key refresh, and releases its lock on success or failure. `syncStale` sequences feature-specific readiness workflows; simple sources use the coordinator and complex feature workflows retain their existing guards. Forcing a refresh never bypasses the global cache-lookup preference.
+
+Guild trial schema 4 matches the signed-in character by name to participant rows grouped beneath each native trial heading. It stores `activeName`, `stateEndsAt` for participation, `periodEndsAt` for the overall trial period, and `approximateTimer` for coarse native timers. Active participation refreshes hourly when cache lookups are enabled; visible-page capture remains passive. Repeated identical rounded timer readings preserve the original deadline. Partially mounted trial lists do not replace valid snapshots.
+
+Guild event schema 9 rejects partial native mounts: an empty participant list cannot establish availability. Active participation requires the character’s own participant row with a positive timer. A loaded own row with XP but no timer means contribution is completed, even while the event remains open. Personal `stateEndsAt` and overall `eventEndsAt` are separate; personal expiry changes the icon to completed and removes the action bonus. Availability requires an explicit enabled join control and no personal participation timer. Rejected visible captures do not consume the throttle interval. Old event snapshots are invalidated and refreshed on startup or when opening Status; available snapshots expire within five minutes.
+
+Adventure schema 11 reads the menu’s `.time` element before its status icon. The active map name and skill come only from Adventure details with a Remaining Time row, never from a selected Storage map. Resource and creation fields survive captures from either tab, and a partial mount cannot replace known state. Background refresh reads Storage resources followed by Adventure details. Old schema snapshots and active entries missing a map skill are stale; nonactive snapshots expire within five minutes.
+
+Challenge schema 4 requires numeric scroll, auto-complete and daily limit pairs before capture. Partial challenge screens return false without changing the cache or the visible-capture throttle. Confirmed native counts also reconcile the cached Challenge Scroll inventory quantity.
+
+Inventory captures wait for item tiles and are deferred during a pending Current Loot claim. Confirmed claims add observed item quantities exactly once, synchronize the potion list and Challenge Scroll count, and preserve the full snapshot age. Empty route mounts never overwrite inventory. Incremental updates use the existing inventory baseline; a missing baseline still needs a full capture.
+
+`CacheStore.isUsable` validates snapshot structure independently of age. Background lookups use this rather than `isFresh`: expiration alone never opens a hidden page. Usable snapshots keep supplying calculations and historical values until native navigation updates them. Missing or incompatible data can use a hidden lookup when cache lookups are enabled. An explicit refresh can override age. The page being left is captured before opening Status.
