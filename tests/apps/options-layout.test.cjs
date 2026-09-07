@@ -71,6 +71,16 @@ test('potion selection preserves the legacy setting and supports an explicitly e
   assert.equal(h.run('JSON.stringify(getPotionTypes())'),'[]');
 });
 
+test('action summary shows earned XP percentage, including zero after leveling up',()=>{
+  const h=setup();
+  for(const progress of [87,0,100]) {
+    h.context.progress=progress;
+    h.run('action.skillProgress=progress; action.levelRemaining=100-progress; AppState.ui.lastSignature=""; StatusRenderer.render(AppState)');
+    assert.match(h.run('AppState.ui.page.innerHTML'),new RegExp(`data-live-level-progress>${progress}% XP`));
+    assert.doesNotMatch(h.run('AppState.ui.page.innerHTML'),/data-live-level-remaining/);
+  }
+});
+
 test('all potion tiers merge inventory and equipped counts, exclude other consumables, and respond to filtering',()=>{
   const h=setup();
   h.run(`

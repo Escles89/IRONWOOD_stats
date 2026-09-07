@@ -22,7 +22,7 @@ The script reads Ironwood's rendered interface and runs alongside Pancake-Script
 
 ## Current Action and Loot
 
-Current Action shows the running activity, levels, location, XP per hour, progress, materials, and consumables. With no running action, it says **No action in progress** and the remaining panels stay available.
+Current Action shows the running activity, levels, location, XP per hour, progress, materials, and consumables. The top block keeps the action name, skill level, XP rate, and earned level progress together (for example, 87% XP). A compact second detail row below shows finish time, Loot, Queued, and Owned with icons. The clock matches Ironwood's native action timer, loot uses the item sprite, and Owned uses its inventory icon. Hover for labels; accessible icon names identify each value. Rows can wrap on very narrow screens instead of overflowing. With no running action, it says **No action in progress** and the remaining panels stay available.
 
 Consumables have separate Equipped and Stored quantities. Stored-only items such as Stardust and Mastery Contracts appear only under Stored. Stardust is hidden during gathering. The active skill's Mastery progress is informational; the badge turns gold when the skill is complete.
 
@@ -60,7 +60,7 @@ Cached data and local calculations take priority over hidden lookups. Opening na
 
 ## Dashboard options
 
-The options button in the Status card opens a compact menu grouped into Display, Automation & data, Potions, Challenges, and a collapsible Daily quests section. Settings save automatically.
+The options button in the Status card opens a compact menu grouped into Display, Automation & data, Potions, Challenges, and a collapsible Daily quests section. Settings save automatically. On phones, sections use their full content height inside a scrolling menu, with full-width selection fields and larger touch targets. The heading and Done button remain visible while scrolling.
 
 Enable **Icons beside money** under **Display** to move the complete Current Action indicator group to the left of the money in the main header while viewing Status. Disable it to return the icons to Current Action. Skill and bonus eligibility rules stay the same in either position.
 

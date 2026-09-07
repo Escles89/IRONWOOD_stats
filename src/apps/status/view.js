@@ -112,7 +112,7 @@
       if (actionFill) actionFill.style.width = `${action.progress ?? 0}%`;
       const skillFill = AppState.ui.page.querySelector('[data-live-skill-progress]');
       if (skillFill) skillFill.style.width = `${action.skillProgress ?? 0}%`;
-      text('[data-live-level-remaining]', Number.isFinite(action.levelRemaining) ? `${action.levelRemaining}% remaining` : '—');
+      text('[data-live-level-progress]', Number.isFinite(action.skillProgress) ? `${action.skillProgress}% XP` : '—');
       text('[data-live-xp-hour]', action.xpPerHour ? `${formatCompact(action.xpPerHour)} XP/h` : '—');
       const reviveElement = AppState.ui.page.querySelector('[data-live-revive]');
       if (reviveElement) {
@@ -171,9 +171,26 @@
         <section class="iw-card iw-action-card ${action.isCombat ? `iw-combat-card${combatDeath ? ' iw-death' : ''}` : ''}" style="--combat-progress:${action.progress ?? 0}%">
           <div class="iw-card-header"><span>Current Action</span>${headerIcons ? '' : actionBadges}</div>
           <div class="iw-action-body">
-            <div class="iw-action-image">${action.image ? `<img src="${escapeHtml(action.image)}" alt="">` : ''}</div>
-            <div class="iw-action-name"><span class="iw-action-title"><strong>${escapeHtml(displayActionName)}</strong>${action.level ? `<small>(${escapeHtml(action.level.replace(/^Lv\.\s*/i, 'lvl '))})</small>` : ''}</span><span class="iw-action-meta">${action.skillName || action.skillLevel ? `<span>${escapeHtml([action.skillName, action.skillLevel].filter(Boolean).join(' '))}</span>` : ''}<span data-live-xp-hour>${action.xpPerHour ? `${formatCompact(action.xpPerHour)} XP/h` : '—'}</span><span data-live-level-remaining>${Number.isFinite(action.levelRemaining) ? `${action.levelRemaining}% remaining` : '—'}</span><span class="iw-revive-timer" data-live-revive ${action.reviveRemainingMs > 0 ? '' : 'hidden'}>${action.reviveRemainingMs > 0 ? `Revive in ${formatReviveTime(action.reviveRemainingMs)}` : ''}</span></span></div>
-            ${finiteQueue ? `<div class="iw-queue-summary"><span>Finishes in</span><strong>${escapeHtml(finiteQueue.time)}</strong>${compactCraftingLoot ? `<small class="iw-queue-values"><span title="Current loot"><b data-live-queue-loot>${formatCompact(totalItems)}</b> <em>loot</em></span><span title="Total craft queue"><b>${formatCompact(finiteQueue.total)}</b> <em>queued</em></span><span title="Inventory"><b>${escapeHtml(craftedInventory?.amountText || '0')}</b> <em>owned</em></span></small>` : `<small>${formatNumber(finiteQueue.completed)} / ${formatNumber(finiteQueue.total)} actions</small>`}</div>` : ''}
+            <div class="iw-action-heading">
+              <div class="iw-action-image">${action.image ? `<img src="${escapeHtml(action.image)}" alt="">` : ''}</div>
+              <div class="iw-action-name">
+                <span class="iw-action-title"><strong>${escapeHtml(displayActionName)}</strong>${action.level ? `<small>(${escapeHtml(action.level.replace(/^Lv\.\s*/i, 'lvl '))})</small>` : ''}</span>
+                <span class="iw-action-meta">
+                  ${action.skillName || action.skillLevel ? `<span class="iw-action-skill">${escapeHtml([action.skillName, action.skillLevel].filter(Boolean).join(' '))}</span>` : ''}
+                  <span data-live-xp-hour>${action.xpPerHour ? `${formatCompact(action.xpPerHour)} XP/h` : '—'}</span>
+                  <span data-live-level-progress>${Number.isFinite(action.skillProgress) ? `${action.skillProgress}% XP` : '—'}</span>
+                  <span class="iw-revive-timer" data-live-revive ${action.reviveRemainingMs > 0 ? '' : 'hidden'}>${action.reviveRemainingMs > 0 ? `Revive in ${formatReviveTime(action.reviveRemainingMs)}` : ''}</span>
+                </span>
+              </div>
+            </div>
+            ${finiteQueue ? `<div class="iw-queue-summary" aria-label="Queue details">
+              <span class="iw-queue-stat iw-queue-finish" title="Finishes in"><svg viewBox="0 0 24 24" aria-label="Finishes in" role="img"><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><strong>${escapeHtml(finiteQueue.time)}</strong></span>
+              ${compactCraftingLoot ? `
+                <span class="iw-queue-stat" title="Loot waiting to collect"><img src="${escapeHtml(loot[0]?.image || action.image || '/assets/misc/inventory.png')}" alt="Loot"><b data-live-queue-loot>${formatCompact(totalItems)}</b></span>
+                <span class="iw-queue-stat" title="Total queued"><svg viewBox="0 0 24 24" aria-label="Queued" role="img"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"></path></svg><b>${formatCompact(finiteQueue.total)}</b></span>
+                <span class="iw-queue-stat" title="Owned in inventory"><img src="/assets/misc/inventory.png" alt="Owned"><b>${formatCompact(craftedInventory?.amount || 0)}</b></span>
+              ` : `<span class="iw-queue-stat" title="Actions completed / queued"><svg viewBox="0 0 24 24" aria-label="Actions completed / queued" role="img"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"></path></svg><b>${formatCompact(finiteQueue.completed)} / ${formatCompact(finiteQueue.total)}</b></span>`}
+            </div>` : ''}
           </div>
           ${renderCombatants(action)}
           ${action.isCombat ? '' : `<div class="iw-progress-stack">
