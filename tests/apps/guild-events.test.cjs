@@ -31,7 +31,7 @@ function element(text = '', singles = {}, lists = {}, extra = {}) {
   return { textContent: text, querySelector: selector => singles[selector] || null,
     querySelectorAll: selector => lists[selector] || [], ...extra };
 }
-function eventFixture({ loaded = true, own = true, join = false, menuTime = '23h', player = 'Player', cooldown = false, ownTime = '23h', ownXp = '0 XP', eventTime = '1d 18h' } = {}) {
+function eventFixture({ loaded = true, own = true, join = false, menuTime = '23h', player = 'Player', cooldown = false, cooldownTime = '2h', ownTime = '23h', ownXp = '0 XP', eventTime = '1d 18h' } = {}) {
   const row = (name, amount, time) => element(`${name} ${amount || ''} ${time || ''}`, {
     ':scope > .name': element(name), '.name': element(name),
     ':scope > .amount': amount === undefined ? null : element(amount),
@@ -42,7 +42,10 @@ function eventFixture({ loaded = true, own = true, join = false, menuTime = '23h
   const participants = loaded ? [row('OtherPlayer', '67,413 XP', '19h'), ...(own ? [row(player, ownXp, ownTime)] : [])] : [];
   const cards = [element('', { ':scope > .header > .name': element('Event') }, { ':scope > .row': loaded ? [eventRow, xpRow] : [] }),
     element('', { ':scope > .header > .name': element('Participants') }, { 'button.row, .row': participants, button: join ? [element('Participate', {}, {}, { disabled: false })] : [] })];
-  const cooldownRow = element('Event Cooldown 2h', { '.name': element('Event Cooldown'), '.date, .time, .amount': element('2h') });
+  const cooldownRow = element(`Event Cooldown ${cooldownTime}`, { '.name': element('Event Cooldown'), '.date, .time, .amount': element(cooldownTime) });
+  if (cooldown) cards.splice(0, cards.length,
+    element('', { ':scope > .header > .name': element('Events') }),
+    element('', { ':scope > .header > .name': element('Requirements') }, { ':scope > .row': [cooldownRow] }));
   const root = element('', {}, { '.card': cards, '.row': cooldown ? [cooldownRow] : [], 'button.row': [row('Events', undefined, menuTime)] });
   return element('', { 'guild-page': root });
 }
@@ -149,4 +152,44 @@ test('a partial visible capture does not throttle the participant rows that arri
   h.run('ready = true; captureVisibleCaches()');
   assert.equal(h.run('attempts'), 2);
   assert.equal(h.run('AppState.ui.visibleCaptureTimes.guildEvent'), 100100);
+});
+
+test('native cooldown without Event or Participants panels replaces old participation and counts down locally', () => {
+  const document = eventFixture({ cooldown:true, cooldownTime:'1d5h53m16s' });
+  const h = harness({ document, location:{ pathname:'/guild' } });
+  h.run(`AppState.ui.page={hidden:true}; CacheStore.set('guildEvent', {schema:9,state:'Completed',eventName:'Combat Event',eventEndsAt:90000}); captureVisibleCaches()`);
+  const entry = h.run("getCache().guildEvent");
+  assert.equal(entry.state, 'Cooldown');
+  assert.equal(entry.eventName, 'Combat Event');
+  assert.match(h.context.guildEventDetail(entry), /Cooldown · Ready in 29h 54m · Next: Gathering/);
+  assert.match(h.context.guildEventStatusIcon(entry), /class="iw-task-icon waiting" data-guild-event-state="Cooldown"/);
+  assert.equal(h.run('AppState.ui.visibleCaptureTimes.guildEvent'), 100000);
+  h.time(3700000);
+  assert.match(h.context.guildEventDetail(entry), /Ready in 28h 54m/);
+  assert.equal(h.run('AppState.ui.lookupActivity.length'), 0);
+});
+
+test('an unfinished cooldown timer preserves the prior snapshot until the countdown loads', () => {
+  const h = harness();
+  h.run("CacheStore.set('guildEvent', {schema:9,state:'Completed',eventName:'Combat Event'})");
+  for (const cooldownTime of ['', 'Loading', '—']) {
+    assert.equal(h.context.collectGuildEvent(eventFixture({cooldown:true, cooldownTime})), false);
+    assert.equal(h.run('getCache().guildEvent.state'), 'Completed');
+  }
+});
+
+test('an event end allows one fallback observation while an aging cooldown remains usable', async () => {
+  const h = harness();
+  h.run(`setCacheLookupsEnabled(true); CacheStore.set('guildEvent', {schema:9,state:'Completed',eventName:'Combat Event',eventEndsAt:200000,expiresAt:150000})`);
+  h.time(160000);
+  assert.equal(h.run("needsLookup('guildEvent')"), false);
+  h.time(200000);
+  assert.equal(h.run("needsLookup('guildEvent')"), true);
+  let reads = 0;
+  const load = () => { reads++; h.context.collectGuildEvent(eventFixture({cooldown:true})); };
+  await h.run("SyncCoordinator").refresh('guildEvent', {load});
+  await h.run("SyncCoordinator").refresh('guildEvent', {load});
+  assert.equal(reads, 1);
+  h.time(300000);
+  assert.equal(h.run("needsLookup('guildEvent')"), false);
 });

@@ -35,8 +35,9 @@
       .find((row) => /^(Forest|Mountain|Ocean) Tribute$/.test(clean(row.querySelector('.name')?.textContent)));
     const tributes = { ...(previous.tributes || {}) };
     const region = clean(tributeRow?.querySelector('.name')?.textContent).replace(' Tribute', '');
-    if (region) tributes[region] = numberFrom(clean(tributeRow.querySelector('.amount')?.textContent).split('/')[0]);
-    setCache('attunement', { schema: 3, selected, tributes });
+    const tributeAmount = readTributeBalance(tributeRow?.querySelector('.amount')?.textContent);
+    if (region && Number.isFinite(tributeAmount)) tributes[region] = tributeAmount;
+    setCache('attunement', { schema: 3, selected, tributes, lastClaim: previous.lastClaim });
   }
 
   function captureVisibleAutomation() {
@@ -60,14 +61,26 @@
     else if (path === '/equipment') capture('equipped', [...document.querySelectorAll('.card')].some((card) => clean(card.querySelector(':scope > .header > .name')?.textContent) === 'Consumables'), () => storeEquippedDivine(divineConsumables(document), true));
     else if (path === '/adventure') captureVisibleAdventure();
     else if (path === '/challenges') capture('challenges', document.querySelector('challenges-page'), () => collectChallenges(document));
-    else if (path === '/skill/15') capture('taming', document.querySelector('taming-page .row .name'), () => collectTaming(document));
+    else if (path === '/skill/15') {
+      const root = document.querySelector('taming-page');
+      const previous = getCache().taming || {};
+      const eggs = readTamingEggs(root, previous);
+      // Native Ranch readiness arrives after its first timer tick. Do not lose
+      // that one-off marker change inside the normal two-second capture throttle.
+      if (['hatcheryEggsReady', 'ranchEggsReady'].some(key => typeof eggs[key] === 'boolean' && eggs[key] !== previous[key])) {
+        AppState.ui.visibleCaptureTimes.taming = 0;
+      }
+      capture('taming', root, () => collectTaming(document));
+    }
     else if (path === '/attunement') capture('attunement', document.querySelector('attunement-page'), captureVisibleAttunement);
     else if (path === '/mastery') capture('mastery', document.querySelector('mastery-page'), () => collectMastery(document));
     else if (path === '/profile') capture('playerName', document.querySelector('profile-page profile-card-component .name'), () => collectPlayerName(document));
     else if (path.startsWith('/house')) captureVisibleAutomation();
     else if (path.startsWith('/guild')) {
       const headers = [...document.querySelectorAll('guild-page .card > .header > .name')].map((element) => clean(element.textContent));
-      if (headers.includes('Event') && headers.includes('Participants')) capture('guildEvent', true, () => collectGuildEvent(document));
+      // Cooldown has Events / Requirements cards, with no Participants card.
+      // The collector validates either layout and rejects partial mounts.
+      capture('guildEvent', true, () => collectGuildEvent(document));
       if (headers.some((name) => /^(Incomplete|Complete) Trials$/.test(name))) capture('guildTrial', true, () => collectGuildTrial(document));
     }
   }

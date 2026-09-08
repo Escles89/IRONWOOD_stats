@@ -6,7 +6,7 @@
 
 Install only one full copy. Pancake-Scripts may remain enabled. Old `/stats` bookmarks automatically open `/status`.
 
-Both **Enable automation** and **Enable cache lookups** start off for new installations. Configure them in the Status header Preferences control. Existing preferences survive updates.
+Both **Enable automation** and **Allow fallback lookups** start off for new installations. Configure them in Settings beside the main money bar. Existing preferences survive updates.
 
 Developers using the local loader should follow [the release and development guide](../technical/release-process.md).
 

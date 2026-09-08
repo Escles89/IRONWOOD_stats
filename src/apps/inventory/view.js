@@ -5,8 +5,8 @@
             <div class="iw-table-head"><span>Potion</span><span>Equipped</span><span>Stored</span></div>
             ${displayedPotions.map((item) => `<div class="iw-table-row">
               <div class="iw-table-item"><span class="iw-item-image"><img src="${escapeHtml(item.image)}" alt=""></span><span>${escapeHtml(item.name)}</span></div>
-              <div class="iw-table-number ${item.equipped ? '' : 'iw-zero'}">${item.tier !== 'Divine' && item.equipped === null ? '—' : formatNumber(item.equipped || 0)}</div>
-              <div class="iw-table-number ${item.stored ? '' : 'iw-zero'}">${formatNumber(item.stored || 0)}</div>
+              <div class="iw-table-number ${item.equipped ? '' : 'iw-zero'}">${item.tier !== 'Divine' && item.equipped === null ? '—' : formatQuantityMarkup({amount:item.equipped || 0, approximate:item.equippedApproximate})}</div>
+              <div class="iw-table-number ${item.stored ? '' : 'iw-zero'}">${formatQuantityMarkup({amount:item.stored || 0, approximate:item.storedApproximate})}</div>
             </div>`).join('')}
           </div>` : '<div class="iw-muted">No potions to show. Choose types in Dashboard options; open Inventory naturally to update stored counts.</div>'}
         </section>`;

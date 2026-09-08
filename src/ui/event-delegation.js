@@ -4,6 +4,8 @@
       if (event.target.matches?.('[data-debug-section]')) { AppState.ui.debugUpdatedAt = 0; scheduleStatusRender(); }
     }, true);
     document.addEventListener('click', event => {
+      const toastDismiss = event.target.closest?.('[data-toast-dismiss]');
+      if (toastDismiss) { dismissActionToast(toastDismiss.dataset.toastDismiss); return; }
       const potionTypeButton = event.target.closest?.('[data-potion-type-remove]');
       if (potionTypeButton) {
         localStorage.setItem(POTION_TYPES_KEY, JSON.stringify(getPotionTypes().filter(type => type !== potionTypeButton.dataset.potionTypeRemove)));
@@ -30,12 +32,6 @@
         render();
         return;
       }
-      if (event.target.matches?.('[data-header-icons-toggle]')) {
-        localStorage.setItem(HEADER_ICONS_KEY, event.target.checked ? 'true' : 'false');
-        AppState.ui.lastSignature = '';
-        render();
-        return;
-      }
       if (event.target.matches?.('[data-potion-type-add]')) {
         const value = event.target.value;
         if (value !== 'all' && !POTION_TYPES.includes(value)) return;
@@ -50,6 +46,7 @@
         setAutomationEnabled(event.target.checked);
         AppState.ui.automationTask = '';
         render();
+        if (event.target.checked) checkDailyAutomations();
         return;
       }
       if (event.target.matches?.('[data-cache-lookups-toggle]')) {
@@ -58,8 +55,36 @@
         if (event.target.checked) syncStale(false);
         return;
       }
+      if (event.target.matches?.('[data-warning-pref]')) {
+        const key = event.target.dataset.warningPref;
+        if (!Object.hasOwn(WARNING_DEFAULTS, key)) return;
+        const value = Number(event.target.value);
+        if (event.target.value.trim() === '' || !Number.isSafeInteger(value) || value < 0 || value > 1000000000) {
+          event.target.value = getWarningPrefs()[key];
+          return;
+        }
+        const saved = setWarningPrefs({ [key]: value });
+        document.querySelectorAll('[data-warning-pref]').forEach(input => { input.value = saved[input.dataset.warningPref]; });
+        render();
+        return;
+      }
       if (event.target.matches?.('[data-challenge-region]')) {
         setChallengePrefs({ region: event.target.value, skill: 'Defense' });
+        render();
+        return;
+      }
+      if (event.target.matches?.('[data-challenge-buy-toggle]')) {
+        setChallengePrefs({ ...getChallengePrefs(), buyScrolls: event.target.checked });
+        render();
+        return;
+      }
+      if (event.target.matches?.('[data-challenge-buy-price]')) {
+        setChallengePrefs({ ...getChallengePrefs(), maxBuyPrice: Number(event.target.value) });
+        render();
+        return;
+      }
+      if (event.target.matches?.('[data-challenge-cancel-toggle]')) {
+        setChallengePrefs({ ...getChallengePrefs(), cancelBlocked: event.target.checked });
         render();
         return;
       }
@@ -79,10 +104,14 @@
           localStorage.setItem(PREFS_KEY, JSON.stringify(normalized));
           syncStale(false);
         }
+        render();
         return;
       }
     });
     document.addEventListener('click', (event) => {
+      const guideJump = event.target.closest?.('[data-guide-jump]');
+      if (guideJump) { navigateGuideSection(guideJump.dataset.guideJump); return; }
+      if (event.target.closest?.('[data-guide-modal]')) { openGuide(event.target.closest('[data-guide-modal]')); return; }
       if (event.target.closest?.('[data-quest-modal]')) { openPreferences(event.target.closest('[data-quest-modal]')); return; }
       if (event.target.closest?.('[data-modal-close]') || event.target.matches?.('[data-modal-backdrop]')) { closePreferences(); return; }
       if (event.target.closest?.('[data-sync]')) { syncStale(true); return; }

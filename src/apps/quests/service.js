@@ -12,7 +12,10 @@
     const headerText = clean(card?.querySelector(':scope > .header > .amount')?.textContent);
     const headerProgress = headerText.match(/(\d+)\s*\/\s*(\d+)/);
     const completed = headerProgress ? Number(headerProgress[1]) : quests.filter((quest) => quest.done).length;
-    setCache('quests', { schema: 2, day: dayKey(), quests, completed, dailyComplete: completed >= 5, expiresAt: nextDailyReset() });
+    const previous = getCache().quests;
+    const next = { schema: 2, day: dayKey(), quests, completed, dailyComplete: completed >= 5, expiresAt: nextDailyReset() };
+    setCache('quests', next);
+    notifyQuestCompletion(previous, next);
     return { card, quests };
   }
   function questMatchesPreference(quest, preference) {
@@ -55,4 +58,17 @@
     const completed = state.quests.filter((q) => q.done).length;
     setCache('quests', { schema: 2, day: dayKey(), quests: state.quests, completed, selectedDone, dailyComplete: completed >= 5, expiresAt: nextDailyReset() });
     return state;
+  }
+
+  function notifyQuestCompletion(previous, next) {
+    // Loading an existing completed day, re-reading it, or resetting a day is not a completion.
+    if (!previous || previous.schema !== 2 || previous.day !== next.day || !Number.isFinite(previous.completed)) return;
+    const before = Math.min(5, previous.completed);
+    const after = Math.min(5, next.completed);
+    if (!(after > before)) return;
+    const newlyDone = (next.quests || []).filter(quest => quest.done && !(previous.quests || []).some(old => old.id === quest.id && old.done));
+    showActionToast({ icon: 'quests', title: after === 5 ? 'Daily quests complete' : 'Quest completed',
+      summary: newlyDone.map(quest => quest.skill || quest.name).filter(Boolean).join(' · '),
+      metrics: [{ icon: 'quests', label: 'Completed today', value: `${after}/5` }],
+      detail: after === 5 ? 'All five daily quests are complete.' : `${after - before} new completion${after - before === 1 ? '' : 's'} confirmed by Ironwood.` });
   }

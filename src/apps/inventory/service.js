@@ -4,15 +4,14 @@
     const allItems = [...doc.querySelectorAll('inventory-page button.item')].map((button) => {
       const src = button.querySelector('img')?.getAttribute('src') || '';
       const key = src.split('/').pop()?.split('?')[0] || '';
-      const amountText = clean(button.querySelector('.amount')?.textContent);
+      const quantity = readItemQuantity(button.querySelector('.amount'));
       const name = clean(button.querySelector('.name')?.textContent);
-      return key ? { key, name, amount: parseCompact(amountText), amountText, image: src } : null;
+      return key ? { key, name, ...quantity, image: src } : null;
     }).filter(Boolean);
-    const items = [...doc.querySelectorAll('inventory-page button.item')].map((button) => {
-      const src = button.querySelector('img')?.getAttribute('src') || '';
-      const slug = src.match(/potion-divine-[\w-]+/)?.[0];
-      return slug ? { slug, name: `Divine ${titleFromSlug(slug)} Potion`, amount: parseCompact(button.querySelector('.amount')?.textContent), image: src } : null;
-    }).filter(Boolean);
+    const items = allItems.filter(item => /potion-divine-[\w-]+/.test(item.key)).map(item => ({
+      ...item, slug: item.key.match(/potion-divine-[\w-]+/)[0],
+      name: item.name || `Divine ${titleFromSlug(item.key.replace(/\.[^.]+$/, ''))} Potion`
+    }));
     setCache('inventory', { schema: 1, items, allItems });
     return true;
   }
@@ -46,11 +45,11 @@
     if (!Array.isArray(inventory?.allItems)) return;
     const counts = new Map(inventory.allItems.map(item => [item.key, item]));
     let changed = false;
-    for (const { key, amount, name, image } of observations) {
+    for (const { key, amount, name, image, approximate = false } of observations) {
       if (!key || !Number.isFinite(amount)) continue;
       const previous = counts.get(key);
-      if (previous?.amount === amount || (!previous && amount === 0)) continue;
-      counts.set(key, { ...previous, key, name: previous?.name || name, image: previous?.image || image, amount, amountText: formatNumber(amount) });
+      if ((previous?.amount === amount && quantityIsApproximate(previous) === approximate) || (!previous && amount === 0)) continue;
+      counts.set(key, { ...previous, key, name: previous?.name || name, image: previous?.image || image, amount, approximate, amountText: formatItemQuantity({ amount, approximate }) });
       changed = true;
     }
     if (changed) setCache('inventory', { ...inventory, allItems: [...counts.values()] });
@@ -73,7 +72,8 @@
       if (!key || item.name === 'Coins' || key === 'coin.png' || !Number.isFinite(item.amount) || item.amount <= 0) continue;
       const previous = counts.get(key);
       const amount = (previous?.amount || 0) + item.amount;
-      counts.set(key, { ...previous, key, name: previous?.name || item.name, image: previous?.image || item.image, amount, amountText: formatNumber(amount) });
+      const approximate = quantityIsApproximate(previous) || quantityIsApproximate(item);
+      counts.set(key, { ...previous, key, name: previous?.name || item.name, image: previous?.image || item.image, amount, approximate, amountText: formatItemQuantity({ amount, approximate }) });
       changed = true;
     }
     if (!changed) return false;
@@ -84,7 +84,7 @@
     // Keep the full snapshot's age: collecting one item does not refresh every other item.
     setCache('inventory', { ...inventory, allItems, items, lootUpdatedAt: Date.now() });
     const scrolls = counts.get('challenge-scroll.png');
-    if (scrolls && claim.loot.some(item => item.image?.split('/').pop()?.split('?')[0] === 'challenge-scroll.png') && getCache().challenges) {
+    if (scrolls && !quantityIsApproximate(scrolls) && claim.loot.some(item => item.image?.split('/').pop()?.split('?')[0] === 'challenge-scroll.png') && getCache().challenges) {
       setCache('challenges', { ...getCache().challenges, scrollsAvailable: scrolls.amount });
     }
     return true;
@@ -157,10 +157,10 @@
     for (const item of materials) {
       if (!Number.isFinite(item.available)) continue;
       const key = item.image || item.name;
-      current.set(key, item.available);
+      current.set(key, item.approximate ? undefined : item.available);
       const before = previous.get(key);
-      const delta = before === undefined ? 0 : item.available - before;
-      if (before === undefined || delta) inventoryUpdates.push({ key: item.image?.split('/').pop()?.split('?')[0], amount: item.available, name: item.name, image: item.image });
+      const delta = item.approximate || before === undefined ? 0 : item.available - before;
+      if (before === undefined || delta) inventoryUpdates.push({ key: item.image?.split('/').pop()?.split('?')[0], amount: item.available, approximate: Boolean(item.approximate), name: item.name, image: item.image });
       if (delta && EventLedger.record(`material:${key}:${now}`, { delta }, 4000)) {
         notices.set(key, { delta, started: now, until: now + 4000 });
       }

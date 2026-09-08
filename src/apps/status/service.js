@@ -4,11 +4,12 @@
     setCache(key, { summary: text || 'No active information found' });
   }
   function render() {
+    renderGlobalDialog();
     if (document.hidden || !AppState.ui.page || AppState.ui.page.hidden) return;
     try {
     const { action, loot, consumables, materials, masteryProgress, finiteQueue } = SourceAdapter.capture(document);
     const combatDeath = Boolean(action?.isCombat && action.combatants?.some((fighter) => fighter.side === 'monster' && fighter.hpPercent === 0));
-    const lootDeltas = loot.map((item) => { const key = item.image || item.name; const old = AppState.live.previousLootValues.get(key); return old === undefined || old === item.amount ? 0 : item.amount - old; });
+    const lootDeltas = loot.map((item) => { const key = item.image || item.name; const old = AppState.live.previousLootValues.get(key); return quantityIsApproximate(item) || old === undefined || old === item.amount ? 0 : item.amount - old; });
     const consumableDeltas = consumables.map((item) => { const key = item.image || item.name; const old = AppState.live.previousConsumableValues.get(key); return old === undefined || old === parseCompact(item.amount) ? 0 : parseCompact(item.amount) - old; });
     const noticeNow = Date.now();
     recordMaterialChanges(materials, noticeNow);
@@ -30,7 +31,7 @@
         const existing = AppState.ui.consumableDeltaNotices.get(key);
         if (delta && (!existing || existing.delta !== delta || existing.until <= noticeNow) && EventLedger.record(`consumable:${key}:${noticeNow}`, { delta }, 4000)) AppState.ui.consumableDeltaNotices.set(key, { delta, started: noticeNow, until: noticeNow + 4000 });
       });
-    AppState.live.previousLootValues = new Map(loot.map((item) => [item.image || item.name, item.amount]));
+    AppState.live.previousLootValues = new Map(loot.filter(item => !quantityIsApproximate(item)).map((item) => [item.image || item.name, item.amount]));
     AppState.live.previousConsumableValues = new Map(consumables.map((item) => [item.image || item.name, parseCompact(item.amount)]));
     const isHealingConsumable = (item) => /pie|potion|elixir|food/i.test(item?.name || '');
     const dropCandidate = action?.isCombat ? loot.find((item, index) => lootDeltas[index] > 0 && item.image) : null;
@@ -57,15 +58,11 @@
     AppState.ui.page.style.setProperty('--iw-drop-icon', combatDrop ? `url(${JSON.stringify(combatDrop.image)})` : 'none');
     AppState.ui.page.style.setProperty('--iw-use-icon', combatUse ? `url(${JSON.stringify(combatUse.image)})` : 'none');
     const queueRemainingMs = finiteQueue ? durationMs(finiteQueue.time) : 0;
-    const queueWarning = queueRemainingMs > 0 && queueRemainingMs < 3600000
-      ? (queueRemainingMs < 600000 ? 'urgent' : 'warning') : queueRemainingMs >= 3600000 && CRAFTING_SKILLS.has(action?.skillName) ? 'sufficient' : '';
-    const lowMaterials = materials
-      .filter((item) => Number.isFinite(item.available) && item.available < 1000)
-      .sort((a, b) => a.available - b.available);
-    const materialWarning = lowMaterials.length ? (lowMaterials[0].available < 500 ? 'urgent' : 'warning') : '';
-    const materialWarningText = lowMaterials.length
-      ? `Material${lowMaterials.length > 1 ? 's' : ''} low: ${lowMaterials.map((item) => `${item.name} ${formatNumber(item.available)}`).join(', ')}`
-      : '';
+    const warningPrefs = getWarningPrefs();
+    const queueWarning = queueWarningState(queueRemainingMs, CRAFTING_SKILLS.has(action?.skillName), warningPrefs);
+    const materialAlert = lowMaterialWarning(materials, warningPrefs);
+    const materialWarning = materialAlert.state;
+    const materialWarningText = materialAlert.text;
     const liveEquippedDivine = divineConsumables(document);
     let equippedDivine = [];
     try { equippedDivine = JSON.parse(localStorage.getItem(EQUIPPED_KEY) || '[]'); } catch { equippedDivine = []; }
@@ -75,6 +72,7 @@
       equippedDivine = storeEquippedDivine(liveEquippedDivine);
     }
     const cache = projectStatusCache(getCache());
+    const resourceWarnings = statusResourceWarnings(cache, warningPrefs);
     const adventureActive = cache.adventure?.schema === 11 && cache.adventure.state === 'Active'
       && (!cache.adventure.stateEndsAt || cache.adventure.stateEndsAt > Date.now());
     const adventureActionActive = adventureBonusActive(cache.adventure, action?.skillName);
@@ -93,6 +91,7 @@
     const challengePrefs = getChallengePrefs();
     const headerIcons = headerIconsEnabled();
     const potionTypes = getPotionTypes();
+    const tamingEggs = tamingEggReadiness(cache.taming);
     const adventureIdleAvailable = cache.adventure?.state === 'Idle' && Number(cache.adventure?.mapsStored) > 0;
     Object.assign(AppState.derived, { eliteCombat,
       countdowns: { revive: action?.reviveRemainingMs || 0, queue: queueRemainingMs },
@@ -104,7 +103,7 @@
       materials: materials.map((item) => ({ name: item.name, image: item.image })),
       combatDropStarted: AppState.ui.combatDropNotice?.started, combatUseStarted: AppState.ui.combatUseNotice?.started,
       masteryAchieved,
-      finiteQueue, trialState, eventState, day: dayKey(), materialWarning, materialWarningText, adventureActive, adventureActionActive, adventureIdleAvailable, guildEventActionActive, guildTrialActionActive, cacheRevision: AppState.ui.cacheRevision, prefs, challengePrefs, automationOn, cacheLookupsOn, potionTypes, headerIcons, questModalOpen: AppState.ui.questModalOpen, automationTask: AppState.ui.automationTask, tamingClaimNoticeUntil: AppState.ui.tamingClaimNoticeUntil
+      warningPrefs, resourceWarnings, tamingEggs, finiteQueue, trialState, eventState, day: dayKey(), materialWarning, materialWarningText, adventureActive, adventureActionActive, adventureIdleAvailable, guildEventActionActive, guildTrialActionActive, cacheRevision: AppState.ui.cacheRevision, prefs, challengePrefs, automationOn, cacheLookupsOn, potionTypes, headerIcons, questModalOpen: AppState.ui.questModalOpen, automationTask: AppState.ui.automationTask, tamingClaimNoticeUntil: AppState.ui.tamingClaimNoticeUntil
     });
     if (signature === AppState.ui.lastSignature) { StatusRenderer.updateLive(AppState); syncHeaderActionBadges(); updateDebugPanel(); return; }
     AppState.ui.lastSignature = signature;
@@ -116,7 +115,7 @@
     const dailyQuestComplete = (cache.quests?.completed || 0) >= 5 || cache.quests?.dailyComplete === true;
     const adventureStatus = adventureActive ? 'Active' : cache.adventure?.mapsComplete ? 'Complete' : cache.adventure?.state || 'Unknown';
     const taskIndicator = (task, complete, fallback, fallbackClass = '') => AppState.ui.automationTask === task
-      ? '<span class="iw-task-icon running" title="Automation running" aria-label="Automation running"><svg class="iw-spin" viewBox="0 0 24 24" aria-hidden="true"><circle class="iw-spin-track" cx="12" cy="12" r="8"></circle><g class="iw-spin-motion"><path d="M12 4a8 8 0 0 1 7.2 4.5"></path><path d="M19.2 5.7v2.8h-2.8"></path><path d="M12 20a8 8 0 0 1-7.2-4.5"></path><path d="M4.8 18.3v-2.8h2.8"></path></g></svg></span>'
+      ? `<span class="iw-task-icon running" title="Automation running" aria-label="Automation running">${renderActionSpinner()}</span>`
       : complete
         ? '<span class="iw-task-icon done" title="Complete" aria-label="Complete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4 4L19 6.5"></path></svg></span>'
         : `<em class="${fallbackClass}">${escapeHtml(fallback)}</em>`;
@@ -130,36 +129,27 @@
     const mapRunDetail = cache.adventure?.mapAutomation?.stoppedReason && !cache.adventure?.mapsComplete
       ? cache.adventure.mapAutomation.stoppedReason : '';
     const attunementSkills = (cache.attunement?.selected || []).map((slot) => slot.skill).filter(Boolean);
-    const attunementTributes = ['Forest', 'Mountain', 'Ocean'].map((category) => {
-      const amount = cache.attunement?.tributes?.[category];
-      return Number.isFinite(amount) ? `${category} ${Math.round(amount / 1000)}K` : '';
-    }).filter(Boolean);
-    const attunementDetails = [...attunementSkills, ...attunementTributes].join(' · ') || humanAge(cache.attunement?.checkedAt);
+    const attunementDetails = attunementSkills.join(' · ') || 'No skills selected';
     const challengeScrolls = cache.challenges?.scrollsAvailable;
     const challengeAutoRemaining = cache.challenges?.autoCompletesRemaining;
-    const challengeLastError = cache.challenges?.lastRun?.successful === false ? cache.challenges.lastRun.result : '';
-    const challengeDetails = Number.isFinite(challengeScrolls)
-      ? `${formatNumber(challengeScrolls)} ${challengeScrolls === 1 ? 'scroll' : 'scrolls'} · ${challengePrefs.region} · ${challengePrefs.skill}${challengeLastError ? ` · ${challengeLastError}` : ''}`
-      : `Scrolls unknown · ${challengePrefs.region} · ${challengePrefs.skill}${challengeLastError ? ` · ${challengeLastError}` : ''}`;
+    const challengeError = challengeRunError(cache.challenges);
     const challengeIndicator = AppState.ui.automationTask === 'challenges'
       ? taskIndicator('challenges', false, '')
-      : challengeScrolls === 0 || challengeAutoRemaining === 0
+      : cache.challenges?.phase === 'blocked' && !challengePrefs.cancelBlocked
+        ? challengeBlockedIndicator()
+      : !['blocked', 'active', 'reward'].includes(cache.challenges?.phase) && ((challengeScrolls === 0 && !challengePrefs.buyScrolls) || challengeAutoRemaining === 0)
         ? taskIndicator('challenges', true, '')
-        : `<button class="iw-small-button" data-run-challenge ${automationOn && (!Number.isFinite(challengeScrolls) || (challengeScrolls > 0 && challengeAutoRemaining > 0)) ? '' : 'disabled'} title="${automationOn ? 'Run and claim challenges' : 'Automation is disabled'}">Claim</button>`;
+        : `<button class="iw-small-button iw-claim-button" data-run-challenge ${automationOn && (['blocked', 'active', 'reward'].includes(cache.challenges?.phase) || !Number.isFinite(challengeScrolls) || ((challengeScrolls > 0 || challengePrefs.buyScrolls) && challengeAutoRemaining > 0)) ? '' : 'disabled'} title="${automationOn ? 'Run and claim challenges' : 'Automation is disabled'}">Claim</button>`;
     const tamingSnacks = cache.taming?.petSnacks;
     const tamingExpedition = cache.taming?.expeditionName;
-    const tamingDetails = [
-      tamingExpedition || 'No expedition selected',
-      Number.isFinite(tamingSnacks) ? `${formatNumber(tamingSnacks)} Pet Snacks` : 'Pet Snacks unknown'
-    ].join(' · ');
-    const tamingIndicator = AppState.ui.collectingTaming
-      ? '<span class="iw-task-icon running" title="Collecting Taming loot" aria-label="Collecting Taming loot"><svg class="iw-spin" viewBox="0 0 24 24" aria-hidden="true"><circle class="iw-spin-track" cx="12" cy="12" r="8"></circle><g class="iw-spin-motion"><path d="M12 4a8 8 0 0 1 7.2 4.5"></path><path d="M19.2 5.7v2.8h-2.8"></path><path d="M12 20a8 8 0 0 1-7.2-4.5"></path><path d="M4.8 18.3v-2.8h2.8"></path></g></svg></span>'
+    const tamingDetails = tamingExpedition || 'No expedition selected';
+    const tamingLootIndicator = AppState.ui.collectingTaming
+      ? `<span class="iw-task-icon running" title="Collecting Taming loot" aria-label="Collecting Taming loot">${renderActionSpinner()}</span>`
       : AppState.ui.tamingClaimNoticeUntil > Date.now()
-        ? '<button class="iw-small-button" disabled>Claimed</button>'
-      : `<button class="iw-small-button" data-collect-taming ${automationOn && (cache.taming?.lootAvailable || !Number.isFinite(tamingSnacks)) ? '' : 'disabled'} title="${automationOn ? 'Claim Taming loot' : 'Automation is disabled'}">Claim</button>`;
+        ? '<button class="iw-small-button iw-claim-button" data-claim-state="done" title="Taming loot claimed" disabled>Claimed</button>'
+      : `<button class="iw-small-button iw-claim-button" data-collect-taming ${automationOn && (cache.taming?.lootAvailable || !Number.isFinite(tamingSnacks)) ? '' : 'disabled'} title="${automationOn ? 'Claim Taming loot' : 'Automation is disabled'}">Claim</button>`;
+    const tamingIndicator = `<div class="iw-taming-actions">${renderTamingEggIndicator(tamingEggs)}${tamingLootIndicator}</div>`;
     const adventureSupplement = [
-      Number.isFinite(cache.adventure?.researchPoints) ? `${formatNumber(cache.adventure.researchPoints)} RP` : '',
-      cache.adventure?.dailyMapsLimit ? `Maps ${cache.adventure.dailyMapsCreated}/${cache.adventure.dailyMapsLimit} today` : '',
       mapRunDetail
     ].filter(Boolean).join(' · ');
     const cachedInventory = (Array.isArray(cache.inventory?.items) ? cache.inventory.items : [])
@@ -177,6 +167,8 @@
         storedOnly,
         masteryContract,
         equipped: storedOnly ? null : parseCompact(item.amount),
+        equippedApproximate: quantityIsApproximate(item),
+        storedApproximate: storedOnly && item.amount ? quantityIsApproximate(item) : quantityIsApproximate(storedItem),
         stored: storedOnly ? (item.amount ? parseCompact(item.amount) : (storedItem?.amount ?? 0)) : (storedItem?.amount ?? 0)
       };
     }).filter((item) => !(!craftingSkill && /stardust/i.test(item.name)));
@@ -189,7 +181,7 @@
       if (!storedItem || (key === 'stardust.png' && !craftingSkill) || (key === 'contract-mastery.png' && masteryAchieved) || consumableRows.some((item) => item.image.split('/').pop()?.split('?')[0] === key)) return;
       consumableRows.push({
         name, image: storedItem.image || `/assets/items/${key}`, amount: storedItem.amountText,
-        liveIndex: null, storedOnly: true, masteryContract: key === 'contract-mastery.png', equipped: null, stored: storedItem.amount
+        liveIndex: null, storedOnly: true, masteryContract: key === 'contract-mastery.png', equipped: null, stored: storedItem.amount, storedApproximate: quantityIsApproximate(storedItem)
       });
     });
     consumableRows.sort((a, b) => Number(a.storedOnly) - Number(b.storedOnly));
@@ -211,7 +203,7 @@
       const existing = potionMap.get(key);
       potionMap.set(key, { ...existing, key, tier,
         name: item.name || existing?.name || `${titleFromSlug(key.replace(/\.[^.]+$/, '').replace(/^potion-/, ''))} Potion`,
-        image: item.image || `/assets/items/${key}`, equipped: null, stored: item.amount });
+        image: item.image || `/assets/items/${key}`, equipped: null, stored: item.amount, storedApproximate: quantityIsApproximate(item) });
     }
     for (const item of [...equippedDivine, ...consumables]) {
       const tier = potionType(item);
@@ -219,6 +211,7 @@
       const key = item.image.split('/').pop()?.split('?')[0];
       const existing = potionMap.get(key);
       potionMap.set(key, { ...existing, key, tier, name: item.name, image: item.image,
+        equippedApproximate: quantityIsApproximate(item),
         equipped: typeof item.amount === 'number' ? item.amount : parseCompact(item.amount), stored: existing?.stored ?? null });
     }
     const canonicalPotionOrder = new Map(canonicalDivinePotions.map(([key], index) => [key, index]));
@@ -245,7 +238,7 @@
 
     const actionBadges = renderActionBadges({ action, masteryAchieved, adventureActionActive, guildEventActionActive, guildTrialActionActive, cache, locationBadges, materialWarning, materialWarningText, queueWarning, finiteQueue });
     AppState.ui.headerBadgeMarkup = actionBadges;
-    updateStatusMarkup(renderStatusMarkup({ actionBadges, headerIcons, combatDeath, noticeNow, queueWarning, materialWarning, materialWarningText, cache, adventureActive, adventureActionActive, guildEventActionActive, guildTrialActionActive, prefs, automationOn, cacheLookupsOn, masteryAchieved, automationRows, questSkills, challengePrefs, dailyQuestComplete, taskIndicator, adventureIndicator, guildTrialIndicator, guildEventIndicator, attunementSkills, attunementDetails, challengeDetails, challengeIndicator, tamingDetails, tamingIndicator, adventureSupplement, potionTypes, consumableRows, displayedPotions, inventoryCounts, totalItems, compactCraftingLoot, craftedInventory, action, loot, consumables, materials, masteryProgress, finiteQueue, locationBadges, displayActionName }));
+    updateStatusMarkup(renderStatusMarkup({ actionBadges, headerIcons, combatDeath, noticeNow, queueWarning, materialWarning, materialWarningText, cache, adventureActive, adventureActionActive, guildEventActionActive, guildTrialActionActive, prefs, automationOn, cacheLookupsOn, masteryAchieved, automationRows, questSkills, challengePrefs, dailyQuestComplete, taskIndicator, adventureIndicator, guildTrialIndicator, guildEventIndicator, attunementSkills, attunementDetails, challengeError, challengeIndicator, tamingDetails, tamingIndicator, resourceWarnings, adventureSupplement, potionTypes, consumableRows, displayedPotions, inventoryCounts, totalItems, compactCraftingLoot, craftedInventory, action, loot, consumables, materials, masteryProgress, finiteQueue, locationBadges, displayActionName }));
     syncHeaderActionBadges();
     StatusRenderer.updateLive(AppState);
     updateDebugPanel();

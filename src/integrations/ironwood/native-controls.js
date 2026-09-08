@@ -13,7 +13,7 @@
     AppState.ui.collectingLoot = true;
     const inventoryClaim = beginInventoryLootClaim();
     const control = AppState.ui.page?.querySelector('[data-collect-loot]');
-    if (control) { control.disabled = true; control.textContent = 'Claiming…'; }
+    if (control) { control.disabled = true; setClaimButtonState(control, 'Claiming…', 'busy'); }
     try {
       stopButton.click();
       const start = Date.now();
@@ -33,12 +33,12 @@
       render();
     } catch (error) {
       console.error('[Ironwood Status] Collect and continue failed', error);
-      if (control) { control.textContent = 'Claim'; control.title = error.message; }
+      if (control) { setClaimButtonState(control, `Retry claim: ${error.message}`, 'error'); }
     } finally {
       AppState.ui.collectingLoot = false;
       if (AppState.ui.pendingLootClaim === inventoryClaim) AppState.ui.pendingLootClaim = null;
       const current = AppState.ui.page?.querySelector('[data-collect-loot]');
-      if (current) { current.disabled = false; if (current.textContent === 'Claiming…') current.textContent = 'Claim'; }
+      if (current) { current.disabled = false; if (current.textContent === 'Claiming…') setClaimButtonState(current, 'Claim'); }
     }
   }
 

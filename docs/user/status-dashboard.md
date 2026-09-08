@@ -1,73 +1,93 @@
 # Status dashboard
 
-## Features
+Open **Status** above Inventory in Ironwood’s sidebar. It combines your current activity, pending loot, supplies and daily progress. On desktop the panels share two columns; on a phone they stack.
 
-- Live current action, Village/Outskirts location, compact action/skill levels, native XP/hour, green skill-level progress, finite-queue finish estimate, action materials, and consumables with equipped/stored quantities.
-- Combat actions show both fighters with live HP bars, restrained hit motion, and a brief death animation when an enemy reaches zero HP.
-- Current loot table with pending and cached inventory quantities, plus native collect-and-continue control.
-- Daily quest status and a modal for selecting five quests for Ironwood auto-completion.
-- Cached Adventure, Guild Event, and Guild Trial status.
-- Adventure Research Points, daily map creation limit, daily reset, and map-storage count.
-- Selected Attunement skills with Forest, Mountain, and Ocean Tribute balances in compact `K` units, plus native collect-all loot control.
-- Challenge Scroll status with configurable region/reward skill and button-triggered start, auto-complete, and reward claim automation.
-- Taming status with the selected expedition, current Pet Snack inventory, and native expedition-loot collection.
-- Automation tracking for all structures, including the selected action, projected loot, and queue progress.
-- Potion table with separate equipped and stored quantities. Choose Regular, Super, Divine, or **All types** under **Dashboard options → Potions**. Selections are saved; existing Divine/Super preferences are preserved.
-- Stardust is shown only while a crafting skill is active.
-- Native Traits rows grouped under Forest, Mountain, Ocean, and shared Defense headers while keeping each skill's traits together.
-- Responsive two-column layout using the live Ironwood/Pancake visual style.
+The **book** beside the money bar opens the illustrated in-game guide. It includes a dashboard example, chapter navigation, expandable panel explanations and an indicator legend. Examples are labelled and do not perform actions. The **sliders** open Settings. Both controls stay available on native game pages.
 
-The script reads Ironwood's rendered interface and runs alongside Pancake-Scripts. Requested automations use Ironwood's own controls. **Enable automation** controls every game-changing action, while **Allow fallback lookups** controls background information retrieval. Both settings are disabled by default. Cached information can still update without a background lookup when its native page is opened manually.
+## First visit
 
+1. Visit Inventory, Quests, Adventure, Taming, Attunement and Guild normally to populate their saved information. Visit House → Automate for production details.
+2. Open Settings to choose potion types, warning thresholds and five daily quest skills.
+3. Enable automation if you want Claim controls or automatic daily work. Enable fallback lookups as well for daily quests and map creation. Both switches start off.
 
-## Current Action and Loot
+Settings save automatically in this browser. Unknown values mean information is missing, not that a balance is zero.
 
-Current Action shows the running activity, levels, location, XP per hour, progress, materials, and consumables. The top block keeps the action name, skill level, XP rate, and earned level progress together (for example, 87% XP). A compact second detail row below shows finish time, Loot, Queued, and Owned with icons. The clock matches Ironwood's native action timer, loot uses the item sprite, and Owned uses its inventory icon. Hover for labels; accessible icon names identify each value. Rows can wrap on very narrow screens instead of overflowing. With no running action, it says **No action in progress** and the remaining panels stay available.
+## Current Action
 
-Consumables have separate Equipped and Stored quantities. Stored-only items such as Stardust and Mastery Contracts appear only under Stored. Stardust is hidden during gathering. The active skill's Mastery progress is informational; the badge turns gold when the skill is complete.
+The item or enemy identifies the activity. Its level is separate from your skill level. **XP/h** is the native rate; **87% XP** means 87% earned toward the next skill level.
 
-Current Loot shows pending quantities and cached inventory amounts. **Claim** collects and continues through Ironwood's native controls when automation is enabled. Finite crafting queues instead show loot, queued, and owned amounts in Current Action.
+For non-combat actions, the blue bar tracks the action cycle and the green bar tracks skill XP. Combat shows fighters, health, attacks, healing and revival; see the [combat guide](combat.md). An idle character sees **No action in progress**, while the other panels remain available.
 
-Confirmed Current Loot claims and native **Stop & Loot** clicks add the observed loot quantities to the inventory cache immediately, including newly obtained items. Coins remain separate. Existing stored counts update without opening Inventory; failed claims do not add anything. Opening Inventory naturally reconciles other spending and trading. A hidden inventory read is only a fallback when no usable baseline exists, or when you explicitly refresh.
+Finite queues add a compact line for finish time, loot, queued amount and inventory owned. Crafting combines its loot information here instead of repeating Current Loot. Queued work is not inventory you already own.
 
-Visible material quantities also update cached inventory when they change, so crafting consumption is reflected without another lookup.
+Materials show the available supply needed to continue. Consumables separate **Equipped** from **Stored** reserves. Stardust and Mastery Contracts are stored-only; Stardust appears for crafting.
 
-Crafting queues show a green clock when at least one hour remains. The clock turns amber below one hour and red below ten minutes. Material warnings turn orange below 1,000 and red below 500; hover to see affected materials. Badges appear in this order: Mastery, active events, location, activity, warnings.
+### Action indicators
 
-## Other progress
+| Indicator | Meaning |
+| --- | --- |
+| Green activity spinner | An action is running. |
+| Gray / gold mastery | Mastery is incomplete / achieved for this skill. |
+| Location icon | Village, Outskirts or Dungeon, when known. |
+| Blue adventure, event or trial badge | An active bonus matches the current skill. Trial participation provides +10% XP. |
+| Green / amber / red clock | Enough crafting time / a short queue / an urgent queue. |
+| Amber / red materials warning | Required materials are low / urgent. |
+| Red activity icon and skull | The character is reviving after defeat. |
 
-Daily Quests shows today's completion. Adventure shows active progress, map creation totals, or a green idle indicator when a stored map can be started. Guild event participation is matched to your character; its action badge appears only when your activity contributes to that event. Guild Trials has its own active indicator and countdown.
+Current Action retains its larger badges. Away from Status, compact activity, queue and material indicators appear beside money. The full badge group stays in Current Action while Status is open.
 
-When your guild event participant row no longer has a timer, your contribution is complete. The Status row shows a green checkmark and your earned XP, with the overall event countdown shown separately. The Current Action event bonus icon disappears when your contribution time ends.
+## Loot, quantities and claims
 
-Attunement lists selected skills and tribute balances. Taming shows the selected expedition and Pet Snacks. Challenges shows scrolls and remaining auto-completes. The potion panel separates equipped and stored quantities. In **Dashboard options → Potions**, add types using the selection field, or click a selected type to remove it. Regular and Super potions appear when stored or currently equipped; Divine retains its standard rows. No background lookup is triggered by changing the selection.
+**Current Loot** lists pending items and saved inventory counts. Coins are excluded from “items waiting.” The dark cyan **Claim** button uses Ironwood’s inventory artwork. Hover for its action name; keyboard and screen-reader labels are retained.
 
-Challenge claims wait for loaded counts, the selected region, auto-completion and reward selection. Completion is confirmed only after the reward screen closes, scrolls decrease and used auto-completes increase. Temporary loading screens preserve known counts; a failed claim shows its error instead of silently reporting success.
+Claim collects through native controls and resumes the action when automation is enabled. Confirmed loot additions and visible material consumption update saved inventory locally. Normal Inventory visits reconcile purchases, trades and other changes.
 
-Traits on the native page are grouped by Forest, Mountain, Ocean, and shared Defense. Enable **Show multiplayer control** under **Dashboard options → Display** to restore Ironwood's native Multiplayer menu in the sidebar. This saved switch controls visibility; it does not open the menu.
+Full counts appear when space permits. Narrow panels can show **11.7K**, with a smaller white suffix; the full observed value remains available in a tooltip. Quantity animations use underlying changes: **+5** floats up, and a loss moves down. Rounded source values are retained as rounded internally rather than expanded into invented precision.
 
-The small version label below the top Status title identifies your installed userscript version. Material quantities show the same green increases and red decreases as other quantity feedback.
+A blue two-arrow spinner means a claim or automation is processing. A green check can confirm completion. Disabled Claim buttons can mean automation is off, no eligible task is known, or a collection is already running.
 
-Guild Trials shows your character’s trial name and participation countdown, separate from the overall guild trial-period deadline. Whole-hour native timers are labeled “About.” The status icon is a blue animated hourglass while participating, a green check when trials are available to join or completed, gray when unavailable, and amber after participation expires. A dashed gray icon means participation has not been checked. Open Guild → Trials to refresh it without background lookups.
+## Status rows
 
-The blue Guild Trial badge in Current Action appears only while the running skill matches your active trial. Its tooltip names the trial and the +10% XP bonus. Switching skills hides the action badge; your trial participation and countdown remain visible in the Status panel.
+Feature icons and titles align at the top. Right-side controls are also top-aligned with a small inset. Row titles use regular 16px text; separate numerical values use 12px text. Small 8px dividers separate groups, while each resource icon stays beside its value.
 
-Running adventures show the map’s skill (for example, **Defense Map**) and a live countdown. The Current Action adventure icon names that map in its tooltip. Daily map creation progress remains separate from whether an adventure is running.
+| Row | Details and indicators |
+| --- | --- |
+| Challenges | Region and reward-skill icons identify the configured selection; the scroll count is the available supply. A green check means no further automatic starts are available because scrolls are exhausted with buying off, or auto-completes are exhausted, and no active challenge is waiting. An amber warning identifies a blocked challenge when cancellation is off. Claim starts the configured loop; its recap contains confirmed totals and remaining auto-completes. |
+| Daily quests | The fraction is quests completed today, not the number of selected skills. A check means today is complete. Pending means the saved daily progress is not complete; a spinner means automation is processing. Choose the five preferred skills in Settings. |
+| Adventure | The map and countdown describe a running adventure; RP and maps created today are separate resources/counters. A blue hourglass means running; green zZ means a stored map is ready to start. A check means daily map creation is complete, not that an adventure is running or finished. Running/ready-to-start indicators take priority. |
+| Taming | The selected expedition and Pet Snacks are shown together. Claim collects expedition loot. A yellow shaking egg identifies ready Hatchery/Ranch eggs; the loot Claim button does not hatch them. |
+| Attunement | Region and selected skill icons sit together, followed by a subtle divider and right-aligned Tribute balances. These are supplies, not claimable loot totals. Claim collects selected slots’ loot. Amber warns about low Tribute independently of the collection control. |
+| Guild event | Green hourglass: available. Blue hourglass: your contribution is active, with your participation timer. Green check: your contribution time is over; the countdown now describes the overall event. Amber hourglass: cooldown, with time until the next event and its type. |
+| Guild trials | Blue hourglass: your trial participation is active. Green check: trials are available to join or completed—read the row text. Amber hourglass: the observed participation timer has expired. Your participation deadline is separate from the guild trial-period deadline. |
 
-The Current Action adventure icon appears only while training the running map’s skill. The Adventure status row continues to show the map and countdown when training a different skill.
+Guild indicators are gray when unavailable and dashed gray when participation needs checking. Open Guild Events or Trials to update them. Low RP and Tribute warnings can appear alongside an active indicator and do not mean the activity has stopped. Only matching skills receive the adventure, event and trial badges in Current Action.
 
-Cached data and local calculations take priority over hidden lookups. Opening native pages updates their snapshots. Old but usable records are retained without automatic refresh; known timers and automation production continue to be calculated locally. Hidden reads are reserved for missing or incompatible data with cache lookups enabled, or an explicit refresh. Requested claims may open the native page needed to perform the action.
+Linked rows open their native game pages; Daily quest preferences are in Settings. Disabled Claim controls can indicate automation is off, no eligible work is known, or an operation is already processing. Expand a row in the in-game Guide to see its actual icon designs beside these explanations.
 
-## Dashboard options
+## Potions and House production
 
-The options button in the Status card opens a compact menu grouped into Display, Automation & data, Potions, Challenges, and a collapsible Daily quests section. Settings save automatically. On phones, sections use their full content height inside a scrolling menu, with full-width selection fields and larger touch targets. The heading and Done button remain visible while scrolling.
+Potions separate equipped quantities from stored inventory. **Settings → Potions** adds Regular, Super, Divine or All types. This changes the display; it does not buy, equip or drink anything.
 
-Enable **Icons beside money** under **Display** to move the complete Current Action indicator group to the left of the money in the main header while viewing Status. Disable it to return the icons to Current Action. Skill and bonus eligibility rules stay the same in either position.
+The **Automations** panel lists Structure, Making, Loot and Queued. Production and queue values are projected from the last observed state, rather than fetched on every tick. Its age describes that snapshot. Visit House after changing a recipe or queue. Claim collects the structures through the game; see [automations and recaps](automations.md).
 
-## Debug panel
+## Warnings and settings
 
-Enable **Debug** under **Dashboard options > Automation & data** to show a separate panel below the dashboard. The setting is saved and defaults to off. Expand sections to inspect live and calculated values, raw cache records, or recent background page activity.
+| Setting | Default / behavior |
+| --- | --- |
+| Queue warning | Amber below 60 minutes; red below 10. |
+| Material warning | Amber below 1,000; red below 500 of an individual material. |
+| Low RP / regional Tribute | Warn below 10,000. |
+| Show multiplayer control | Shows Ironwood’s native Multiplayer menu; does not open it. |
+| Debug | Shows tracked values, cache observations and background-page activity. Off by default. |
 
-Each cached source shows its last write, original snapshot time, and next refresh or trigger. Writes from reliable local count updates are recorded separately from the original full snapshot. Existing older records fall back to their recorded snapshot time until their next write. Cache age limits are shown for diagnosis and do not schedule lookups. The panel identifies disabled lookups, pending startup checks, active background reads, and data waiting for natural navigation or a fallback trigger. Background page history covers the latest 20 reads in the current page session; the version checker shows its separate due time.
+Set warning thresholds under **Settings → Warnings**. Zero disables a threshold; disabling amber also disables its urgent level. Low supplies are separate from whether an activity is running or claimable. Unknown balances do not trigger low-balance warnings.
 
-Debug refreshes at most once per second while Status is visible, renders full values only for expanded sections, and triggers no background lookups of its own. Turning it off removes the panel and stops its rendering work.
+Settings use full-width sections on mobile, with scrolling content and a persistent heading and Done control. The native Traits page is also grouped by region while keeping each skill’s traits together.
+
+## Saved data, versions and help
+
+Usable cached information stays available even when old. Known countdowns and production advance locally; normal game navigation supplies new observations. Background reads are a fallback for missing or incompatible data, or an explicit refresh, and require the lookup switch. Daily automation and requested claims have their own workflows. See [cache and refresh](cache-and-refresh.md).
+
+The small subtitle under Status shows the installed version and latest known public version, including when a local build is ahead. A green arrow beside money appears only when the public release is newer. Tampermonkey manages installation through Greasy Fork; the indicator only reports availability.
+
+For missing values, disabled claims or synchronization failures, use [troubleshooting](troubleshooting.md). The Debug panel can show the last observation, local writes and the next known trigger without initiating a lookup of its own.

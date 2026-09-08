@@ -1,8 +1,43 @@
   const routeWrapper = () => document.querySelector('app-component > .scroll > .padding > .wrapper');
 
+  function installHeaderTools() {
+    const header = document.querySelector('header-component > .header');
+    if (!header) return;
+    if (document.querySelector('#iw-header-tools')) { syncHeaderToolbar(header); return; }
+    const host = document.createElement('span');
+    host.id = 'iw-header-tools';
+    host.setAttribute('role', 'group');
+    host.setAttribute('aria-label', 'Ironwood Status');
+    host.innerHTML = `<button type="button" data-guide-modal aria-label="Ironwood Status guide" title="Ironwood Status guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v15M12 5C9 3 5 3 2 4v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1Z"></path></svg></button><button type="button" data-quest-modal aria-label="Dashboard options" title="Dashboard options"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h5m4 0h7M4 12h9m4 0h3M4 18h2m4 0h10"></path><circle cx="11" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="8" cy="18" r="2"></circle></svg></button>`;
+    const coins = header.querySelector('.coins');
+    if (coins) coins.after(host);
+    else header.appendChild(host);
+    syncHeaderToolbar(header);
+  }
+
+  function syncHeaderToolbar(header) {
+    const coins = header.querySelector('.coins');
+    const tools = header.querySelector('#iw-header-tools');
+    if (!coins || !tools) return;
+    let bar = header.querySelector('#iw-header-bar');
+    if (!bar) {
+      bar = document.createElement('span');
+      bar.id = 'iw-header-bar';
+      bar.setAttribute('role', 'group');
+      bar.setAttribute('aria-label', 'Activity, gold and dashboard controls');
+      coins.before(bar);
+    }
+    // Move the native gold button itself so its game click handler stays attached.
+    if (coins.parentElement !== bar) bar.appendChild(coins);
+    if (tools.parentElement !== bar) bar.appendChild(tools);
+    const badges = header.querySelector('#iw-header-action-badges');
+    if (badges && coins.previousElementSibling !== badges) coins.before(badges);
+  }
+
   function syncHeaderActionBadges() {
     const existing = document.querySelector('#iw-header-action-badges');
-    if (!headerIconsEnabled() || !AppState.ui.page || AppState.ui.page.hidden || !AppState.ui.headerBadgeMarkup) {
+    const summary = readHeaderActionSummary();
+    if (!AppState.ui.page?.hidden && AppState.ui.page) {
       existing?.remove();
       return;
     }
@@ -10,7 +45,7 @@
     if (!coins) return;
     const host = existing || document.createElement('span');
     if (!existing) { host.id = 'iw-header-action-badges'; host.setAttribute('aria-label', 'Current action indicators'); }
-    const markup = AppState.ui.headerBadgeMarkup;
+    const markup = renderImportantActionBadges(summary);
     if (host._iwBadgeMarkup !== markup) {
       const template = document.createElement('template');
       template.innerHTML = markup;

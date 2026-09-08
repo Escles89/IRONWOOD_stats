@@ -24,8 +24,8 @@
     };
     if (entry.state === 'Cooldown') {
       const nextEvent = nextGuildEventName(entry.eventName);
-      const detail = remaining > 0 ? `Ready in ${countdown()}` : 'Ready to start';
-      return nextEvent ? `Next: ${nextEvent} · ${detail}` : detail;
+      const detail = remaining > 0 ? `Cooldown · Ready in ${countdown()}` : 'Ready to start';
+      return nextEvent ? `${detail} · Next: ${nextEvent}` : detail;
     }
     if (remaining > 0 && entry.state === 'Participating') return `${entry.eventName || 'Guild event'} · Participating · ${formatNumber(entry.personalXp || 0)} XP · ${countdown()} remaining`;
     if (entry.state === 'Participating') return entry.stateDetail || `${entry.eventName || 'Guild event'} · Participating · ${formatNumber(entry.personalXp || 0)} XP`;
@@ -136,7 +136,8 @@
     const ownRow = participantRows.find((row) => clean(row.querySelector(':scope > .name')?.textContent) === ownName);
     const personalXp = ownRow ? numberFrom(ownRow.querySelector(':scope > .amount')?.textContent) : null;
     const participationRemaining = clean(ownRow?.querySelector(':scope > .time')?.textContent);
-    const cooldown = Boolean(cooldownRow && cooldownText);
+    const cooldown = Boolean(cooldownRow && durationMs(cooldownText) > 0);
+    if (cooldownRow && !cooldown) return false;
     const eventMenu = [...root.querySelectorAll('button.row')]
       .find(button => clean(button.querySelector(':scope > .name')?.textContent) === 'Events');
     const menuParticipation = durationMs(clean(eventMenu?.querySelector(':scope > .time')?.textContent)) > 0;

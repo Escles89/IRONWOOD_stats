@@ -18,24 +18,18 @@ test('crafting queue clock uses green, amber and red thresholds and hides withou
   h.run('queue=null; StatusRenderer.render(AppState)');
   assert.doesNotMatch(h.run('AppState.ui.headerBadgeMarkup'),/iw-queue-warning/);
 });
-test('saved header option relocates the entire indicator group, restores it when disabled, and clears on idle',()=>{
+test('Status always retains its full indicator group regardless of the legacy header preference',()=>{
   const h=setup();
-  h.run('StatusRenderer.render(AppState)');
-  assert.match(h.run('AppState.ui.page.innerHTML'),/class="iw-action-badges"/);
-  h.run("localStorage.setItem(HEADER_ICONS_KEY,'true'); StatusRenderer.render(AppState)");
-  assert.doesNotMatch(h.run('AppState.ui.page.innerHTML'),/class="iw-action-badges"/);
-  assert.match(h.run('AppState.ui.headerBadgeMarkup'),/iw-mastery-badge/);
-  assert.match(h.run('AppState.ui.headerBadgeMarkup'),/iw-active-badge/);
-  assert.match(h.run('AppState.ui.headerBadgeMarkup'),/iw-queue-warning sufficient/);
-  h.run("localStorage.setItem(HEADER_ICONS_KEY,'false'); StatusRenderer.render(AppState)");
-  assert.match(h.run('AppState.ui.page.innerHTML'),/class="iw-action-badges"/);
-  h.run('action=null; queue=null; StatusRenderer.render(AppState)');
-  assert.equal(h.run('AppState.ui.headerBadgeMarkup'),'');
+  for (const saved of ['true','false']) {
+    h.context.saved=saved;
+    h.run("localStorage.setItem(HEADER_ICONS_KEY,saved); StatusRenderer.render(AppState)");
+    assert.match(h.run('AppState.ui.page.innerHTML'),/class="iw-action-badges"/);
+  }
 });
 test('compact options retain every control and explain cache lookups accurately',()=>{
   const h=setup();h.run('StatusRenderer.render(AppState)');
-  const html=h.run('AppState.ui.page.innerHTML');
-  for(const attr of ['data-header-icons-toggle','data-potion-type-add','data-automation-toggle','data-cache-lookups-toggle','data-challenge-region','data-challenge-skill','data-multiplayer-toggle','data-debug-toggle']) {
+  const html=h.run('renderPreferences({prefs:[], automationOn:false, cacheLookupsOn:false, headerIcons:false, questSkills:[], challengePrefs:getChallengePrefs()})');
+  for(const attr of ['data-potion-type-add','data-automation-toggle','data-cache-lookups-toggle','data-challenge-region','data-challenge-skill','data-challenge-buy-toggle','data-challenge-buy-price','data-multiplayer-toggle','data-debug-toggle']) {
     assert.equal(html.split(attr).length-1,1,attr);
   }
   assert.match(html,/aria-labelledby="iw-options-title"/);

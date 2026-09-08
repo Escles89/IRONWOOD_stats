@@ -78,7 +78,7 @@
         .find((button) => clean(button.textContent) === 'Estimates' && !button.disabled);
       estimatesTab?.click();
     }
-    const xpPerHour = numberFrom(xpHourRow?.children[1]?.textContent || xpHourRow?.textContent);
+    const xpPerHour = parseCompact(xpHourRow?.children[1]?.textContent || xpHourRow?.textContent);
     const combatTranslate = fill?.style.transform?.match(/translateX\((-?[\d.]+)%\)/i);
     const actionProgress = isCombat && combatTranslate
       ? Math.max(0, Math.min(100, 100 + Number(combatTranslate[1])))
@@ -146,8 +146,8 @@
     if (!card) return [];
     return [...card.querySelectorAll(':scope > .row')].map((row) => ({
       name: clean(row.querySelector(':scope > .name')?.textContent) || 'Unknown item',
-      amount: numberFrom(row.querySelector(':scope > .amount')?.textContent),
-      worth: numberFrom(row.querySelector(':scope > .worth')?.textContent),
+      ...readItemQuantity(row.querySelector(':scope > .amount')),
+      worth: parseCompact(row.querySelector(':scope > .worth')?.textContent),
       image: row.querySelector(':scope > .image img')?.src || ''
     }));
   }
@@ -171,7 +171,8 @@
       return {
         name: clean(row.querySelector(':scope > .name')?.textContent),
         image: row.querySelector(':scope > .image img')?.src || '',
-        available: pair ? parseCompact(pair[1]) : parseCompact(amountText)
+        available: pair ? parseCompact(pair[1]) : parseCompact(amountText),
+        approximate: quantityIsApproximate({amountText:pair ? pair[1] : amountText})
       };
     }).filter((item) => item.name);
   }

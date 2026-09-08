@@ -1,22 +1,45 @@
 # Cache and refresh
 
-Live action and loot come from the current native skill page. Other panels use remembered information from native pages. When **Enable cache lookups** is off, no background information page opens; manually opening a native page still updates its remembered values.
+Status prefers information already available in the game, then reliable local calculations. **Allow fallback lookups** controls background information pages. It starts off; visiting a native page still updates saved information while it is disabled.
 
-When lookups are on, missing or expired information refreshes automatically. Structure values continue to project locally between refreshes. Expired values may remain visible as a reference while lookups are off.
+## What updates a value?
 
-| Data | Source | Normal refresh |
+| Source | Examples | Behavior |
 | --- | --- | --- |
-| Quests | `/quests` | Daily or when missing |
-| Inventory | `/inventory` | Hourly |
-| Equipped consumables | `/equipment` | Once when missing; afterward updated passively from the live action or Equipment page |
-| Adventure and maps | `/adventure` | Daily at the 02:00 CET reset, after map automation, or when missing |
-| Challenges | `/challenges` | Daily at the 02:00 CET reset, after a challenge run, or when missing; background lookup is skipped while the cached Scroll count is zero |
-| Taming | `/skill/15` | Hourly when checked, after collection, or passively when opened manually |
-| Automations | House → Automate | Once when missing, passively when opened manually, then locally projected from each structure's own capture time until the longest queue should finish (at most 24 hours). The table age reflects the oldest structure snapshot. |
-| Attunement | `/attunement` | Every four hours (at most six automatic lookups per day) |
-| Guild event | `/guild` → Events | Hourly while participating to update personal earned XP; otherwise at the known state expiry (24-hour fallback) |
-| Guild trials | `/guild` → Trials | Hourly while active; otherwise at the known state expiry (24-hour fallback) |
+| Visible game interface | Current action, loot, equipped supplies | Reads what the native page has rendered. |
+| Natural navigation | Inventory, Adventure, Guild, Taming | Updates the saved snapshot as the native page loads. |
+| Local calculations | Known countdowns, House production, confirmed loot additions | Advances from observed data without opening another page. |
+| Requested claim | Challenges, Attunement, Taming, House | Opens or uses the native controls required for that action and confirms the result. |
+| Fallback read | Missing or incompatible snapshots | Allowed only when fallback lookups are enabled. |
+| Explicit refresh | User-requested cache synchronization | Requires fallback lookups and can reload otherwise usable snapshots. |
 
-Daily Quest, Adventure, and Challenge resets use the game's fixed 02:00 CET boundary. Countdown displays generally use hours and minutes; revive timers also show seconds.
+**Age alone does not schedule a lookup.** Usable old snapshots remain visible. There is no routine hourly Inventory or four-hourly Attunement refresh. A known timer can expire locally, but expiration alone does not prove a new game state; open the corresponding page to confirm it.
 
-The modular release starts a fresh data cache. Expect some panels to show unknown information until you visit their native pages or enable cache lookups. Automation, lookup, quest, challenge, and interface preferences are preserved.
+## Where to update each panel
+
+| Panel | Native page |
+| --- | --- |
+| Inventory and stored potions | Inventory |
+| Equipped supplies | Current skill or Equipment |
+| Daily quests | Quests |
+| Adventure, RP and maps | Adventure, including the running map details |
+| Challenges and auto-complete allowance | Challenges |
+| Taming loot, Pet Snacks and eggs | Taming; Hatchery or Ranch for their timers |
+| House production | House → Automate |
+| Regional Tribute and selected skills | Attunement |
+| Event contribution | Guild → Events |
+| Trial participation | Guild → Trials |
+
+Daily quests and map creation are a separate scheduled workflow. With **both** switches enabled, pending daily work can open its native page, while completed work waits for the next reset. Failed or incomplete attempts wait at least 15 minutes before retrying. RP/storage shortages wait for a new native observation or daily reset. See [automations](automations.md).
+
+## Accuracy and synchronization
+
+Exact native quantities are retained where available, even if the display uses K or M. Rounded text alone is not treated as an exact count. Unknown values remain unknown until a usable observation arrives.
+
+Confirmed loot claims add quantities locally, and visible material use reduces supplies. A normal Inventory visit reconciles spending and trading. Challenge and Attunement batches synchronize the main game before their recap; a failure to sync is reported separately from accepted rewards. Taming collection restores the running skill page before returning to Status.
+
+## Debug
+
+Enable **Debug** in Settings to inspect live values, saved snapshots, local writes and recent background-page activity. Snapshot time and cache-write time can differ: updating a balance locally does not pretend a full page was just read. Listed age limits are diagnostic, not a promise of scheduled polling.
+
+Debug updates at most once per second while visible. Only expanded sections render full details. Opening it performs no additional lookups.

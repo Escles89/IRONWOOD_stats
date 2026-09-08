@@ -49,6 +49,30 @@
     const multiplier = /K/i.test(raw) ? 1e3 : /M/i.test(raw) ? 1e6 : /B/i.test(raw) ? 1e9 : 1;
     return Math.round(parseFloat(raw) * multiplier);
   }
+  function quantityIsApproximate(item) {
+    return Boolean(item?.approximate || /[\d.]\s*[KMB]\b/i.test(String(item?.amountText || item?.amount || '')));
+  }
+  function formatItemQuantity(item) {
+    const amount = item?.amount ?? 0;
+    return quantityIsApproximate(item) ? formatCompact(amount) : formatNumber(amount);
+  }
+  function formatQuantityMarkup(item) {
+    const full = formatItemQuantity(item);
+    const compact = formatCompact(item?.amount ?? 0);
+    const parts = compact.match(/^(.*?)([KMB])$/i);
+    if (!parts) return escapeHtml(full);
+    const compactMarkup = `${escapeHtml(parts[1])}<small class="iw-quantity-suffix">${parts[2]}</small>`;
+    return `<span class="iw-quantity-display" title="${escapeHtml(full)}" aria-label="${escapeHtml(full)}"><span class="iw-quantity-full" aria-hidden="true">${quantityIsApproximate(item) ? compactMarkup : escapeHtml(full)}</span><span class="iw-quantity-compact" aria-hidden="true">${compactMarkup}</span></span>`;
+  }
+  function readItemQuantity(element) {
+    const text = clean(element?.textContent);
+    // Only numeric metadata on the quantity itself can supply missing digits.
+    // Never infer a count from a surrounding price, name, or rounded label.
+    const exact = [text, element?.getAttribute?.('title'), element?.getAttribute?.('aria-label')]
+      .map(value => clean(value)).find(value => /^\d[\d,]*$/.test(value));
+    const amountText = exact || text;
+    return { amount: parseCompact(amountText), amountText, approximate: !exact };
+  }
   function durationMs(text) {
     const units = { d: 86400000, h: 3600000, m: 60000, s: 1000 };
     return [...clean(text).matchAll(/([\d.]+)\s*([dhms])/gi)].reduce((sum, match) => sum + Number(match[1]) * units[match[2].toLowerCase()], 0);

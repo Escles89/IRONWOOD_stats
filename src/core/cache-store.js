@@ -43,13 +43,16 @@
       entry.researchPoints, entry.mapCost, entry.dailyMapsCreated,
       entry.dailyMapsLimit, entry.mapsStored, entry.mapStorageLimit
     ].some((value) => typeof value !== 'number' || !Number.isFinite(value)));
-    const incompleteGuildEvent = key === 'guildEvent' && entry?.schema !== 9;
+    // An ended event cannot describe the next event/cooldown. Unlike an age
+    // limit, this is a known state boundary that requires a new observation.
+    const incompleteGuildEvent = key === 'guildEvent' && (entry?.schema !== 9
+      || (entry.state !== 'Cooldown' && Number.isFinite(entry.eventEndsAt) && entry.eventEndsAt <= Date.now()));
     const incompleteGuildTrial = key === 'guildTrial' && (entry?.schema !== 4 || entry.state === 'Unknown');
     const guildTrialRefreshDue = !ignoreAge && key === 'guildTrial' && entry && Number.isFinite(entry.refreshAt) && Date.now() >= entry.refreshAt;
     const incompleteQuests = key === 'quests' && (entry?.schema !== 2 || (!ignoreAge && getPrefs().length === 5 && entry?.day === dayKey() && !entry.dailyComplete));
     const incompleteAttunement = key === 'attunement' && entry?.schema !== 3;
     const incompleteMastery = key === 'mastery' && entry?.schema !== 1;
-    const incompleteChallenges = key === 'challenges' && (entry?.schema !== 4 || !Number.isFinite(entry.scrollsAvailable) || !Number.isFinite(entry.autoCompletesRemaining));
+    const incompleteChallenges = key === 'challenges' && (entry?.schema !== 4 || (!['blocked', 'active', 'reward'].includes(entry.phase) && (!Number.isFinite(entry.scrollsAvailable) || !Number.isFinite(entry.autoCompletesRemaining))));
     const incompleteTaming = key === 'taming' && entry?.schema !== 2;
     const incompleteAutomations = key === 'automations' && entry?.schema !== 4;
     return !entry || !Number.isFinite(entry.checkedAt) || incompleteAdventure || incompleteGuildEvent || incompleteGuildTrial || guildTrialRefreshDue || incompleteQuests || incompleteAttunement || incompleteMastery || incompleteChallenges || incompleteTaming || incompleteAutomations || (key === 'inventory' && !Array.isArray(entry.allItems)) || (!ignoreAge && ((entry.expiresAt ? Date.now() >= entry.expiresAt : Date.now() - entry.checkedAt > TTL[key]) || (key === 'quests' && entry.day !== dayKey())));

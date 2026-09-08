@@ -14,6 +14,10 @@
       let next = 'No timed refresh; native navigation or confirmed local changes';
       if (active) next = 'Background page running now';
       else if (!cacheLookupsEnabled()) next = 'Background lookups disabled; native navigation or local changes';
+      else if (['quests', 'adventure'].includes(key) && automationEnabled()) {
+        const daily = dailyAutomationStatus(key, now);
+        next = `${daily.reason}${daily.nextAt ? ` (${debugTime(daily.nextAt)})` : ''}`;
+      }
       else if (!usable && AppState.ui.startupSyncAt > now) next = `Startup fallback check at ${debugTime(AppState.ui.startupSyncAt)}`;
       else if (!usable && AppState.ui.syncing) next = 'Current sync pass may request missing data';
       else if (!usable) next = 'Missing/unusable data; fallback on next dashboard/source open or manual refresh';
@@ -51,6 +55,8 @@
       potions: AppState.derived.displayedPotions,
       automations: (getCache().automations?.structures || []).map(item => projectedAutomation(item, getCache().automations.checkedAt)) };
     const runtime = { route: location.pathname, syncing: ui.syncing, pendingSources: [...ui.pendingActions.keys()], automationTask: ui.automationTask,
+      nativeGameSync: { ...ui.nativeSync, trigger: 'Once after a challenge or Attunement batch that attempted a game action' },
+      nativeQuantityPrecision: ui.quantityPrecision.installed ? 'Full precision enabled' : 'DOM fallback; rounded source values retained',
       backgroundLookupsEnabled: cacheLookupsEnabled(), startupFallbackCheckAt: ui.startupSyncAt ? debugTime(ui.startupSyncAt) : 'Already triggered; no repeating cache refresh scheduled',
       versionCheck: { installed: USERSCRIPT_VERSION, public: scriptUpdate.latestVersion, running: Boolean(scriptUpdate.pending),
         next: scriptUpdate.nextCheckAt ? debugTime(scriptUpdate.nextCheckAt) : 'Next visible-page check', polling: 'Every minute while visible; check only when due' },
