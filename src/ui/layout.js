@@ -56,6 +56,23 @@
     if (coins.previousElementSibling !== host) coins.before(host);
   }
 
+  function renderCacheRefreshButton() {
+    const busy = Boolean(AppState.ui.syncing);
+    const label = busy ? 'Refreshing cached data' : 'Refresh all cached data';
+    return `<button type="button" id="iw-cache-refresh" data-refresh-all-caches class="${busy ? 'iw-refreshing' : ''}" aria-label="${label}" title="${label}" aria-busy="${busy}" ${busy ? 'disabled' : ''}>${renderActionSpinner()}</button>`;
+  }
+
+  function syncCacheRefreshButton() {
+    const button = document.querySelector('#iw-cache-refresh');
+    if (!button) return;
+    const busy = Boolean(AppState.ui.syncing);
+    button.disabled = busy;
+    button.classList.toggle('iw-refreshing', busy);
+    button.setAttribute('aria-busy', String(busy));
+    button.setAttribute('aria-label', busy ? 'Refreshing cached data' : 'Refresh all cached data');
+    button.title = busy ? 'Refreshing cached data…' : 'Refresh all cached data';
+  }
+
   function setStatusHeader(active) {
     const header = document.querySelector('header-component > .header');
     const title = header?.querySelector('.title');
@@ -114,6 +131,30 @@
     }
     await primeNativeEstimates();
     showStats({ push: true });
+  }
+
+  async function recoverStatusActionView() {
+    if (location.pathname !== STATS_PATH || AppState.ui.recoveringActionView || AppState.ui.collectingLoot || AppState.ui.collectingTaming
+      || !AppState.live.actionRebuildStartedAt || Date.now() - AppState.live.actionRebuildStartedAt < 1500
+      || Date.now() - (AppState.ui.lastActionViewRecovery || 0) < 10000) return;
+    const shortcut = document.querySelector('nav-component action-component button.button, nav-component combat-component button.button');
+    if (!shortcut) return;
+    AppState.ui.recoveringActionView = true;
+    AppState.ui.lastActionViewRecovery = Date.now();
+    try {
+      const route = AppState.ui.previousUrl.split(/[?#]/)[0];
+      shortcut.click();
+      const started = Date.now();
+      while (Date.now() - started < 5000) {
+        if (location.pathname !== route && location.pathname !== STATS_PATH) return; // Respect navigation during recovery.
+        if (document.querySelector('skill-page action-component > .card .bars .fill, skill-page combat-component .interface.monster, skill-page combat-component > .card')) break;
+        await wait(100);
+      }
+      if (location.pathname !== route && location.pathname !== STATS_PATH) return;
+      showStats({ push: false });
+      history.replaceState({ iwStats: true }, '', STATS_PATH);
+    } catch (error) { console.error('[Ironwood Status] Action view recovery failed', error); }
+    finally { AppState.ui.recoveringActionView = false; }
   }
 
   function hideStats() {

@@ -122,3 +122,64 @@ test('native revive state with an idle action card uses the retained combat snap
   assert.equal(action.name, 'Treant');
   assert.equal(action.reviveRemainingMs, 20000);
 });
+
+
+test('a level-up rebuild retains a matching running action and resources, then reads the new level', () => {
+  const h = harness({ document: nativeFixture(), location: { pathname: '/skill/1/action/1005' } });
+  h.run('SourceAdapter.capture(document)');
+  const shortcut = element('', { '.details > .name': element('Ancient Tree'), '.details > .skill': element('Woodcutting') });
+  h.context.document = element('', {
+    'nav-component action-component button.button, nav-component combat-component button.button': shortcut,
+    'skill-page action-component > .card': element('Ancient Tree')
+  });
+  h.time(100250);
+  const rebuilding = h.run('SourceAdapter.capture(document)');
+  assert.equal(rebuilding.action.nativeRebuilding, true);
+  assert.equal(rebuilding.action.name, 'Ancient Tree');
+  assert.equal(rebuilding.loot[0].amount, 1234);
+  h.time(105000);
+  assert.equal(h.context.readCurrentAction().name, 'Ancient Tree');
+  const restored = nativeFixture();
+  const tracker = restored.querySelector('skill-page tracker-component .skill');
+  tracker.querySelector('.header .level').textContent = 'Lv. 124';
+  tracker.querySelector('.percent').textContent = '1%';
+  h.context.document = restored;
+  const action = h.run('SourceAdapter.capture(document).action');
+  assert.equal(action.skillLevel, 'Lv. 124');
+  assert.equal(action.skillProgress, 1);
+  assert.equal(action.nativeRebuilding, undefined);
+  assert.equal(h.run('AppState.live.actionRebuildStartedAt'), 0);
+});
+
+test('a stopped, changed or differently routed action cannot reuse the retained snapshot', () => {
+  const h = harness({ document: nativeFixture(), location: { pathname: '/skill/1/action/1005' } });
+  h.run('SourceAdapter.capture(document)');
+  h.context.document = element();
+  assert.equal(h.context.readCurrentAction(), null);
+  const shortcut = element('', { '.details > .name': element('Other Tree'), '.details > .skill': element('Woodcutting') });
+  h.context.document = element('', { 'nav-component action-component button.button, nav-component combat-component button.button': shortcut });
+  assert.equal(h.context.readCurrentAction(), null);
+  shortcut.querySelector('.details > .name').textContent = 'Ancient Tree';
+  h.context.location.pathname = '/skill/1/action/2000';
+  assert.equal(h.context.readCurrentAction(), null);
+});
+
+
+test('recovery tolerates asynchronous native navigation and returns to Status without restarting the action', async () => {
+  const h = harness({ location: { pathname: '/status' } });
+  let now = 103000, clicks = 0, shown = 0, restored = '';
+  h.time(now);
+  h.run("AppState.ui.previousUrl='/skill/1/action/1005'; AppState.live.actionRebuildStartedAt=100000");
+  h.context.document = { querySelector(selector) {
+    return selector.startsWith('nav-component') ? { click() { clicks++; } }
+      : now >= 103200 ? {} : null;
+  } };
+  h.context.setTimeout = (resolve, ms) => { now += ms; h.time(now); h.context.location.pathname='/skill/1/action/1005'; resolve(); };
+  h.context.showStats = options => { assert.equal(options.push, false); shown++; };
+  h.context.history = { replaceState(_state, _title, route) { restored = route; } };
+  await h.context.recoverStatusActionView();
+  assert.equal(clicks, 1);
+  assert.equal(shown, 1);
+  assert.equal(restored, '/status');
+  assert.equal(h.run('AppState.ui.recoveringActionView'), false);
+});

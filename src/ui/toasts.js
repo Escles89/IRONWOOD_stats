@@ -117,3 +117,99 @@
       warning: [run.syncError, categories.some(category => category.xp === null || category.rewards === null || category.shards === null) ? 'Some reward details were unavailable. Missing values are marked Unknown.' : ''].filter(Boolean).join(' ')
     });
   }
+
+  // Observe the existing request subscription; never issue or subscribe to a
+  // second collection request. Only reward notifications are intercepted.
+  function observeCollectionRewards(targetWindow = globalThis, methods = []) {
+    const rewards = new Map();
+    const restores = [];
+    let confirmed = false;
+    let active = true;
+    const add = (key, reward) => {
+      if (!Number.isFinite(reward.amount) || reward.amount <= 0) return;
+      const previous = rewards.get(key);
+      rewards.set(key, { ...reward, amount: (previous?.amount || 0) + reward.amount });
+    };
+    try {
+      const runtime = findNativeSyncRuntime(targetWindow);
+      const itemReward = (id, amount) => {
+        const item = runtime.catalog?.[id];
+        return { name: item?.name || 'Item reward', image: item?.image ? `/assets/${item.image}` : '', amount };
+      };
+      const prototype = runtime.notificationComponent?.prototype;
+      if (prototype) {
+        const original = prototype.createNotifications;
+        function observed(messages) {
+          const remaining = messages.filter(message => {
+            const types = this.NotificationEnum;
+            const reward = message.type === types.Item ? itemReward(message.itemId, message.amount)
+              : message.type === types.Coin ? { name: 'Coins', icon: 'gold', amount: message.amount }
+                : message.type === types.Exp ? { name: `${this.SKILL_DATA?.[message.skillId]?.name || message.skillId} XP`, icon: 'xp', amount: message.amount } : null;
+            if (!active || !reward || !Number.isFinite(reward.amount) || reward.amount <= 0) return true;
+            const key = message.type === types.Item ? `item:${message.itemId}` : message.type === types.Coin ? 'coins' : `xp:${message.skillId}`;
+            if (!rewards.has(key)) add(key, reward);
+            return false;
+          });
+          if (remaining.length) return original.call(this, remaining);
+        }
+        prototype.createNotifications = observed;
+        restores.push(() => { if (prototype.createNotifications === observed) prototype.createNotifications = original; });
+      }
+      for (const method of methods) {
+        const original = runtime.firebase[method];
+        if (typeof original !== 'function') continue;
+        async function observed(...args) {
+          const automation = method === 'lootAutomation' ? runtime.automations?.automations?.[args[0]] : null;
+          const automationLoot = automation ? Object.entries(automation.loot || {}).map(([id, owned]) => [id, { amount: owned.amount }]) : null;
+          const response = await original.apply(this, args);
+          const Observable = response?.constructor;
+          if (typeof Observable?.prototype?.subscribe !== 'function') return response;
+          return new Observable(subscriber => response.subscribe({
+            next(value) {
+              if (active && (value?.user || (method === 'lootAutomation' && value?.inventory)) && !value.error) {
+                confirmed = true;
+                for (const [id, owned] of (automationLoot || Object.entries(value.loot || {}))) add(`item:${id}`, itemReward(id, owned?.amount));
+              }
+              subscriber.next(value);
+            },
+            error: error => subscriber.error(error), complete: () => subscriber.complete()
+          }));
+        }
+        runtime.firebase[method] = observed;
+        restores.push(() => { if (runtime.firebase[method] === observed) runtime.firebase[method] = original; });
+      }
+    } catch (error) { console.debug?.('[Ironwood Status] Collection reward observation unavailable', error.message); }
+    return { confirmed: () => confirmed, rewards: () => [...rewards.values()], restore() { active = false; restores.reverse().forEach(restore => restore()); } };
+  }
+
+  function showCollectionRecap(title, rewards = [], error = '', summary = '') {
+    const totals = new Map();
+    for (const reward of rewards) {
+      const key = `${reward.name}:${reward.image || reward.icon || ''}`;
+      const previous = totals.get(key);
+      totals.set(key, { ...reward, amount: (previous?.amount || 0) + reward.amount,
+        approximate: previous?.approximate || reward.approximate });
+    }
+    return showActionToast({ title, summary, kind: error ? 'warning' : 'success',
+      metrics: [...totals.values()].map(item => ({ image: item.image, icon: item.icon, label: item.name,
+        value: item.approximate ? `~${formatNumber(item.amount)}` : formatNumber(item.amount) })),
+      detail: error || (rewards.length ? '' : 'Collection confirmed. Reward details unavailable.') });
+  }
+
+  async function observeNativeCollection(button) {
+    if (AppState.ui.collectingTaming || AppState.ui.collectingAutomation || AppState.ui.collectingAttunementLoot || AppState.ui.nativeCollectionPending) return;
+    const taming = !!button.closest('taming-page');
+    const house = !!button.closest('home-page');
+    const methods = taming ? ['lootPetExpedition', 'claimPetExpedition'] : house ? ['lootAutomation'] : ['lootAttunement'];
+    const title = taming ? 'Taming loot' : house ? 'Automation loot' : 'Attunement';
+    const receipt = observeCollectionRewards(document.defaultView || globalThis, methods);
+    AppState.ui.nativeCollectionPending = true;
+    try {
+      const started = Date.now();
+      while (!receipt.confirmed() && Date.now() - started < 10000) await wait(100);
+      // Allow native post-response notifications to join the same recap.
+      if (receipt.confirmed()) await wait(250);
+      showCollectionRecap(receipt.confirmed() ? `${title} collected` : `${title} collection stopped`, receipt.rewards(),
+        receipt.confirmed() ? '' : 'Ironwood did not confirm collection.');
+    } finally { receipt.restore(); AppState.ui.nativeCollectionPending = false; }
+  }

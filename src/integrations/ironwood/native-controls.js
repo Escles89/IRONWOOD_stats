@@ -12,6 +12,8 @@
     if (!stopButton) return;
     AppState.ui.collectingLoot = true;
     const inventoryClaim = beginInventoryLootClaim();
+    const receipt = observeCollectionRewards(globalThis, ['stopAction']);
+    let collected = false;
     const control = AppState.ui.page?.querySelector('[data-collect-loot]');
     if (control) { control.disabled = true; setClaimButtonState(control, 'Claiming…', 'busy'); }
     try {
@@ -25,16 +27,21 @@
       }
       if (!startButton || startButton.disabled) throw new Error('Ironwood did not expose the continue-action button');
       applyInventoryLootClaim(inventoryClaim);
+      collected = true;
+      receipt.restore();
       startButton.click();
       const restart = Date.now();
       while (Date.now() - restart < 8000 && !document.querySelector('skill-page action-component > .card .bars .fill')) await wait(100);
       if (!document.querySelector('skill-page action-component > .card .bars .fill')) throw new Error('The action did not resume');
       AppState.ui.lastSignature = '';
       render();
+      showCollectionRecap('Loot collected', receipt.rewards().length ? receipt.rewards() : inventoryClaim.loot);
     } catch (error) {
+      showCollectionRecap(collected ? 'Loot collected — action did not resume' : 'Loot collection stopped', receipt.rewards().length ? receipt.rewards() : collected ? inventoryClaim.loot : [], error.message);
       console.error('[Ironwood Status] Collect and continue failed', error);
       if (control) { setClaimButtonState(control, `Retry claim: ${error.message}`, 'error'); }
     } finally {
+      receipt.restore();
       AppState.ui.collectingLoot = false;
       if (AppState.ui.pendingLootClaim === inventoryClaim) AppState.ui.pendingLootClaim = null;
       const current = AppState.ui.page?.querySelector('[data-collect-loot]');

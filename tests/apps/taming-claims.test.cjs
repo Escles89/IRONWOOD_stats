@@ -2,11 +2,11 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const harness = require('../harness.cjs');
 
-function setup({ idle = false, unavailable = false, pathname = '/status' } = {}) {
+function setup({ idle = false, unavailable = false, pathname = '/status', pending = false } = {}) {
   const h = harness({ location: { pathname }, console: { error() {} } });
   let now = 100000, route = 'skill', mountedAt = Infinity, loot = 12;
   const visits = [], shown = [];
-  const collect = { textContent: 'Collect', disabled: false, click() { loot = 0; } };
+  const collect = { textContent: 'Collect', disabled: false, click() { if (pending) this.disabled = true; else loot = 0; } };
   const expedition = {
     querySelector: selector => ({ textContent: selector.includes('.interval') ? '1h / 24h' : 'Expedition' }),
     querySelectorAll: () => [{ textContent: String(loot) }]
@@ -92,5 +92,12 @@ test('a return error releases the claim guard', async () => {
   h.context.showStatusFromCurrentAction = async () => { throw new Error('Navigation failed'); };
   await h.context.collectTamingLoot();
   assert.deepEqual(shown, []);
+  assert.equal(h.run('AppState.ui.collectingTaming'), false);
+});
+
+test('a disabled pending Taming button does not confirm a collection', async () => {
+  const { h } = setup({ pending: true });
+  await h.context.collectTamingLoot();
+  assert.equal(h.run('getCache().taming.lastError'), 'The game did not confirm the Taming loot claim');
   assert.equal(h.run('AppState.ui.collectingTaming'), false);
 });

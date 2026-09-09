@@ -122,6 +122,7 @@
           if (!collectButton) throw new Error(`Could not collect ${name}: the Collect control is unavailable.`);
           if (!automationEnabled()) throw new Error('Automation is disabled');
           const category = readAttunementRewardCategory(doc, liveSlot, name);
+          const notifications = observeCollectionRewards(frameWindow);
           let receipt;
           try { receipt = observeAttunementReward(frameWindow); }
           catch (error) { console.error('[Ironwood Status] Reward detail observation unavailable', error); }
@@ -146,7 +147,7 @@
               categories.push({ ...category, ...(reward || { xp: null, shards: null, rewards: null }) });
             }
             if (!confirmed) throw new Error(`Ironwood did not confirm collection for ${name}.`);
-          } finally { receipt?.restore(); }
+          } finally { receipt?.restore(); notifications.restore(); }
           await wait(150);
         }
         await collectAttunement(doc);

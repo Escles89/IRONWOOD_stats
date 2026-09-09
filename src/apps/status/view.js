@@ -281,7 +281,7 @@
             </div>`).join('')}</div>` : '<div class="iw-empty-loot">No loot waiting to be collected.</div>'}
         </section>`}
         <section class="iw-card iw-activity-card">
-          <div class="iw-card-header"><span>Status</span></div>
+          <div class="iw-card-header"><span>Status</span>${renderCacheRefreshButton()}</div>
           <div class="iw-status-list">
             <div class="iw-status-row iw-status-link" data-route="/challenges" role="link" tabindex="0"><img src="/assets/items/challenge-scroll.png"><span><b>Challenges</b><small class="iw-status-skill-details iw-challenge-details"><span class="iw-challenge-selection">${renderRegionIcon(challengePrefs.region)}${renderStatusSkillIcon(challengePrefs.skill)}</span><span class="iw-challenge-scrolls" title="Challenge scrolls" aria-label="Challenge scrolls: ${escapeHtml(resourceAmount(cache.challenges?.scrollsAvailable))}"><img src="/assets/items/challenge-scroll.png" alt="" aria-hidden="true"><span aria-hidden="true">${escapeHtml(resourceAmount(cache.challenges?.scrollsAvailable))}</span></span></small>${challengeError ? `<small class="iw-challenge-error">${escapeHtml(challengeError)}</small>` : ''}</span>${challengeIndicator}</div>
             <div class="iw-status-row"><img src="/assets/misc/quests.png"><span><b>Daily quests</b><small class="iw-quest-progress" title="Daily quests completed today"><img src="/assets/misc/quests.png" alt="Daily quests completed today"><span>${Math.min(cache.quests?.completed || 0, 5)}/5</span></small></span>${taskIndicator('quests', dailyQuestComplete, 'Pending')}</div>

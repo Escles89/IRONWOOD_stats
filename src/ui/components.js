@@ -23,7 +23,7 @@
     AppState.ui.lastSignature = '';
   }
   function cacheLookupsEnabled() {
-    return localStorage.getItem(CACHE_LOOKUPS_KEY) === 'true';
+    return Boolean(AppState.ui.manualCacheRefresh) || localStorage.getItem(CACHE_LOOKUPS_KEY) === 'true';
   }
   function setCacheLookupsEnabled(enabled) {
     localStorage.setItem(CACHE_LOOKUPS_KEY, enabled ? 'true' : 'false');

@@ -12,7 +12,7 @@
       if (typeof factory !== 'function') continue;
       const source = Function.prototype.toString.call(factory);
       if (source.includes('.bootstrapModule(')) continue;
-      if (['Platform: ', 'syncUser(', 'getUser(', 'handleActionSync(', 'handleAutomationSync(', 'handleExpeditionSync(', 'items/challenge-scroll.png'].some(marker => source.includes(marker))) candidates.add(id);
+      if (['Platform: ', 'syncUser(', 'getUser(', 'handleActionSync(', 'handleAutomationSync(', 'handleExpeditionSync(', 'items/challenge-scroll.png', 'createNotifications('].some(marker => source.includes(marker))) candidates.add(id);
     }
     let runtime;
     chunks.push([[`iw-status-state-sync-${Date.now()}-${++nativeSyncRuntimeSequence}`], {}, requireModule => {
@@ -33,6 +33,7 @@
         state: service('syncUser'), firebase: service('getUser'), action: service('handleActionSync'),
         automations: service('handleAutomationSync'), expedition: service('handleExpeditionSync'),
         zone: Zone && injector.get(Zone, null),
+        notificationComponent: exports.find(value => typeof value?.prototype?.createNotifications === 'function'),
         catalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.image === 'items/challenge-scroll.png'))
       };
     }]);

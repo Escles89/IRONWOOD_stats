@@ -63,6 +63,7 @@ test('Status header shows the build version once and restores the native title w
   const header = { querySelector: selector => selector === '.title' ? title : image };
   const document = { querySelector: () => header, querySelectorAll: () => [], createElement: () => new Element() };
   const h = harness({ document });
+  h.run('syncCacheRefreshButton=()=>{}');
   h.context.setStatusHeader(true);
   h.context.setStatusHeader(true);
   assert.equal(title.dataset.iwVersion, `v${require('../../package.json').version}`);

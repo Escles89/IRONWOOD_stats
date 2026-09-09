@@ -1,6 +1,9 @@
   function createAppState() {
     return {
       live: { action: null, loot: [], consumables: [], materials: [], combatants: [], observations: {},
+        lastNativeAction: null,
+        lastNativeActionRoute: null,
+        actionRebuildStartedAt: 0,
         lastCombatAction: null,
         lastCombatSeenAt: 0,
         previousLootValues: new Map(),
@@ -55,6 +58,7 @@
         collectingAutomation: '',
         tamingClaimNoticeUntil: 0,
         syncing: false,
+        manualCacheRefresh: false,
         page: null,
         navButton: null
       }

@@ -21,7 +21,7 @@
       .iw-location-badge img, .iw-mastery-badge img { position:absolute; top:50%; left:50%; display:block; width:19px; height:19px; object-fit:contain; transform:translate(-50%,-50%); }
       .iw-mastery-badge { color:#a8b2bc; background:rgba(135,149,162,.045); border-color:rgba(154,168,181,.42); box-shadow:inset 0 0 0 1px rgba(220,228,235,.025); }
       .iw-mastery-badge img { filter:grayscale(1); opacity:.42; }
-      .iw-mastery-badge.achieved { color:#ffe28a; background:rgba(238,181,48,.11); border-color:#e8b43e; box-shadow:inset 0 0 0 1px rgba(255,239,173,.06),0 0 8px rgba(232,180,62,.24); }
+      .iw-mastery-badge.achieved { color:#ffe28a; background:rgba(238,181,48,.11); border-color:#e8b43e; box-shadow:inset 0 0 0 1px rgba(255,239,173,.06),0 0 8px rgba(232,180,62,.32),0 0 12px rgba(232,180,62,.14); animation:iw-mastery-badge-glow 4.5s ease-in-out infinite; }
       .iw-mastery-badge.achieved img { filter:none; opacity:1; }
       .iw-location-badge.outskirts { color:#ffc17f; background:rgba(255,145,61,.08); border-color:#ff913d; box-shadow:inset 0 0 0 1px rgba(255,205,156,.04),0 0 7px rgba(255,120,42,.16); }
       .iw-location-badge.dungeon { color:#ffc17f; background:rgba(255,145,61,.08); border-color:#ff913d; box-shadow:inset 0 0 0 1px rgba(255,205,156,.04),0 0 7px rgba(255,120,42,.16); }
@@ -29,6 +29,9 @@
       .iw-active-badge { color:#78efa9; background:rgba(56,221,137,.08); border-color:#38dd89; box-shadow:inset 0 0 0 1px rgba(195,255,217,.04),0 0 7px rgba(42,220,130,.16); }
       .iw-active-badge .iw-spin { position:absolute; top:50%; left:50%; width:17px; height:17px; margin:-8.5px 0 0 -8.5px; }
       .iw-adventure-badge, .iw-guild-event-badge, .iw-guild-trial-badge { display:grid; place-items:center; background:rgba(68,171,221,.12); border-color:#4fb7e5; box-shadow:inset 0 0 0 1px rgba(198,239,255,.04),0 0 7px rgba(79,183,229,.18); }
+      .iw-adventure-badge, .iw-guild-event-badge, .iw-guild-trial-badge { box-shadow:inset 0 0 0 1px rgba(198,239,255,.06),0 0 8px rgba(79,183,229,.32),0 0 12px rgba(79,183,229,.14); animation:iw-bonus-badge-glow 4.5s ease-in-out infinite; }
+      .iw-material-warning:not(.sufficient), .iw-queue-warning:not(.sufficient) { animation:iw-warning-badge-glow 1.8s ease-in-out infinite; }
+      .iw-material-warning.urgent, .iw-queue-warning.urgent { animation-name:iw-death-badge-glow; }
       .iw-adventure-badge img, .iw-guild-event-badge img, .iw-guild-trial-badge img { width:20px; height:20px; object-fit:contain; image-rendering:auto; }
       .iw-material-warning, .iw-queue-warning { color:#ffd078; background:rgba(231,164,45,.09); border-color:#e7a42d; box-shadow:inset 0 0 0 1px rgba(255,222,153,.04),0 0 8px rgba(231,164,45,.2); }
       .iw-material-warning.urgent, .iw-queue-warning.urgent { color:#ff8d87; background:rgba(230,72,65,.1); border-color:#ed5a52; box-shadow:inset 0 0 0 1px rgba(255,190,184,.04),0 0 8px rgba(237,90,82,.22); }
@@ -39,6 +42,10 @@
       .iw-active-badge .iw-spin-motion { animation-duration:1.15s; }
       @media (prefers-reduced-motion:reduce) { .iw-task-icon .iw-spin-motion { animation:none; } }
       @keyframes iw-spin { from { transform:translateZ(0) rotate(0deg); } to { transform:translateZ(0) rotate(360deg); } }
+      @keyframes iw-bonus-badge-glow { 0%,100% { box-shadow:inset 0 0 0 1px rgba(198,239,255,.06),0 0 8px rgba(79,183,229,.32),0 0 12px rgba(79,183,229,.14); } 50% { box-shadow:inset 0 0 0 1px rgba(198,239,255,.06),0 0 12px rgba(79,183,229,.32),0 0 20px rgba(79,183,229,.14); } }
+      @keyframes iw-warning-badge-glow { 0%,100% { filter:brightness(.95); box-shadow:inset 0 0 0 1px rgba(255,222,153,.06),0 0 7px rgba(231,164,45,.25); } 50% { filter:brightness(1.18); box-shadow:inset 0 0 0 1px rgba(255,222,153,.1),0 0 14px rgba(231,164,45,.5),0 0 24px rgba(231,164,45,.18); } }
+      @keyframes iw-mastery-badge-glow { 0%,100% { box-shadow:inset 0 0 0 1px rgba(255,239,173,.06),0 0 8px rgba(232,180,62,.32),0 0 12px rgba(232,180,62,.14); } 50% { box-shadow:inset 0 0 0 1px rgba(255,239,173,.06),0 0 12px rgba(232,180,62,.32),0 0 20px rgba(232,180,62,.14); } }
+      @media (prefers-reduced-motion:reduce) { .iw-mastery-badge.achieved, .iw-revive-badge, .iw-adventure-badge, .iw-guild-event-badge, .iw-guild-trial-badge, .iw-material-warning:not(.sufficient), .iw-queue-warning:not(.sufficient) { animation:none; } }
       @keyframes iw-death-badge-glow { 0%,100% { filter:brightness(.95); box-shadow:inset 0 0 0 1px rgba(255,180,170,.06),0 0 7px rgba(235,72,62,.25); } 50% { filter:brightness(1.18); box-shadow:inset 0 0 0 1px rgba(255,180,170,.1),0 0 14px rgba(235,72,62,.5),0 0 24px rgba(235,72,62,.18); } }
       .iw-action-body { display:flex; flex-direction:column; gap:8px; min-width:0; padding:10px 12px; }
       .iw-action-heading { display:flex; align-items:center; gap:12px; min-width:0; }
@@ -794,3 +801,11 @@
       .iw-guide-frozen-combat .iw-fighter-visual::before { display:none; }
       .iw-guide-frozen-combat .iw-card-header { flex-wrap:wrap; }
       .iw-guide-frozen-combat .iw-floating-heal::before { opacity:1; }
+
+      #iw-stats-page #iw-cache-refresh { display:inline-grid; place-items:center; flex:0 0 25px; width:25px; min-width:25px; height:25px; min-height:25px; box-sizing:border-box; margin-left:8px; padding:0; border:1px solid #50717d; border-radius:4px; background:#12303c; color:#b9dce5; cursor:pointer; }
+      #iw-stats-page #iw-cache-refresh .iw-spin { position:static; width:15px; height:15px; margin:0; animation:none; }
+      #iw-stats-page #iw-cache-refresh .iw-spin-motion { animation:none; will-change:auto; }
+      #iw-stats-page #iw-cache-refresh.iw-refreshing .iw-spin-motion { animation:iw-spin 1s linear infinite; }
+      #iw-stats-page #iw-cache-refresh:disabled { cursor:wait; color:#77cef7; }
+      #iw-stats-page #iw-cache-refresh:hover:not(:disabled) { background:#1b4352; border-color:#89bdca; }
+      #iw-stats-page #iw-cache-refresh:focus-visible { outline:2px solid #8ad6ff; outline-offset:2px; }

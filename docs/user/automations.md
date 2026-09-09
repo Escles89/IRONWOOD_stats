@@ -53,3 +53,9 @@ Attunement claims also synchronize the main game before their recap, so opening 
 Attunement recaps group confirmed XP, item rewards and skill-specific shards by region and skill (for example, Forest · Farming). Each item uses its game icon and exact count. XP appears beside each skill header with a dedicated XP icon; overall XP and slot totals are omitted. Empty rewards say None; unavailable receipt details say Unknown rather than zero. Partial runs retain rewards already confirmed.
 
 Each skill has a compact header with its native icon, name, region and XP amount. Item rewards and shards sit directly underneath. Successful recaps omit the redundant confirmation footer; errors and synchronization warnings remain visible.
+
+### Collection recaps
+
+Current Loot, House and Taming claims show a compact reward recap. Native Collect buttons on House, Taming and Attunement, plus skill Stop & Loot, also show recaps. Matching item rewards are combined into one count. House batches retain collected rewards if a later structure fails; a failed action restart does not erase a successful loot claim.
+
+During collection, native item, coin and XP toasts are replaced by the recap. Error and level-up notifications remain visible. Exact native reward details are preferred; if those are unavailable, confirmed visible loot is used where possible, otherwise the recap says reward details are unavailable. A disabled Collect button alone does not confirm a Taming claim.

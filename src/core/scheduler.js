@@ -46,6 +46,47 @@
     finally { AppState.ui.automationTask = ''; AppState.ui.lastSignature = ''; render(); }
   }
 
+  async function refreshAllCachedData() {
+    if (AppState.ui.syncing) return;
+    AppState.ui.syncing = true;
+    AppState.ui.manualCacheRefresh = true;
+    syncCacheRefreshButton();
+    const failures = [];
+    const sources = [
+      ['Quests', () => withPage('/quests', 'quests-page', doc => waitForQuestRows(doc))],
+      ['Adventure', () => withPage('/adventure', 'adventure-page', async doc => {
+        await waitFor(doc, 'adventure-page .row .name');
+        collectAdventure(doc);
+        await captureAdventureMapDetails(doc);
+      })],
+      ['Guild event', () => refreshGuildEventSnapshot(true)],
+      ['Inventory', () => refreshInventorySnapshot(true)],
+      ['Equipment', () => withPage('/equipment', 'equipment-page', doc => storeEquippedDivine(divineConsumables(doc), true))],
+      ['Challenges', () => refreshChallengesSnapshot(true)],
+      ['Taming', () => withPage('/skill/15', 'taming-page', collectTaming)],
+      ['House', () => refreshAutomationsSnapshot(true)],
+      ['Attunement', () => withPage('/attunement', 'attunement-page', collectAttunement)],
+      ['Mastery', () => withPage('/mastery', 'mastery-page', collectMastery)],
+      ['Guild trials', () => refreshGuildTrialSnapshot(true)]
+    ];
+    try {
+      captureVisibleCaches();
+      for (const [name, load] of sources) {
+        try { await load(); }
+        catch (error) { failures.push(name); setCache('syncError', { message: `${name}: ${error.message}` }); }
+      }
+    } finally {
+      AppState.ui.manualCacheRefresh = false;
+      AppState.ui.syncing = false;
+      AppState.ui.lastSignature = '';
+      syncCacheRefreshButton();
+      render();
+    }
+    showActionToast({ kind: failures.length ? 'warning' : 'success',
+      title: failures.length ? 'Cache refresh incomplete' : 'Cached data refreshed',
+      detail: failures.length ? `Could not refresh: ${failures.join(', ')}.` : 'All data sources refreshed.' });
+  }
+
   async function syncStale(force = false) {
     if (!cacheLookupsEnabled()) return;
     if (AppState.ui.syncing) return;

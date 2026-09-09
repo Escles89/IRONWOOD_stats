@@ -43,3 +43,7 @@ Confirmed loot claims add quantities locally, and visible material use reduces s
 Enable **Debug** in Settings to inspect live values, saved snapshots, local writes and recent background-page activity. Snapshot time and cache-write time can differ: updating a balance locally does not pretend a full page was just read. Listed age limits are diagnostic, not a promise of scheduled polling.
 
 Debug updates at most once per second while visible. Only expanded sections render full details. Opening it performs no additional lookups.
+
+### Refresh everything now
+
+Use the refresh icon at the right of the **Status** panel’s title bar for a one-time refresh of every cache source. It works with fallback lookups off, shows a spinner while busy and reports any failed sources. This reads data only; it does not run quests, create maps or claim rewards. Your fallback setting stays unchanged.

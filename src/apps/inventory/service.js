@@ -93,14 +93,17 @@
   async function observeNativeLootClaim() {
     if (AppState.ui.collectingLoot || AppState.ui.pendingLootClaim) return;
     const claim = beginInventoryLootClaim();
+    const receipt = observeCollectionRewards(globalThis, ['stopAction']);
     const route = location.pathname;
     try {
       const started = Date.now();
       while (Date.now() - started < 8000 && location.pathname === route) {
         await wait(100);
-        if (findSkillStartButton()) { applyInventoryLootClaim(claim); render(); return; }
+        if (findSkillStartButton()) { applyInventoryLootClaim(claim); render(); showCollectionRecap('Loot collected', receipt.rewards().length ? receipt.rewards() : claim.loot); return; }
       }
+      showCollectionRecap('Loot collection stopped', receipt.rewards(), 'Ironwood did not confirm collection.');
     } finally {
+      receipt.restore();
       if (AppState.ui.pendingLootClaim === claim) AppState.ui.pendingLootClaim = null;
     }
   }

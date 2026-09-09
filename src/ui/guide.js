@@ -39,7 +39,7 @@
           </div>
         </section>
         <section>${chapter('start', '/assets/icon.png', 'Start here', 'Three steps to a useful dashboard.')}<ol class="iw-guide-steps"><li><b>Open Status</b><span>Find it above Inventory.</span></li><li><b>Browse normally</b><span>Visited pages fill saved values.</span></li><li><b>Set preferences</b><span>Use the sliders beside money.</span></li></ol></section>
-        <section>${chapter('panels', '/assets/misc/inventory.png', 'Explore your dashboard', 'What each panel shows.')}<div class="iw-guide-features">
+        <section>${chapter('panels', '/assets/misc/inventory.png', 'Explore your dashboard', 'What each panel shows. Use the refresh icon in the Status panel’s title bar to reload cached data.')}<div class="iw-guide-features">
           ${feature('Current Action', '<b>XP/h</b> is your XP rate; <b>% XP</b> is progress toward the next level. Blue tracks the action cycle, green tracks skill XP. Combat shows HP and battle effects.')}
           ${feature('Crafting', 'Finish time, loot, total queued and inventory owned. The clock warns when your queue runs short.')}
           ${feature('Materials &amp; consumables', '<b>Available</b> shows materials; <b>Equipped</b> and <b>Stored</b> separate active supplies from reserves. Set low-supply alerts in Settings → Warnings.')}

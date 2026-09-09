@@ -8,6 +8,7 @@
     if (document.hidden || !AppState.ui.page || AppState.ui.page.hidden) return;
     try {
     const { action, loot, consumables, materials, masteryProgress, finiteQueue } = SourceAdapter.capture(document);
+    if (action?.nativeRebuilding) recoverStatusActionView();
     const combatDeath = Boolean(action?.isCombat && action.combatants?.some((fighter) => fighter.side === 'monster' && fighter.hpPercent === 0));
     const lootDeltas = loot.map((item) => { const key = item.image || item.name; const old = AppState.live.previousLootValues.get(key); return quantityIsApproximate(item) || old === undefined || old === item.amount ? 0 : item.amount - old; });
     const consumableDeltas = consumables.map((item) => { const key = item.image || item.name; const old = AppState.live.previousConsumableValues.get(key); return old === undefined || old === parseCompact(item.amount) ? 0 : parseCompact(item.amount) - old; });

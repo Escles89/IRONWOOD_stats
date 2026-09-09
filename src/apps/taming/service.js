@@ -105,6 +105,7 @@
     AppState.ui.lastSignature = '';
     render();
     const returnToStatus = location.pathname === STATS_PATH;
+    let receipt;
     try {
       if (!document.querySelector('taming-page')) {
         const tamingNav = [...document.querySelectorAll('nav-component button')]
@@ -129,6 +130,7 @@
         const elapsed = () => durationMs(clean(expeditionCard()?.querySelector(':scope > .header .interval')?.textContent).split('/')[0]);
         const beforeLoot = lootTotal();
         const beforeElapsed = elapsed();
+        receipt = observeCollectionRewards(globalThis, ['lootPetExpedition', 'claimPetExpedition']);
         collectButton.click();
         const confirmStarted = Date.now();
         let confirmed = false;
@@ -137,7 +139,7 @@
             .find((button) => clean(button.textContent) === 'Collect');
           const currentLoot = lootTotal();
           const currentElapsed = elapsed();
-          if (!current || current.disabled || (beforeLoot > 0 && currentLoot < beforeLoot) || (beforeElapsed > 3000 && currentElapsed + 2000 < beforeElapsed)) {
+          if (receipt.confirmed() || (current && !current.disabled && ((beforeLoot > 0 && currentLoot < beforeLoot) || (beforeElapsed > 3000 && currentElapsed + 2000 < beforeElapsed)))) {
             confirmed = true;
             break;
           }
@@ -148,13 +150,14 @@
         setCache('taming', { ...refreshed, lastClaimAt: Date.now(), lastError: '' });
       })(document);
       AppState.ui.tamingClaimNoticeUntil = Date.now() + 1800;
-      showActionToast({ icon: 'taming', title: 'Taming items recovered', summary: getCache().taming?.expeditionName || '', detail: 'Expedition loot collection was confirmed by Ironwood.' });
+      showCollectionRecap('Taming loot collected', receipt?.rewards(), '', getCache().taming?.expeditionName || '');
     } catch (error) {
       console.error('[Ironwood Status] Taming collection failed', error);
       const cached = getCache().taming || {};
       setCache('taming', { ...cached, lastError: error.message });
-      showActionToast({ icon: 'taming', title: 'Taming collection stopped', kind: 'warning', detail: error.message });
+      showCollectionRecap('Taming collection stopped', receipt?.rewards(), error.message);
     } finally {
+      receipt?.restore();
       try {
         // Status reads the mounted skill page; Taming has replaced it during collection.
         if (returnToStatus) await showStatusFromCurrentAction();

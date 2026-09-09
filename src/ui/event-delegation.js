@@ -14,6 +14,8 @@
         document.querySelector('[data-potion-type-add]')?.focus();
         return;
       }
+      const collect = event.target.closest?.('taming-page button, home-page automate-component > .action-buttons > button, attunement-page button');
+      if (collect && !collect.disabled && /^(Collect(?: Loot)?|Claim(?: Expedition)?)$/i.test(clean(collect.textContent))) observeNativeCollection(collect);
       const stop = event.target.closest?.('skill-page button.action-stop');
       if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
     }, true);
@@ -114,6 +116,7 @@
       if (event.target.closest?.('[data-guide-modal]')) { openGuide(event.target.closest('[data-guide-modal]')); return; }
       if (event.target.closest?.('[data-quest-modal]')) { openPreferences(event.target.closest('[data-quest-modal]')); return; }
       if (event.target.closest?.('[data-modal-close]') || event.target.matches?.('[data-modal-backdrop]')) { closePreferences(); return; }
+      if (event.target.closest?.('[data-refresh-all-caches]')) { refreshAllCachedData(); return; }
       if (event.target.closest?.('[data-sync]')) { syncStale(true); return; }
       const craftAll = event.target.closest?.('[data-craft-all]');
       if (craftAll) {

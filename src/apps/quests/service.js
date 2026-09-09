@@ -12,6 +12,7 @@
     const headerText = clean(card?.querySelector(':scope > .header > .amount')?.textContent);
     const headerProgress = headerText.match(/(\d+)\s*\/\s*(\d+)/);
     const completed = headerProgress ? Number(headerProgress[1]) : quests.filter((quest) => quest.done).length;
+    if (!card || !quests.length) return { card, quests };
     const previous = getCache().quests;
     const next = { schema: 2, day: dayKey(), quests, completed, dailyComplete: completed >= 5, expiresAt: nextDailyReset() };
     setCache('quests', next);
@@ -33,11 +34,20 @@
     }
     return collectQuests(doc);
   }
+  async function waitForQuestRows(doc, timeout = 12000) {
+    const started = Date.now();
+    while (Date.now() - started < timeout) {
+      const state = collectQuests(doc);
+      if (state.quests.length) return state;
+      await wait(200);
+    }
+    throw new Error('Daily quest rows did not load; will retry');
+  }
   async function completeSelectedQuests(doc) {
     if (!automationEnabled()) return collectQuests(doc);
     const prefs = getPrefs();
     if (prefs.length !== 5) return collectQuests(doc);
-    let state = collectQuests(doc);
+    let state = await waitForQuestRows(doc);
     if (state.quests.filter((quest) => quest.done).length >= 5) return state;
     for (const preference of prefs) {
       const quest = questForPreference(state.quests, preference);
@@ -47,10 +57,17 @@
       const previousCompleted = state.quests.filter((item) => item.done).length;
       row.click();
       await wait(250);
-      const autoComplete = [...doc.querySelectorAll('quests-page button')].find((button) =>
+      let autoComplete = [...doc.querySelectorAll('quests-page button')].find((button) =>
         !button.disabled && /auto[\s-]?complete/i.test(clean(button.textContent))
       );
-      autoComplete?.click();
+      const controlStarted = Date.now();
+      while (!autoComplete && Date.now() - controlStarted < 6000) {
+        await wait(200);
+        autoComplete = [...doc.querySelectorAll('quests-page button')].find(button =>
+          !button.disabled && /auto[\s-]?complete/i.test(clean(button.textContent)));
+      }
+      if (!autoComplete) throw new Error(`Auto-complete unavailable for ${quest.skill || quest.name}`);
+      autoComplete.click();
       state = await waitForQuestProgress(doc, previousCompleted);
       if (state.quests.filter((item) => item.done).length >= 5) break;
     }

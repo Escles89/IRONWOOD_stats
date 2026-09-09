@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ironwood RPG - Status Page
 // @namespace    ironwood-rpg-status
-// @version      1.13.88
+// @version      1.13.98
 // @description  Adds a cached live status dashboard and optional task automation to Ironwood RPG.
 // @license      PolyForm-Noncommercial-1.0.0
 // @match        https://ironwoodrpg.com/*

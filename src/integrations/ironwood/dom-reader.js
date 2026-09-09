@@ -12,6 +12,20 @@
     );
   }
 
+  function readRebuildingAction(document) {
+    const previous = AppState.live.lastNativeAction;
+    const shortcut = document.querySelector('nav-component action-component button.button, nav-component combat-component button.button');
+    const route = location.pathname === STATS_PATH ? AppState.ui.previousUrl : location.pathname;
+    const name = clean(shortcut?.querySelector('.details > .name')?.textContent);
+    const skill = clean(shortcut?.querySelector('.details > .skill')?.textContent);
+    if (!previous || !name || name !== previous.name || skill !== previous.skillName || route !== AppState.live.lastNativeActionRoute) {
+      AppState.live.actionRebuildStartedAt = 0;
+      return null;
+    }
+    if (!AppState.live.actionRebuildStartedAt) AppState.live.actionRebuildStartedAt = Date.now();
+    return { ...previous, nativeRebuilding: true };
+  }
+
   function readCurrentAction(document = globalThis.document) {
     const standardCard = document.querySelector('skill-page action-component > .card');
     const combatComponent = document.querySelector('skill-page combat-component');
@@ -40,6 +54,8 @@
     }
     const card = combatCard || standardCard;
     if (!card) {
+      const rebuilding = readRebuildingAction(document);
+      if (rebuilding) return rebuilding;
       return AppState.live.lastCombatAction && Date.now() - AppState.live.lastCombatSeenAt < 2500
         ? { ...AppState.live.lastCombatAction, reviveRemainingMs: 0, combatGrace: true }
         : null;
@@ -51,6 +67,8 @@
     // Ironwood keeps the selected action card mounted while idle. The live
     // progress bars only exist after an action has actually been started.
     if (!fill && !isCombat) {
+      const rebuilding = readRebuildingAction(document);
+      if (rebuilding) return rebuilding;
       if (reviveVisible && AppState.live.lastCombatAction) return { ...AppState.live.lastCombatAction, reviveRemainingMs, combatGrace: true };
       return AppState.live.lastCombatAction && Date.now() - AppState.live.lastCombatSeenAt < 2500
         ? { ...AppState.live.lastCombatAction, reviveRemainingMs: 0, combatGrace: true }
@@ -137,6 +155,9 @@
       reviveRemainingMs: reviveRemainingMs > 0 ? reviveRemainingMs : 0,
       combatants: transitionCombatants(combatants, AppState.live.lastCombatAction?.combatants || [])
     };
+    AppState.live.lastNativeAction = result;
+    AppState.live.lastNativeActionRoute = location.pathname === STATS_PATH ? AppState.ui.previousUrl : location.pathname;
+    AppState.live.actionRebuildStartedAt = 0;
     if (isCombat) { AppState.live.lastCombatAction = result; AppState.live.lastCombatSeenAt = Date.now(); }
     return result;
   }
@@ -203,6 +224,9 @@
   const SourceAdapter = {
     capture(document) {
       const action = readCurrentAction(document);
+      // Keep the last complete set of resources alongside the retained action
+      // while Angular rebuilds the native view; do not emit false zero deltas.
+      if (action?.nativeRebuilding) { AppState.live.action = action; return AppState.live; }
       Object.assign(AppState.live, {
         action, combatants: action?.combatants || [],
         loot: readLoot(document).sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name)),

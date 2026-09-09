@@ -119,7 +119,7 @@
       // reduction before replacing the snapshot or moving to another structure.
       if (after?.structure === structure && after.lootAmount < before.lootAmount) {
         storeAutomationStructure(after);
-        return;
+        return { name: before.lootName || before.making, image: before.makingImage, amount: before.lootAmount };
       }
       await wait(100);
     }
@@ -132,7 +132,9 @@
     const structures = (cached?.structures || [])
       .map((item) => projectedAutomation(item, cached.checkedAt))
       .filter((item) => item.lootAmount > 0);
-    if (!structures.length) return;
+    if (!structures.length) { showActionToast({ title: 'Automations', detail: 'No loot is ready to collect.' }); return; }
+    const rewards = [];
+    let failure = '';
     AppState.ui.collectingAutomation = 'all';
     setCache('automations', { ...cached, lastError: '' });
     AppState.ui.lastSignature = '';
@@ -141,17 +143,26 @@
       await withPage('/', 'app-component', async (doc) => {
         await openAutomationHouse(doc);
         for (const item of structures) {
-          if (!automationEnabled()) break;
+          if (!automationEnabled()) throw new Error('Collection stopped: automation is disabled');
           AppState.ui.collectingAutomation = item.structure;
-          await collectAutomationStructure(doc, item.structure);
+          const receipt = observeCollectionRewards(doc.defaultView, ['lootAutomation']);
+          try {
+            const reward = await collectAutomationStructure(doc, item.structure);
+            if (reward && !receipt.rewards().some(item => item.name === reward.name)) rewards.push(reward);
+          } finally {
+            rewards.push(...receipt.rewards());
+            receipt.restore();
+          }
           AppState.ui.lastSignature = '';
           render();
         }
       });
     } catch (error) {
+      failure = error.message;
       console.error('[Ironwood Status] Automation collection failed', error);
       setCache('automations', { ...getCache().automations, lastError: error.message });
     } finally {
+      showCollectionRecap(failure ? 'Automation collection stopped' : 'Automation loot collected', rewards, failure);
       AppState.ui.collectingAutomation = '';
       AppState.ui.lastSignature = '';
       render();

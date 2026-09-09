@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(`${__dirname}/../ironwood-stats.user.js`, 'utf8');
 function harness(names, overrides = {}) {
-  const ctx = vm.createContext({ console: { error() {} }, ...overrides });
+  const ctx = vm.createContext({ console: { error() {} }, observeCollectionRewards: () => ({ rewards: () => [], restore() {} }), showCollectionRecap() {}, ...overrides });
   ctx.AppState = { ui: ctx, live: ctx };
   for (const name of names) {
     const start = source.search(new RegExp(`  (?:async )?function ${name}\\(`));
