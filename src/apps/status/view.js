@@ -201,8 +201,10 @@
     const automationCache = getCache().automations;
     (automationCache?.structures || []).forEach((item, index) => {
       const projected = projectedAutomation(item, automationCache.checkedAt);
+      text(`[data-live-automation-time="${index}"]`, automationRemainingTime(projected, automationCache.checkedAt));
+      text(`[data-live-automation-done="${index}"]`, formatNumber(projected.queuedDone || 0));
       text(`[data-live-automation-loot="${index}"]`, projected.lootAmount ? formatNumber(projected.lootAmount) : '0');
-      text(`[data-live-automation-queue="${index}"]`, projected.queuedTotal ? formatNumber(Math.max(0, projected.queuedTotal - projected.queuedDone)) : '0');
+      text(`[data-live-automation-queue="${index}"]`, formatNumber(projected.queuedTotal || 0));
     });
     const eventDetail = AppState.ui.page.querySelector('[data-live-guild-event-detail]');
     if (eventDetail) {
@@ -237,7 +239,7 @@
     return `<div class="iw-stats-grid">
         ${action ? `
         <section class="iw-card iw-action-card ${action.isCombat ? `iw-combat-card${combatDeath ? ' iw-death' : ''}` : ''}" style="--combat-progress:${action.progress ?? 0}%">
-          <div class="iw-card-header"><span>Current Action</span>${actionBadges}</div>
+          <div class="iw-card-header"><span>${escapeHtml(action.skillName || 'Current Action')}</span>${actionBadges}</div>
           <div class="iw-action-body">
             <div class="iw-action-heading">
               <div class="iw-action-image">${action.image ? `<img src="${escapeHtml(action.image)}" alt="">` : ''}</div>

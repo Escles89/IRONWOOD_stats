@@ -25,7 +25,7 @@
           <div class="iw-guide-preview" aria-label="Illustrative dashboard example">
             <small class="iw-guide-preview-label">Example · frozen combat moment</small>
             <section class="iw-card iw-action-card iw-combat-card iw-guide-frozen-combat" style="--iw-recovery-icon:url('/assets/items/pie-king-crab.png')">
-              <div class="iw-card-header"><span>Current Action</span>${renderActionBadges({action:{isCombat:true,skillName:'Defense'},masteryAchieved:true,cache:{},locationBadges:selectLocationBadges({name:'Dungeon',isCombat:true},[{name:'Elite Key',image:'/assets/items/key-onyx.png'}],false).locationBadges})}</div>
+              <div class="iw-card-header"><span>Defense</span>${renderActionBadges({action:{isCombat:true,skillName:'Defense'},masteryAchieved:true,cache:{},locationBadges:selectLocationBadges({name:'Dungeon',isCombat:true},[{name:'Elite Key',image:'/assets/items/key-onyx.png'}],false).locationBadges})}</div>
               <div class="iw-action-body"><div class="iw-action-heading"><div class="iw-action-image"><img src="/assets/monsters/treant.png" alt=""></div><div class="iw-action-name"><span class="iw-action-title"><strong>Elite Treant</strong><small>(lvl 100)</small></span><span class="iw-action-meta"><span>Defense Lv. 110</span><span>66.8K XP/h</span><span>15% XP</span></span></div></div></div>
               ${renderCombatants({ isCombat: true, combatants: [
                 { side: 'player', name: 'Player', image: '/assets/characters/character.png', hp: 840, maxHp: 1000, hpPercent: 84, meterPercent: 60, healAmount: 240 },

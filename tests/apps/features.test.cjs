@@ -76,3 +76,24 @@ test('native control adapter gates mutations and rejects unknown commands', asyn
   assert.equal(h.run('claims'), 1);
   assert.throws(() => h.run(`NativeControlAdapter.run(document, { type: 'unknown' })`), /Unknown native command/);
 });
+
+test('automation remaining time follows projected queue progress and partial cycles', () => {
+  const h = harness();
+  h.context.item = { checkedAt: 100000, queuedDone: 2, queuedTotal: 12, intervalMs: 60000 };
+  h.time(250000);
+  assert.equal(h.run('projectedAutomation(item).queuedDone'), 4);
+  assert.equal(h.run('automationRemainingTime(projectedAutomation(item))'), '~0d 1h');
+  h.time(700000);
+  assert.equal(h.run('automationRemainingTime(projectedAutomation(item))'), 'Complete');
+});
+
+test('automation queue time does not invent estimates for unknown speed or idle structures', () => {
+  const h = harness();
+  assert.equal(h.run('automationRemainingTime({queuedDone: 1, queuedTotal: 10})'), '—');
+  assert.equal(h.run('automationRemainingTime({queuedDone: 0, queuedTotal: 0})'), '—');
+});
+
+test('automation time displays days and remaining hours', () => {
+  const h = harness();
+  assert.equal(h.run('automationRemainingTime({queuedDone:0,queuedTotal:50,intervalMs:3600000})'), '~2d 2h');
+});

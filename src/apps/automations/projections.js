@@ -18,3 +18,13 @@
     // expire the cache at the predicted queue end and trigger a hidden lookup.
     return { schema: 4, checkedAt, structures, expiresAt: oldestExpiry };
   }
+
+  function automationRemainingTime(item, checkedAt) {
+    const remaining = Math.max(0, (item.queuedTotal || 0) - (item.queuedDone || 0));
+    if (!remaining) return item.queuedTotal ? 'Complete' : '—';
+    if (!(item.intervalMs > 0)) return '—';
+    const observedAt = item.checkedAt || checkedAt;
+    const partialCycle = observedAt ? Math.max(0, Date.now() - observedAt) % item.intervalMs : 0;
+    const hours = Math.ceil(Math.max(0, remaining * item.intervalMs - partialCycle) / 3600000);
+    return `~${Math.floor(hours / 24)}d ${hours % 24}h`;
+  }
