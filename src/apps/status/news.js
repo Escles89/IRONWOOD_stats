@@ -1,4 +1,4 @@
-  const newsTicker = { line: '', template: '', category: '', source: '', skill: null, nextAt: 0, rareAt: -Infinity, paused: false, events: [], bags: {}, recent: [], level: null, lootKey: '', loot: null };
+  const newsTicker = { line: '', template: '', category: '', source: '', skill: null, nextAt: 0, duration: 14000, pauseRemaining: null, rareAt: -Infinity, paused: false, events: [], bags: {}, recent: [], level: null, lootKey: '', loot: null };
   function personalizeNewsLine(template, values = {}) {
     let name = '';
     try { name = playerName(); } catch (_) { /* No identity lookup is needed. */ }
@@ -98,7 +98,8 @@
     const sources = NEWS_LINES._sources.filter(source => source !== newsTicker.source);
     newsTicker.source = sources[Math.floor(Math.random() * sources.length)] || NEWS_LINES._sources[0];
     newsTicker.skill = skill;
-    newsTicker.nextAt = now + Math.max(14000, newsTicker.line.length * 110);
+    newsTicker.duration = Math.max(14000, newsTicker.line.length * 110);
+    newsTicker.nextAt = now + newsTicker.duration;
     return newsTicker;
   }
   function newsCategoryLabel(category) {
@@ -151,18 +152,37 @@
     const shape = NEWS_BRAND_SHAPES[outlet.shape] || NEWS_BRAND_SHAPES.crest;
     return `<span class="iw-news-lockup iw-brand-${family} iw-brand-mark-${escapeHtml(outlet.icon || 'paper')}" style="--iw-outlet-color:${color};--iw-outlet-secondary:${secondary}"><span class="iw-news-outlet-icon"><svg viewBox="-2 -2 28 28" aria-hidden="true"><path class="iw-brand-field" d="${shape}"></path><path class="iw-brand-shine" d="M4 5h6M4 8h3"></path><path class="iw-brand-glyph" transform="translate(4 4) scale(.67)" d="${path}"></path></svg></span><span class="iw-news-outlet-name">${escapeHtml(outlet.name)}</span></span>`;
   }
+  function newsAccent(source) {
+    const color = NEWS_OUTLETS[source]?.color;
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : '#8bc8d6';
+  }
+  function newsRemainingFraction(now = Date.now()) {
+    const remaining = newsTicker.paused ? newsTicker.pauseRemaining ?? newsTicker.duration : newsTicker.nextAt - now;
+    return Math.max(0, Math.min(1, remaining / newsTicker.duration));
+  }
+  function toggleNewsPause(now = Date.now()) {
+    if (newsTicker.paused) newsTicker.nextAt = now + (newsTicker.pauseRemaining ?? newsTicker.duration);
+    else newsTicker.pauseRemaining = Math.max(0, newsTicker.nextAt - now);
+    newsTicker.paused = !newsTicker.paused;
+    updateNewsTicker(AppState.live.action);
+  }
+  function newsPauseIcon(paused) {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paused ? 'm9 5 10 7-10 7Z' : 'M8 5v14M16 5v14'}"></path></svg>`;
+  }
   function renderNewsTicker(action) {
     const news = selectNewsLine(action);
-    return `<aside class="iw-news-ticker" aria-label="The Ironwood Dispatch — fictional village headlines">
+    return `<aside class="iw-news-ticker" style="--iw-news-accent:${newsAccent(news.source)};--iw-news-remaining:${newsRemainingFraction()}" data-paused="${news.paused}" aria-label="The Ironwood Dispatch — fictional village headlines">
       <div class="iw-news-brand" data-news-source="${escapeHtml(news.source)}" title="${escapeHtml(news.source)}">${renderNewsOutlet(news.source)}</div>
       <div class="iw-news-copy"><span class="iw-news-category">${escapeHtml(newsCategoryLabel(news.category))}</span><span class="iw-news-line">${escapeHtml(news.line)}</span></div>
-      <button type="button" class="iw-news-pause" data-news-pause aria-label="${news.paused ? 'Resume' : 'Pause'} news ticker" aria-pressed="${news.paused}">${news.paused ? '▶' : 'Ⅱ'}</button>
+      <button type="button" class="iw-news-pause" data-news-pause aria-label="${news.paused ? 'Resume' : 'Pause'} news ticker" aria-pressed="${news.paused}">${newsPauseIcon(news.paused)}</button>
     </aside>`;
   }
   function updateNewsTicker(action) {
     const host = AppState.ui.page?.querySelector('.iw-news-ticker');
     if (!host) return;
     const news = selectNewsLine(action);
+    host.style.setProperty('--iw-news-remaining', String(newsRemainingFraction()));
+    if (host.dataset.paused !== String(news.paused)) host.dataset.paused = String(news.paused);
     const line = host.querySelector('.iw-news-line');
     if (line && line.textContent !== news.line) {
       line.textContent = news.line;
@@ -177,11 +197,12 @@
       brand.innerHTML = renderNewsOutlet(news.source);
       brand.dataset.newsSource = news.source;
       brand.title = news.source;
+      host.style.setProperty('--iw-news-accent', newsAccent(news.source));
     }
     const button = host.querySelector('[data-news-pause]');
     const label = `${news.paused ? 'Resume' : 'Pause'} news ticker`;
     if (button && button.getAttribute('aria-label') !== label) {
-      button.textContent = news.paused ? '▶' : 'Ⅱ';
+      button.innerHTML = newsPauseIcon(news.paused);
       button.setAttribute('aria-label', label);
       button.setAttribute('aria-pressed', String(news.paused));
     }

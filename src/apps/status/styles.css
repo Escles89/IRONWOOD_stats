@@ -926,3 +926,32 @@
       @media (max-width:600px) {
         .iw-news-ticker .iw-news-lockup .iw-news-outlet-icon, .iw-news-lockup .iw-news-outlet-icon svg { width:24px; height:24px; flex-basis:24px; }
       }
+      .iw-news-ticker { border-left-color:var(--iw-news-accent,#70b5c7); background:linear-gradient(110deg,color-mix(in srgb,var(--iw-news-accent,#70b5c7) 9%,#102a3b),#0c2233 65%); transition:border-color .5s ease; }
+      .iw-news-ticker::after { content:''; position:absolute; bottom:0; left:0; right:0; height:1px; background:var(--iw-news-accent,#70b5c7); opacity:.38; transform:scaleX(var(--iw-news-remaining,1)); transform-origin:left; transition:transform .25s linear; pointer-events:none; }
+      .iw-news-ticker .iw-news-copy { row-gap:3px; }
+      .iw-news-ticker .iw-news-line { font-size:14px; line-height:20px; color:#d3e0e7; }
+      .iw-news-ticker .iw-news-category { color:var(--iw-news-accent,#d4b777); opacity:.85; letter-spacing:.075em; font-size:9px; }
+      .iw-news-ticker .iw-news-pause { color:#a6bdc9; background:transparent; border-color:#304c5c; transition:color .2s,background .2s; }
+      .iw-news-ticker .iw-news-pause:hover, .iw-news-ticker[data-paused="true"] .iw-news-pause { color:var(--iw-news-accent,#8bc8d6); background:#1a3547; }
+      .iw-news-pause svg { display:block; width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+      @media (max-width:600px) { .iw-news-ticker .iw-news-line { font-size:12px; line-height:18px; } }
+      @media (prefers-reduced-motion:reduce) { .iw-news-ticker { transition:none; } .iw-news-ticker::after { display:none; } }
+      .iw-fighter-player .iw-held-weapon { position:absolute; z-index:2; left:calc(50% + 8px); top:33px; width:30px; height:30px; pointer-events:none; animation:iw-fighter-float 3.8s ease-in-out infinite; }
+      .iw-held-weapon .iw-weapon-motion { display:block; width:30px; height:30px; overflow:visible; transform:rotate(-12deg); transform-origin:30% 78%; filter:drop-shadow(1px 2px 1px #0008); }
+      .iw-held-weapon image { image-rendering:pixelated; }
+      .iw-held-weapon .iw-weapon-thrust { transform:rotate(20deg); }
+      .iw-held-weapon .iw-weapon-draw { transform:rotate(35deg); width:34px; height:34px; margin-top:-4px; }
+      .iw-fighter-reviving .iw-held-weapon, .iw-fighter-dead .iw-held-weapon { display:none; }
+      @media (prefers-reduced-motion:reduce) { .iw-fighter-player .iw-held-weapon { animation:none; } }
+
+      .iw-held-weapon .iw-weapon-hammer { width:34px; height:34px; margin-left:12px; margin-top:-14px; transform-origin:28% 84%; }
+      /* A lower shaft grip keeps the tall blade above the hand and the handle visible. */
+      .iw-held-weapon .iw-weapon-scythe { width:52px; height:52px; margin-left:-5px; margin-top:-28px; transform-origin:32% 76%; transform:rotate(18deg); }
+      .iw-fighter-player .iw-held-scythe { z-index:2; }
+      .iw-held-weapon .iw-weapon-thrust { transform-origin:25% 80%; }
+      .iw-held-weapon .iw-weapon-draw { transform-origin:50% 50%; }
+      .iw-combat-arrow { position:absolute; left:17px; top:9px; width:24px; height:8px; opacity:0; pointer-events:none; overflow:visible; shape-rendering:crispEdges; transform-origin:right center; }
+      .iw-held-weapon .iw-weapon-throw { transform-origin:center; }
+      .iw-held-weapon .iw-weapon-thrust { width:42px; height:42px; margin-left:-5px; margin-top:-12px; }
+      /* Keep the enlarged sword's hilt at the forward hand, clear of the face. */
+      .iw-held-weapon .iw-weapon-swing { width:40px; height:40px; margin-left:8px; margin-top:-20px; }

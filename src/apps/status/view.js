@@ -137,6 +137,7 @@
 
   function updateLiveValues(action, loot, consumables, materials, masteryProgress) {
     updateNewsTicker(action);
+    updateCombatWeapon(action);
     if (!AppState.ui.page) return;
     if (action?.isCombat && Number.isFinite(action.progress)) {
       AppState.ui.page.querySelector('.iw-combat-card')?.style.setProperty('--combat-progress', `${action.progress}%`);

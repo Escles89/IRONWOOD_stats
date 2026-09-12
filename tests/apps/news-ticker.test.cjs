@@ -174,3 +174,15 @@ test('outlet identities use custom silhouettes, palettes and wordmark families',
     assert.match(markup,/iw-brand-glyph/);
   }
 });
+
+test('ticker countdown freezes on pause and resumes with the same remaining reading time', () => {
+  const h=harness();
+  h.context.selectNewsLine(null,100000);
+  const before=h.context.newsRemainingFraction(107000);
+  h.context.toggleNewsPause(107000);
+  assert.equal(h.context.newsRemainingFraction(500000),before);
+  h.context.toggleNewsPause(500000);
+  assert.equal(h.context.newsRemainingFraction(500000),before);
+  assert.equal(h.context.newsRemainingFraction(600000),0);
+  assert.match(h.context.newsPauseIcon(true),/<svg/);
+});

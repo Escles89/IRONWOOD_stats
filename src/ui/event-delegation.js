@@ -112,7 +112,7 @@
     });
     document.addEventListener('click', (event) => {
       if (event.target.closest?.('[data-check-script-update]')) { checkAndInstallScriptUpdate(); return; }
-      if (event.target.closest?.('[data-news-pause]')) { newsTicker.paused = !newsTicker.paused; newsTicker.nextAt = Date.now() + 14000; updateNewsTicker(AppState.live.action); return; }
+      if (event.target.closest?.('[data-news-pause]')) { toggleNewsPause(); return; }
       const guideJump = event.target.closest?.('[data-guide-jump]');
       if (guideJump) { navigateGuideSection(guideJump.dataset.guideJump); return; }
       if (event.target.closest?.('[data-guide-modal]')) { openGuide(event.target.closest('[data-guide-modal]')); return; }

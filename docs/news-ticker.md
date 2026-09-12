@@ -35,7 +35,7 @@ The Dispatch mixes fictional in-world reporting with facts observed by the dashb
 - Otherwise, a recognized active skill gets a 40% roll for its own category. If that roll fails, choose uniformly from all currently eligible ordinary categories. Therefore active-skill lines may also be picked by the ordinary draw.
 - Each category uses a random draw without replacement: every line in that category is used before its next cycle starts. A shared 40-template recent history further discourages repeats across cycles. If every remaining line was recently shown, choose the least recently shown eligible line; never immediately repeat the previous template. This history is held in memory and resets on page reload. Choose a fictional source independently, excluding the previous source.
 - An activity, enemy, or revival-state change can select a new line immediately. HP is sampled when selecting the next live report; this is a headline snapshot, not a continuously updated HP readout.
-- Pause freezes the current headline, including across skill changes. Resume starts a new reading interval. Old queued events still expire.
+- Pause freezes the current headline, including across skill changes. Resume preserves the remaining reading time. Old queued events still expire.
 - The ticker is updated by visible Status dashboard renders. It does not detect events while the page is closed or hidden, does not replay offline history, and does not scan historical logs. The first observed state establishes a baseline.
 
 ## Data safeguards
@@ -76,3 +76,5 @@ Source labels are fictional attribution for the shared headline library. They do
 The banner's left brand block displays the selected outlet's name and colored SVG emblem; the category remains above the headline. On phones, the outlet and pause button occupy a compact top row so the headline retains full width. All 20 outlets have different glyphs. Short names, icon keys, and accent colors live in [`src/content/news-outlets.json`](../src/content/news-outlets.json); the full `_sources` label is retained as a tooltip. Glyph paths live in `NEWS_OUTLET_ICONS` in `src/apps/status/news.js`.
 
 Outlet profiles also define a `family` (wordmark typography), `shape` (emblem silhouette), and `secondary` accent color. Newspaper wordmarks use serif type; broadcasts use spaced capitals; social outlets use compact bold lettering. Custom two-tone SVG fields replace the generic outlined icon boxes.
+
+The outlet accent also colors the banner rail, category label, and subtle one-pixel countdown. Pause freezes the countdown; reduced-motion preferences hide it.
