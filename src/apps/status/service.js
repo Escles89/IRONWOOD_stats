@@ -9,6 +9,7 @@
     try {
     const { action, loot, consumables, materials, masteryProgress, finiteQueue } = SourceAdapter.capture(document);
     if (action?.nativeRebuilding) recoverStatusActionView();
+    observeNewsEvents(action, loot, Boolean(findCard('Loot', document)));
     const combatDeath = Boolean(action?.isCombat && action.combatants?.some((fighter) => fighter.side === 'monster' && fighter.hpPercent === 0));
     const lootDeltas = loot.map((item) => { const key = item.image || item.name; const old = AppState.live.previousLootValues.get(key); return quantityIsApproximate(item) || old === undefined || old === item.amount ? 0 : item.amount - old; });
     const consumableDeltas = consumables.map((item) => { const key = item.image || item.name; const old = AppState.live.previousConsumableValues.get(key); return old === undefined || old === parseCompact(item.amount) ? 0 : parseCompact(item.amount) - old; });
@@ -98,6 +99,7 @@
       countdowns: { revive: action?.reviveRemainingMs || 0, queue: queueRemainingMs },
       panels: { adventureActive, adventureActionActive, guildTrialActionActive, guildEventActionActive, masteryAchieved } });
     const signature = JSON.stringify({
+      currentRegion: currentActionRegion(action),
       pendingAttunementShards: (cache.attunement?.selected || []).map(slot => readPendingAttunementShards(slot.skill)),
       action: action && { name: action.name, level: action.level, image: action.image, actionId: action.actionId, location: action.location, skillName: action.skillName, skillLevel: action.skillLevel, isElite: eliteCombat, revive: Boolean(action.reviveRemainingMs), combatants: action.combatants?.map((fighter) => ({ side: fighter.side, name: fighter.name, image: fighter.image, healAmount: Boolean(fighter.healAmount), spawn: fighter.spawn, dead: fighter.dead })), pieHealing },
       loot: loot.map((item) => ({ name: item.name, image: item.image })),

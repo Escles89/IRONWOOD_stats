@@ -122,6 +122,7 @@
   }
 
   function scheduleStatusRender() {
+    if (!document.hidden) syncStatusNavIcon();
     if (!document.hidden && AppState.ui.page?.hidden) syncHeaderActionBadges();
     if (document.hidden || !AppState.ui.page || AppState.ui.page.hidden || AppState.ui.renderFrame !== null) return;
     AppState.ui.renderFrame = window.requestAnimationFrame(() => {

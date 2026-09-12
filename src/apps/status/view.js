@@ -124,7 +124,7 @@
     if (!current) { page.innerHTML = markup; return; }
     const template = document.createElement('template');
     template.innerHTML = markup;
-    const next = template.content.firstElementChild;
+    const next = template.content.querySelector('.iw-stats-grid');
     const children = [...current.children];
     const incoming = [...next.children];
     // Layout changes (for example switching to crafting) rebuild once.
@@ -136,6 +136,7 @@
   }
 
   function updateLiveValues(action, loot, consumables, materials, masteryProgress) {
+    updateNewsTicker(action);
     if (!AppState.ui.page) return;
     if (action?.isCombat && Number.isFinite(action.progress)) {
       AppState.ui.page.querySelector('.iw-combat-card')?.style.setProperty('--combat-progress', `${action.progress}%`);
@@ -249,7 +250,7 @@
   }
 
   function renderStatusMarkup({ actionBadges, headerIcons, combatDeath, noticeNow, queueWarning, materialWarning, materialWarningText, cache, adventureActive, adventureActionActive, guildEventActionActive, guildTrialActionActive, prefs, automationOn, cacheLookupsOn, masteryAchieved, automationRows, questSkills, challengePrefs, dailyQuestComplete, taskIndicator, adventureIndicator, guildTrialIndicator, guildEventIndicator, attunementSkills, attunementDetails, challengeError, challengeIndicator, tamingDetails, tamingIndicator, resourceWarnings = {}, adventureSupplement, potionTypes, consumableRows, displayedPotions, inventoryCounts, totalItems, compactCraftingLoot, craftedInventory, action, loot, consumables, materials, masteryProgress, finiteQueue, locationBadges, displayActionName }) {
-    return `<div class="iw-stats-grid">
+    return `${renderNewsTicker(action)}<div class="iw-stats-grid">
         ${action ? `
         <section class="iw-card iw-action-card ${action.isCombat ? `iw-combat-card${combatDeath ? ' iw-death' : ''}` : ''}" style="--combat-progress:${action.progress ?? 0}%">
           <div class="iw-card-header"><span>${escapeHtml(action.skillName || 'Current Action')}</span>${actionBadges}</div>
@@ -259,7 +260,7 @@
               <div class="iw-action-name">
                 <span class="iw-action-title"><strong>${escapeHtml(displayActionName)}</strong>${action.level ? `<small>(${escapeHtml(action.level.replace(/^Lv\.\s*/i, 'lvl '))})</small>` : ''}</span>
                 <span class="iw-action-meta">
-                  ${action.skillName || action.skillLevel ? `<span class="iw-action-skill">${action.skillName ? `<span class="iw-action-skill-name">${escapeHtml(action.skillName)}${TRAIT_REGIONS.filter(region => region.skills.includes(action.skillName)).map(region => renderRegionIcon(region.name)).join('')}</span>` : ''}${action.skillLevel ? `<span>${escapeHtml(action.skillLevel)}</span>` : ''}</span>` : ''}
+                  ${action.skillName || action.skillLevel ? `<span class="iw-action-skill">${action.skillName ? `<span class="iw-action-skill-name">${escapeHtml(action.skillName)}${currentActionRegion(action) ? renderRegionIcon(currentActionRegion(action)) : ''}</span>` : ''}${action.skillLevel ? `<span>${escapeHtml(action.skillLevel)}</span>` : ''}</span>` : ''}
                   <span data-live-xp-hour>${action.xpPerHour ? `${formatCompact(action.xpPerHour)} XP/h` : '—'}</span>
                   <span data-live-level-progress>${Number.isFinite(action.skillProgress) ? `${action.skillProgress}% XP` : '—'}</span>
                   <span class="iw-revive-timer" data-live-revive ${action.reviveRemainingMs > 0 ? '' : 'hidden'}>${action.reviveRemainingMs > 0 ? `Revive in ${formatReviveTime(action.reviveRemainingMs)}` : ''}</span>

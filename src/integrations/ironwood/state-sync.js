@@ -34,6 +34,9 @@
         automations: service('handleAutomationSync'), expedition: service('handleExpeditionSync'),
         zone: Zone && injector.get(Zone, null),
         attunementCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Woodcutting' && item.skillId != null) && Object.values(value).every(item => item?.skillId != null)),
+        skillCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Defense' && item.image === 'misc/defense.png')),
+        regionCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Forest' && Array.isArray(item.skills) && item.tributeId != null)),
+        skillRegion: exports.find(value => typeof value === 'function' && ['.Defense', '.weaponType', '.equipment['].every(marker => Function.prototype.toString.call(value).includes(marker)) && Function.prototype.toString.call(value).length < 600),
         notificationComponent: exports.find(value => typeof value?.prototype?.createNotifications === 'function'),
         catalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.image === 'items/challenge-scroll.png'))
       };

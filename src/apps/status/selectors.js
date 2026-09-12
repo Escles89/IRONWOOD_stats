@@ -38,3 +38,17 @@
 
     return { locationBadges, displayActionName, dungeonCombat, locationClass, locationIcon };
   }
+
+  function currentActionRegion(action) {
+    if (!action?.skillName) return '';
+    if (action.skillName !== 'Defense') return TRAIT_REGIONS.find(region => region.skills.includes(action.skillName))?.name || '';
+    try {
+      const runtime = findNativeSyncRuntime();
+      const user = runtime.state?.user$?.getValue();
+      const skill = Object.values(runtime.skillCatalog || {}).find(item => item.name === 'Defense');
+      if (!user || !skill || !runtime.skillRegion) return '';
+      const regionId = runtime.skillRegion(user, skill.id);
+      const region = runtime.regionCatalog?.[regionId]?.name;
+      return TRAIT_REGIONS.some(item => item.name === region) ? region : '';
+    } catch (_) { return ''; }
+  }

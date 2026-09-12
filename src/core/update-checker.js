@@ -55,9 +55,7 @@
   }
 
   function installUpdateIndicator() {
-    const heading = document.querySelector('header-component .title.iw-status-heading');
-    const versionLabel = statusVersionLabel();
-    if (heading && heading.dataset.iwVersion !== versionLabel) heading.dataset.iwVersion = versionLabel;
+    installSidebarVersion();
     document.getElementById('iw-script-update')?.remove();
     const button = document.querySelector('[data-check-script-update]');
     if (button) {

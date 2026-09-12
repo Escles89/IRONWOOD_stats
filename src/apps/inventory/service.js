@@ -147,7 +147,9 @@
       .filter((row) => clean(row.textContent).endsWith('Complete'))
       .map((row) => clean(row.querySelector(':scope > .name')?.textContent))
       .filter(Boolean);
-    const data = { schema: 1, completeSkills };
+    const skillRows = [...(skillsCard?.querySelectorAll(':scope > .row') || [])].filter(row => TRAIT_REGION_ORDER.includes(clean(row.querySelector(':scope > .name')?.textContent)));
+    if (skillRows.length !== TRAIT_REGION_ORDER.length) return;
+    const data = { schema: 1, completeSkills, totalSkills: skillRows.length };
     setCache('mastery', data);
     return data;
   }

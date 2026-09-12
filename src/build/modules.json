@@ -30,6 +30,7 @@
   "apps/taming/service.js",
   "apps/status/selectors.js",
   "apps/status/warnings.js",
+  "apps/status/news.js",
   "apps/status/service.js",
   "apps/status/view.js",
   "ui/components.js",

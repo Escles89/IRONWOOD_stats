@@ -73,25 +73,16 @@
     button.title = busy ? 'Refreshing cached data…' : 'Refresh all cached data';
   }
 
-  function setStatusHeader(active) {
-    const header = document.querySelector('header-component > .header');
-    const title = header?.querySelector('.title');
-    const image = header?.querySelector('.image img');
-    if (!header || !title) return;
-    if (active) {
-      if (!AppState.ui.headerSnapshot) AppState.ui.headerSnapshot = { title: clean(title.textContent), image: image?.getAttribute('src') || '' };
-      title.textContent = 'Status';
-      title.classList.add('iw-status-heading');
-      // Pancake/native header updates replace textContent; keep the subtitle outside that text.
-      title.dataset.iwVersion = statusVersionLabel();
-      if (image) image.setAttribute('src', '/assets/icon.png');
-    } else if (AppState.ui.headerSnapshot) {
-      title.classList.remove('iw-status-heading');
-      delete title.dataset.iwVersion;
-      title.textContent = AppState.ui.headerSnapshot.title;
-      if (image && AppState.ui.headerSnapshot.image) image.setAttribute('src', AppState.ui.headerSnapshot.image);
-      AppState.ui.headerSnapshot = null;
-    }
+  function setStatusHeader() {
+    // Keep the native page title and image intact when opening the overlay.
+    installSidebarVersion();
+  }
+
+  function installSidebarVersion() {
+    const logo = document.querySelector('nav-component .logo');
+    if (!logo) return;
+    const label = `with status panel v${USERSCRIPT_VERSION}`;
+    if (logo.dataset.iwStatusVersion !== label) logo.dataset.iwStatusVersion = label;
   }
 
   function showStats({ push = true } = {}) {
@@ -191,9 +182,37 @@
     if (location.pathname === STATS_PATH) history.replaceState(null, '', AppState.ui.previousUrl || '/');
   }
 
+  function statusNavActivity() {
+    const shortcut = document.querySelector('nav-component action-component button.button, nav-component combat-component button.button');
+    const skill = clean(shortcut?.querySelector('.details > .skill')?.textContent);
+    return { skill, image: skill ? skillIcon(skill) : '/assets/icon.png', active: Boolean(skill) };
+  }
+
+  function syncStatusNavIcon() {
+    const button = AppState.ui.navButton;
+    if (!button) return;
+    const activity = statusNavActivity();
+    let icon = button.querySelector('.iw-nav-skill-icon');
+    if (!icon) {
+      const image = button.querySelector('img');
+      if (!image) return;
+      icon = document.createElement('span');
+      icon.className = 'iw-nav-skill-icon';
+      image.before(icon);
+      icon.appendChild(image);
+    }
+    const image = icon.querySelector('img');
+    if (image.getAttribute('src') !== activity.image) image.setAttribute('src', activity.image);
+    const label = activity.active ? `Status · ${activity.skill} in progress` : 'Status';
+    if (button.getAttribute('aria-label') !== label) button.setAttribute('aria-label', label);
+    if (icon.dataset.active !== String(activity.active)) icon.dataset.active = String(activity.active);
+  }
+
   function installNavButton() {
+    installSidebarVersion();
     if (document.getElementById(NAV_ID)) {
       AppState.ui.navButton = document.getElementById(NAV_ID);
+      syncStatusNavIcon();
       return;
     }
     const inventory = [...document.querySelectorAll('nav-component .scroll > button')]
@@ -209,6 +228,7 @@
     if (name) { name.textContent = 'Status'; name.removeAttribute('style'); }
     AppState.ui.navButton.addEventListener('click', () => showStatusFromCurrentAction());
     inventory.before(AppState.ui.navButton);
+    syncStatusNavIcon();
   }
 
   function createPage() {

@@ -57,18 +57,15 @@ test('material animations survive lightweight updates and resume elapsed time af
   assert.equal(quantity.querySelector('.iw-quantity-delta'), null);
   assert.equal(quantity.querySelector('.iw-quantity-value').textContent, '998');
 });
-test('Status header shows the build version once and restores the native title when leaving', () => {
+test('Status overlay preserves the native title and icon', () => {
   const title = new Element(); title.textContent = 'Guild';
   const image = new Element(); image.setAttribute('src', '/guild.png');
   const header = { querySelector: selector => selector === '.title' ? title : image };
-  const document = { querySelector: () => header, querySelectorAll: () => [], createElement: () => new Element() };
+  const document = { querySelector: selector => selector === 'nav-component .logo' ? null : header, querySelectorAll: () => [], createElement: () => new Element() };
   const h = harness({ document });
   h.run('syncCacheRefreshButton=()=>{}');
   h.context.setStatusHeader(true);
   h.context.setStatusHeader(true);
-  assert.equal(title.dataset.iwVersion, `v${require('../../package.json').version}`);
-  title.textContent = 'Status'; // External scripts can update the native title independently.
-  assert.equal(title.dataset.iwVersion, `v${require('../../package.json').version}`);
   h.context.setStatusHeader(false);
   assert.equal(title.textContent, 'Guild');
   assert.equal(image.getAttribute('src'), '/guild.png');
