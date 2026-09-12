@@ -15,7 +15,7 @@
     const hourglass = '<span class="iw-task-icon participating" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5"></path></svg></span>';
     const idle = '<span class="iw-task-icon adventure-idle" aria-hidden="true"><span class="iw-idle-glyph">z<sup>Z</sup></span></span>';
     const event = state => guildEventStatusIcon({ schema: 9, state });
-    const trial = state => guildTrialStatusIcon({ schema: 4, state });
+    const trial = state => guildTrialStatusIcon({ schema: 5, state });
     return `<div class="iw-modal" data-modal-backdrop><section class="iw-modal-panel iw-guide-panel" role="dialog" aria-modal="true" aria-labelledby="iw-guide-title">
       <div class="iw-options-heading"><img class="iw-guide-brand" src="/assets/icon.png" alt=""><div><h2 id="iw-guide-title">Status Guide</h2><small>Ironwood RPG · Dashboard &amp; automation</small></div><button class="iw-modal-close" data-modal-close aria-label="Close guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div>
       <div class="iw-guide-body">

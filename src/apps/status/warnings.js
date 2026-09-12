@@ -1,6 +1,7 @@
   const WARNING_PREFS_KEY = 'iw-stats-warning-prefs';
   const WARNING_DEFAULTS = Object.freeze({
     queueMinutes: 60, queueUrgentMinutes: 10,
+    automationHours: 24, automationUrgentHours: 1,
     materials: 1000, materialsUrgent: 500,
     researchPoints: 10000, tribute: 10000
   });
@@ -12,6 +13,7 @@
       result[key] = Number.isSafeInteger(value) && value >= 0 && value <= 1000000000 ? value : fallback;
     }
     result.queueUrgentMinutes = Math.min(result.queueUrgentMinutes, result.queueMinutes);
+    result.automationUrgentHours = Math.min(result.automationUrgentHours, result.automationHours);
     result.materialsUrgent = Math.min(result.materialsUrgent, result.materials);
     return result;
   }

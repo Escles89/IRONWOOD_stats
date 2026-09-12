@@ -182,3 +182,24 @@
       }, 1800);
     }
   }
+
+  function readPendingAttunementShards(skillName) {
+    if (!skillName) return null;
+    try {
+      const runtime = findNativeSyncRuntime(globalThis);
+      const user = runtime.state?.user$?.getValue();
+      const attunement = Object.values(runtime.attunementCatalog || {}).find(item => item.name === skillName);
+      const shard = Object.values(runtime.catalog || {}).find(item => item.image === 'items/attunement-shard.png');
+      if (!user || !attunement || !shard) return null;
+      const slots = Object.values(user.attunements?.slots || {}).filter(slot => slot.id === attunement.id);
+      if (!slots.length) return null;
+      let total = 0;
+      for (const slot of slots) {
+        if (!slot.loot || typeof slot.loot !== 'object') return null;
+        const amount = slot.loot[shard.id]?.amount ?? 0;
+        if (!Number.isFinite(amount) || amount < 0) return null;
+        total += amount;
+      }
+      return Math.floor(total);
+    } catch { return null; }
+  }

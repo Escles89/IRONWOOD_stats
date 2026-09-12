@@ -40,6 +40,7 @@
         .match(/([\d,.]+)\s*\/\s*([\d,.]+)/);
       const lootRow = lootCard?.querySelector(':scope > .row');
       structures.push({
+        route: automationRoute(doc.defaultView?.location?.pathname),
         structure,
         image,
         making,
@@ -210,6 +211,7 @@
     const queuedTotal = numberFrom(queueMatch[2]);
     const lootAmount = numberFrom(lootRow?.querySelector('.amount')?.textContent);
     return {
+      route: automationRoute(doc.defaultView?.location?.pathname),
       structure,
       image: row.querySelector(':scope > .image img')?.getAttribute('src') || '/assets/misc/structure.png',
       making,
@@ -234,4 +236,40 @@
     byStructure.set(item.structure, item);
     const structures = [...byStructure.values()];
     setCache('automations', automationSnapshot(structures));
+  }
+
+  function automationRoute(path) {
+    return /^\/house\/automate\/\d+\/\d+$/.test(path || '') ? path : '';
+  }
+
+  async function openAutomationFromStatus(structure) {
+    if (AppState.ui.openingAutomation) return;
+    AppState.ui.openingAutomation = structure;
+    const origin = location.pathname;
+    try {
+      let route = automationRoute(getCache().automations?.structures?.find(item => item.structure === structure)?.route);
+      if (!route) {
+        route = await withPage('/', 'app-component', async (doc, frame) => {
+          await openAutomationHouse(doc);
+          const card = [...doc.querySelectorAll('home-page .card')]
+            .find(item => clean(item.querySelector(':scope > .header > .name')?.textContent) === 'Structures');
+          const row = [...(card?.querySelectorAll(':scope > button.row') || [])]
+            .find(item => clean(item.querySelector(':scope > .name')?.textContent) === structure);
+          if (!row) throw new Error(`Could not find ${structure}`);
+          row.click();
+          const started = Date.now();
+          while (Date.now() - started < 6000) {
+            const selected = card.querySelector(':scope > button.row.active-link');
+            const path = automationRoute(frame.location.pathname);
+            if (path && clean(selected?.querySelector(':scope > .name')?.textContent) === structure) return path;
+            await wait(100);
+          }
+          throw new Error(`Could not open ${structure}`);
+        });
+      }
+      // Navigate directly from Status; intermediate House selection happens in
+      // the lookup frame, never in the user's Back history.
+      if (location.pathname === origin) location.href = route;
+    } catch (error) { showActionToast({ title: 'Could not open automation', kind: 'warning', detail: error.message }); }
+    finally { AppState.ui.openingAutomation = ''; }
   }

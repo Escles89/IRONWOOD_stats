@@ -97,3 +97,10 @@ test('automation time displays days and remaining hours', () => {
   const h = harness();
   assert.equal(h.run('automationRemainingTime({queuedDone:0,queuedTotal:50,intervalMs:3600000})'), '~2d 2h');
 });
+
+test('automation queue bars show completed proportion and stay bounded for empty or completed queues', () => {
+  const h = harness();
+  assert.equal(h.context.automationQueuePercent({queuedDone:25,queuedTotal:100}),25);
+  assert.equal(h.context.automationQueuePercent({queuedDone:110,queuedTotal:100}),100);
+  assert.equal(h.context.automationQueuePercent({queuedDone:0,queuedTotal:0}),0);
+});

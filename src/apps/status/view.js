@@ -51,8 +51,10 @@
       const value = region ? entry.tributes?.[region] : null;
       const amount = resourceAmount(value);
       const low = Number.isFinite(value) && value >= 0 && value < threshold;
+      const shards = skill ? readPendingAttunementShards(skill) : null;
+      const shardLabel = `${skill} shards waiting in Attunement loot`;
       const label = `${region || 'Unconfirmed region'} Tribute: ${amount}${low ? ' (low)' : ''}`;
-      return `<span class="iw-attunement-pair${low ? ' iw-low-tribute' : ''}" title="${escapeHtml(skill ? `${skill} · ${label}` : label)}">${region ? renderRegionIcon(region) : '<span aria-hidden="true"></span>'}${skill ? renderStatusSkillIcon(skill) : '<span aria-hidden="true"></span>'}<span class="iw-tribute-amount" role="img" aria-label="${escapeHtml(label)}"><span aria-hidden="true">${escapeHtml(amount)}</span></span></span>`;
+      return `<span class="iw-attunement-pair${low ? ' iw-low-tribute' : ''}" title="${escapeHtml(skill ? `${skill} · ${label}` : label)}">${region ? `<img src="/assets/items/tribute-${region.toLowerCase()}.png" alt="${region} Tribute">` : '<span aria-hidden="true"></span>'}<span class="iw-tribute-amount" role="img" aria-label="${escapeHtml(label)}"><span aria-hidden="true">${escapeHtml(amount)}</span></span><span class="iw-attunement-divider" aria-hidden="true"></span><span class="iw-attunement-skill">${skill ? renderStatusSkillIcon(skill) : ''}</span><span class="iw-attunement-divider" aria-hidden="true"></span>${skill ? `<span class="iw-pending-shards" title="${escapeHtml(shardLabel)}"><img src="/assets/items/attunement-shard.png" alt="${escapeHtml(shardLabel)}"><span>${shards === null ? '—' : formatNumber(shards)}</span></span>` : ''}</span>`;
     }).join('')}</small>`;
   }
 
@@ -201,6 +203,17 @@
     const automationCache = getCache().automations;
     (automationCache?.structures || []).forEach((item, index) => {
       const projected = projectedAutomation(item, automationCache.checkedAt);
+      const progress = AppState.ui.page.querySelector(`[data-live-automation-progress="${index}"]`);
+      if (progress) {
+        const percent = automationQueuePercent(projected);
+        progress.setAttribute('aria-valuenow', String(percent));
+        progress.setAttribute('data-warning', automationQueueWarning(projected, automationCache.checkedAt));
+        const description = automationQueueDescription(projected, automationCache.checkedAt);
+        progress.setAttribute('title', description);
+        progress.setAttribute('aria-valuetext', description);
+        const fill = progress.querySelector('.iw-automation-queue-fill');
+        if (fill) fill.style.width = `${percent}%`;
+      }
       text(`[data-live-automation-time="${index}"]`, automationRemainingTime(projected, automationCache.checkedAt));
       text(`[data-live-automation-done="${index}"]`, formatNumber(projected.queuedDone || 0));
       text(`[data-live-automation-loot="${index}"]`, projected.lootAmount ? formatNumber(projected.lootAmount) : '0');

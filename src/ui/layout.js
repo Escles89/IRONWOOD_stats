@@ -119,6 +119,22 @@
     refreshGuildTrialSnapshot();
   }
 
+  function shouldRestoreStatusOnLoad() {
+    return location.pathname === STATS_PATH || location.pathname === LEGACY_STATS_PATH
+      || globalThis.performance?.getEntriesByType?.('navigation')?.[0]?.type === 'reload';
+  }
+
+  async function restoreStatusOnLoad() {
+    const started = Date.now();
+    // The userscript can start before Angular has mounted the game shell.
+    while (!routeWrapper() || !document.querySelector('nav-component')) {
+      if (Date.now() - started >= 15000) return;
+      await wait(100);
+    }
+    createPage();
+    await showStatusFromCurrentAction();
+  }
+
   async function showStatusFromCurrentAction() {
     const shortcut = document.querySelector('nav-component action-component button.button, nav-component combat-component button.button');
     if (shortcut) {

@@ -98,6 +98,7 @@
       countdowns: { revive: action?.reviveRemainingMs || 0, queue: queueRemainingMs },
       panels: { adventureActive, adventureActionActive, guildTrialActionActive, guildEventActionActive, masteryAchieved } });
     const signature = JSON.stringify({
+      pendingAttunementShards: (cache.attunement?.selected || []).map(slot => readPendingAttunementShards(slot.skill)),
       action: action && { name: action.name, level: action.level, image: action.image, actionId: action.actionId, location: action.location, skillName: action.skillName, skillLevel: action.skillLevel, isElite: eliteCombat, revive: Boolean(action.reviveRemainingMs), combatants: action.combatants?.map((fighter) => ({ side: fighter.side, name: fighter.name, image: fighter.image, healAmount: Boolean(fighter.healAmount), spawn: fighter.spawn, dead: fighter.dead })), pieHealing },
       loot: loot.map((item) => ({ name: item.name, image: item.image })),
       consumables: consumables.map((item) => ({ name: item.name, image: item.image, amount: item.amount })),

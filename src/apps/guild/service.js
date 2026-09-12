@@ -56,8 +56,9 @@
     return Boolean(group?.has(skillName));
   }
   function guildTrialState(entry, now = Date.now()) {
-    if (!entry || entry.schema !== 4) return 'Unknown';
-    if (entry.state === 'Active' && Number.isFinite(entry.stateEndsAt) && entry.stateEndsAt <= now) return 'Expired';
+    if (!entry || entry.schema !== 5) return 'Unknown';
+    if (Number.isFinite(entry.periodEndsAt) && entry.periodEndsAt <= now) return 'Unknown';
+    if (entry.state === 'Active' && Number.isFinite(entry.stateEndsAt) && entry.stateEndsAt <= now) return 'ParticipationComplete';
     return entry.state || 'Unknown';
   }
   function guildTrialBonusActive(entry, skillName, now = Date.now()) {
@@ -76,6 +77,7 @@
     if (state === 'Expired') return `${entry.activeName || 'Trial'} · Participation ended`;
     const remaining = Number(entry.periodEndsAt) - now;
     const reset = remaining > 0 ? ` · resets in ${formatDuration(remaining / 1000)}` : '';
+    if (state === 'ParticipationComplete') return `Participation complete${reset}`;
     if (state === 'Completed') return `All ${entry.total || ''} guild trials completed${reset}`;
     if (state === 'Available') return `${entry.available} trials available${reset}`;
     return `No trial available${reset}`;
@@ -86,12 +88,13 @@
       Active: ['participating', `${entry?.activeName || 'Guild trial'} in progress`],
       Available: ['done', 'Guild trials available to join'],
       Completed: ['done', 'Guild trials completed'],
+      ParticipationComplete: ['done', 'Guild trial participation complete'],
       Unavailable: ['trial-unavailable', 'No guild trial available'],
       Expired: ['waiting', 'Guild trial participation ended'],
       Unknown: ['trial-unknown', 'Guild trial participation not checked']
     };
     const [className, label] = states[state] || states.Unknown;
-    const path = state === 'Completed' || state === 'Available' ? 'M5 12.5l4 4L19 6.5' : 'M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5';
+    const path = state === 'Completed' || state === 'ParticipationComplete' || state === 'Available' ? 'M5 12.5l4 4L19 6.5' : 'M6 2h12M6 22h12M8 2v5l4 5-4 5v5M16 2v5l-4 5 4 5v5';
     return `<span class="iw-task-icon ${className}" data-guild-trial-state="${escapeHtml(state)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><svg ${state === 'Active' ? 'class="iw-hourglass"' : ''} viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg></span>`;
   }
   function playerName() {
@@ -213,7 +216,8 @@
           trial = { name, complete: heading(card) === 'Complete Trials', joinable: row.tagName === 'BUTTON' && !row.disabled, participants: [] };
           trials.push(trial);
         } else if (trial && row.classList.contains('row-dark')) {
-          trial.participants.push({ name, remaining: clean(row.querySelector(':scope > .time')?.textContent) });
+          const time = row.querySelector(':scope > .time');
+          trial.participants.push({ name, remaining: clean(time?.textContent), completed: !time });
         }
       }
     }
@@ -222,8 +226,10 @@
     // Headings mount before their data. Do not overwrite a good snapshot with that loading state.
     if (trials.length !== total) return null;
     const activeTrial = ownName ? trials.find(trial => trial.participants.some(person => person.name === ownName && durationMs(person.remaining) > 0)) : null;
+    const completedParticipation = ownName && trials.some(trial => trial.participants.some(person => person.name === ownName && person.completed));
+    if (ownName && trials.some(trial => trial.participants.some(person => person.name === ownName && !person.completed && !person.remaining))) return null;
     const ownParticipation = activeTrial?.participants.find(person => person.name === ownName && durationMs(person.remaining) > 0);
-    return { completed, total, endText, available: trials.filter(trial => !trial.complete && trial.joinable).length,
+    return { completed, total, endText, completedParticipation: Boolean(completedParticipation), available: trials.filter(trial => !trial.complete && trial.joinable).length,
       activeName: activeTrial?.name || '', remaining: ownParticipation?.remaining || '', identityKnown: Boolean(ownName) };
   }
   function collectGuildTrial(doc) {
@@ -233,13 +239,13 @@
     const previous = getCache().guildTrial;
     const timer = durationMs(data.remaining);
     const periodTimer = durationMs(data.endText);
-    const sameParticipation = previous?.schema === 4 && previous.activeName === data.activeName && previous.remaining === data.remaining && previous.stateEndsAt > now;
+    const sameParticipation = previous?.schema === 5 && previous.activeName === data.activeName && previous.remaining === data.remaining && previous.stateEndsAt > now;
     const stateEndsAt = timer ? (sameParticipation ? previous.stateEndsAt : now + timer) : null;
-    const state = !data.identityKnown ? 'Unknown' : timer ? 'Active' : data.total > 0 && data.completed >= data.total ? 'Completed' : data.available ? 'Available' : 'Unavailable';
+    const state = !data.identityKnown ? 'Unknown' : timer ? 'Active' : data.completedParticipation ? 'ParticipationComplete' : data.total > 0 && data.completed >= data.total ? 'Completed' : data.available ? 'Available' : 'Unavailable';
     const periodEndsAt = periodTimer ? now + periodTimer : null;
     // Refresh active participation hourly, independently of the guild-wide trial period.
     const refreshAt = Math.min(stateEndsAt || Infinity, periodEndsAt || Infinity, now + (state === 'Active' || state === 'Unknown' ? 3600000 : TTL.guildTrial));
-    const record = { schema: 4, state, activeName: data.activeName, remaining: data.remaining,
+    const record = { schema: 5, state, activeName: data.activeName, remaining: data.remaining,
       approximateTimer: Boolean(timer && !/\d\s*[ms]/i.test(data.remaining)),
       completed: data.completed, total: data.total, available: data.available,
       stateEndsAt, periodEndsAt, refreshAt, expiresAt: refreshAt };

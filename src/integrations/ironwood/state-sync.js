@@ -33,6 +33,7 @@
         state: service('syncUser'), firebase: service('getUser'), action: service('handleActionSync'),
         automations: service('handleAutomationSync'), expedition: service('handleExpeditionSync'),
         zone: Zone && injector.get(Zone, null),
+        attunementCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Woodcutting' && item.skillId != null) && Object.values(value).every(item => item?.skillId != null)),
         notificationComponent: exports.find(value => typeof value?.prototype?.createNotifications === 'function'),
         catalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.image === 'items/challenge-scroll.png'))
       };

@@ -47,7 +47,7 @@
     // limit, this is a known state boundary that requires a new observation.
     const incompleteGuildEvent = key === 'guildEvent' && (entry?.schema !== 9
       || (entry.state !== 'Cooldown' && Number.isFinite(entry.eventEndsAt) && entry.eventEndsAt <= Date.now()));
-    const incompleteGuildTrial = key === 'guildTrial' && (entry?.schema !== 4 || entry.state === 'Unknown');
+    const incompleteGuildTrial = key === 'guildTrial' && (entry?.schema !== 5 || entry.state === 'Unknown');
     const guildTrialRefreshDue = !ignoreAge && key === 'guildTrial' && entry && Number.isFinite(entry.refreshAt) && Date.now() >= entry.refreshAt;
     const incompleteQuests = key === 'quests' && (entry?.schema !== 2 || (!ignoreAge && getPrefs().length === 5 && entry?.day === dayKey() && !entry.dailyComplete));
     const incompleteAttunement = key === 'attunement' && entry?.schema !== 3;

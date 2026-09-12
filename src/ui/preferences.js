@@ -19,6 +19,8 @@
             <div class="iw-warning-grid">
               ${warningInput('Queue time · amber', 'queueMinutes', 'minutes')}
               ${warningInput('Queue time · red', 'queueUrgentMinutes', 'minutes')}
+              ${warningInput('Automation queue · amber', 'automationHours', 'hours')}
+              ${warningInput('Automation queue · red', 'automationUrgentHours', 'hours')}
               ${warningInput('Materials · amber', 'materials', 'per material')}
               ${warningInput('Materials · red', 'materialsUrgent', 'per material')}
               ${warningInput('Low research points', 'researchPoints', 'RP')}

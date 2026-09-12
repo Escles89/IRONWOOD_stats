@@ -54,8 +54,8 @@ test('capture stores participation expiry separately, preserves rounded deadline
   h.context.collectGuildTrial(fixture());
   assert.equal(h.run(`CacheStore.get('guildTrial').stateEndsAt`), entry.stateEndsAt);
   h.time(entry.stateEndsAt);
-  assert.equal(h.context.guildTrialState(entry), 'Expired');
-  assert.match(h.context.guildTrialDetail(entry), /Participation ended/);
+  assert.equal(h.context.guildTrialState(entry), 'ParticipationComplete');
+  assert.match(h.context.guildTrialDetail(entry), /Participation complete/);
 });
 test('partially mounted lists preserve cached participation, and completed trials can still have an active participant', () => {
   const h = harness();
@@ -67,20 +67,20 @@ test('partially mounted lists preserve cached participation, and completed trial
 });
 test('all trial states render accessible icons instead of available/unavailable text', () => {
   const h = harness();
-  for (const state of ['Active', 'Available', 'Unavailable', 'Completed', 'Expired', 'Unknown']) {
-    const html = h.context.guildTrialStatusIcon({ schema: 4, state, activeName: 'Defense Trial', stateEndsAt: 999999 });
+  for (const state of ['Active', 'Available', 'Unavailable', 'Completed', 'ParticipationComplete', 'Expired', 'Unknown']) {
+    const html = h.context.guildTrialStatusIcon({ schema: 5, state, activeName: 'Defense Trial', stateEndsAt: 999999 });
     assert.match(html, /<svg/);
     assert.match(html, /aria-label=/);
     assert.doesNotMatch(html, /<em/);
     assert.equal(html.includes('class="iw-hourglass"'), state === 'Active');
-    assert.equal(html.includes('class="iw-task-icon done"'), ['Available', 'Completed'].includes(state));
-    assert.equal(html.includes('M5 12.5l4 4L19 6.5'), ['Available', 'Completed'].includes(state));
+    assert.equal(html.includes('class="iw-task-icon done"'), ['Available', 'Completed', 'ParticipationComplete'].includes(state));
+    assert.equal(html.includes('M5 12.5l4 4L19 6.5'), ['Available', 'Completed', 'ParticipationComplete'].includes(state));
   }
 });
 
 test('trial bonus requires active participation in exactly the current skill', () => {
   const h = harness();
-  const entry = { schema: 4, state: 'Active', activeName: 'Defense Trial', stateEndsAt: 200000 };
+  const entry = { schema: 5, state: 'Active', activeName: 'Defense Trial', stateEndsAt: 200000 };
   assert.equal(h.context.guildTrialBonusActive(entry, 'Defense'), true);
   assert.equal(h.context.guildTrialBonusActive(entry, ' defense '), true);
   for (const skill of ['Woodcutting', 'One-handed', 'Defense Training', '', undefined]) {
@@ -97,7 +97,7 @@ test('trial bonus requires active participation in exactly the current skill', (
 test('Current Action badge follows skill switches and expiry while the Status row retains trial participation', () => {
   const h = harness();
   h.run(`
-    CacheStore.set('guildTrial', { schema: 4, state: 'Active', activeName: 'Defense Trial', stateEndsAt: 200000 });
+    CacheStore.set('guildTrial', { schema: 5, state: 'Active', activeName: 'Defense Trial', stateEndsAt: 200000 });
     globalThis.action = { name: 'Treant', skillName: 'Defense', isCombat: true, combatants: [] };
     readCurrentAction = () => action;
     AppState.ui.page = { hidden: false, innerHTML: '', style: { setProperty() {} }, querySelector() { return null; } };
@@ -117,6 +117,18 @@ test('Current Action badge follows skill switches and expiry while the Status ro
   h.run('StatusRenderer.render(AppState)');
   html = h.run('AppState.ui.page.innerHTML');
   assert.doesNotMatch(html, /class="iw-guild-trial-badge"/);
-  assert.match(html, /data-guild-trial-state="Expired"/);
+  assert.match(html, /data-guild-trial-state="ParticipationComplete"/);
   assert.doesNotMatch(html, /Status could not render/);
+});
+
+test('finished personal participation gets a completed check even when guild trials remain incomplete', () => {
+  const h = harness();
+  h.storage.set('iw-stats-player-name-v2', 'Player');
+  const entry = h.context.collectGuildTrial(fixture({ time: '', completed: 0 }));
+  assert.equal(entry.state, 'ParticipationComplete');
+  assert.match(h.context.guildTrialDetail(entry), /^Participation complete · resets in/);
+  assert.match(h.context.guildTrialStatusIcon(entry), /iw-task-icon done/);
+  assert.equal(h.context.guildTrialBonusActive(entry, 'Defense'), false);
+  assert.equal(h.context.guildTrialState(entry, entry.periodEndsAt), 'Unknown');
+  assert.equal(h.context.collectGuildTrial(fixture({ ownName: 'Someone else', time: '' })).state, 'Unavailable');
 });

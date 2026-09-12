@@ -811,25 +811,37 @@
       #iw-stats-page #iw-cache-refresh:hover:not(:disabled) { background:#1b4352; border-color:#89bdca; }
       #iw-stats-page #iw-cache-refresh:focus-visible { outline:2px solid #8ad6ff; outline-offset:2px; }
 
-      .iw-automation-heading, .iw-automation-metrics { display:contents; }
-      .iw-automation-metric-icon, .iw-automation-duration, .iw-automation-completed { display:none; }
+      .iw-automation-table .iw-table-row { position:relative; display:flex; flex-direction:column; align-items:stretch; gap:5px; padding:9px 12px; }
+      .iw-automation-heading { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; min-width:0; padding-left:39px; }
+      .iw-automation-table .iw-automation-label { gap:7px; min-width:0; font-size:14px; line-height:19px; }
+      .iw-automation-table .iw-automation-recipe { order:0; }
+      .iw-automation-table .iw-automation-structure { order:1; color:#b1c3ce; font-size:var(--iw-meta-size); line-height:var(--iw-meta-line); }
+      .iw-automation-table .iw-automation-recipe > img, .iw-automation-table .iw-automation-placeholder { position:absolute; width:32px; height:32px; left:12px; top:50%; transform:translateY(-50%); object-position:center; }
+      .iw-automation-table .iw-automation-structure img { width:var(--iw-meta-icon); height:var(--iw-meta-icon); flex-basis:var(--iw-meta-icon); }
+      .iw-automation-table .iw-automation-label > span:last-child { white-space:normal; overflow-wrap:anywhere; }
+      .iw-automation-queue-bar { position:relative; isolation:isolate; display:flex; align-items:center; justify-content:space-between; gap:8px; margin-left:39px; min-width:0; min-height:20px; padding:1px 7px; box-sizing:border-box; overflow:hidden; border:1px solid #2b4859; border-radius:3px; background:#102b3c; color:#b1c3ce; font-size:12px; line-height:18px; font-variant-numeric:tabular-nums; }
+      .iw-automation-queue-fill { position:absolute; z-index:-1; left:0; top:0; bottom:0; background:rgba(79,183,229,.24); border-right:1px solid rgba(121,209,245,.45); }
+      .iw-automation-queue-count { min-width:0; overflow-wrap:anywhere; }
+      .iw-automation-queue-count > [data-live-automation-done] { color:#dce7ec; }
+      .iw-queue-slash { color:#8fa5b2; }
+      .iw-automation-queue-time { flex-shrink:0; font-size:11px; }
+
+      .iw-automation-link { cursor:pointer; }
+      .iw-automation-link:hover { background:#152f40; }
+      .iw-automation-link:focus-visible { outline:2px solid #8ad6ff; outline-offset:-2px; }
+
+      .iw-status-list .iw-pending-shards { display:flex; align-items:center; gap:6px; }
+      .iw-status-list small.iw-tribute-balances { grid-template-columns:var(--iw-meta-icon) max-content 5px var(--iw-meta-icon) 5px max-content; column-gap:6px; }
+      .iw-status-list .iw-attunement-pair::before, .iw-status-list .iw-tribute-amount::before { content:none; }
+      .iw-status-list .iw-attunement-skill { display:flex; align-items:center; justify-content:center; }
+      .iw-status-list .iw-attunement-divider { display:block; place-self:center; width:1px; height:8px; background:var(--iw-status-divider); }
+      .iw-automation-queue-bar[data-warning="warning"] { border-color:#efa900; color:#ffd078; animation:iw-warning-badge-glow 1.8s ease-in-out infinite; }
+      .iw-automation-queue-bar[data-warning="urgent"] { border-color:#ed655d; color:#ffaaa2; animation:iw-death-badge-glow 1.8s ease-in-out infinite; }
+      .iw-automation-queue-bar[data-warning="warning"] .iw-automation-queue-fill { background:rgba(239,169,0,.22); border-color:#efa900; }
+      .iw-automation-queue-bar[data-warning="urgent"] .iw-automation-queue-fill { background:rgba(237,101,93,.22); border-color:#ed655d; }
+      @media (prefers-reduced-motion:reduce) { .iw-automation-queue-bar[data-warning] { animation:none; } }
       @container (max-width:560px) {
-        .iw-automation-table .iw-table-head { display:none; }
-        .iw-automation-table .iw-table-row { position:relative; display:flex; flex-direction:column; align-items:stretch; gap:5px; padding:10px 12px; }
-        .iw-automation-heading { display:flex; flex-wrap:wrap; align-items:center; gap:5px 12px; min-width:0; padding-left:39px; }
-        .iw-automation-table .iw-automation-label { gap:7px; min-width:0; font-size:14px; line-height:19px; }
-        .iw-automation-table .iw-automation-recipe { order:0; }
-        .iw-automation-table .iw-automation-structure { order:1; color:#b1c3ce; font-size:var(--iw-meta-size); line-height:var(--iw-meta-line); }
-        .iw-automation-table .iw-automation-label img, .iw-automation-table .iw-automation-placeholder { width:32px; height:32px; flex-basis:32px; }
-        .iw-automation-table .iw-automation-recipe > img, .iw-automation-table .iw-automation-placeholder { position:absolute; left:12px; top:50%; transform:translateY(-50%); object-position:center; }
-        .iw-automation-table .iw-automation-structure img { width:var(--iw-meta-icon); height:var(--iw-meta-icon); flex-basis:var(--iw-meta-icon); }
-        .iw-automation-table .iw-automation-label > span:last-child { white-space:normal; overflow-wrap:anywhere; }
-        .iw-automation-table .iw-automation-metrics { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; padding-left:39px; min-width:0; }
-        .iw-automation-table [data-label="Loot"] { display:none; }
-        .iw-automation-table .iw-automation-duration, .iw-automation-table .iw-automation-completed, .iw-automation-table [data-label="Queued"] { display:flex; align-items:center; gap:5px; min-width:0; font-size:12px; line-height:18px; font-variant-numeric:tabular-nums; }
-        .iw-automation-table .iw-automation-metrics > div > span { order:1; }
-        .iw-automation-table .iw-automation-metrics > div > svg { order:0; }
-        .iw-automation-table .iw-automation-metrics svg { display:block; width:16px; height:16px; flex-shrink:0; color:#8fa5b2; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
-        .iw-automation-table .iw-automation-completed, .iw-automation-table [data-label="Queued"] { position:relative; padding-left:12px; }
-        .iw-automation-table .iw-automation-completed::before, .iw-automation-table [data-label="Queued"]::before { content:''; position:absolute; left:0; top:5px; height:8px; border-left:1px solid #385565; }
+        .iw-action-card > .iw-card-header { flex-wrap:wrap; row-gap:8px; }
+        .iw-action-card > .iw-card-header > span:first-child { flex:0 0 auto; max-width:100%; overflow-wrap:anywhere; }
+        .iw-action-card > .iw-card-header > .iw-action-badges { flex:0 0 auto; max-width:100%; justify-content:flex-start; }
       }

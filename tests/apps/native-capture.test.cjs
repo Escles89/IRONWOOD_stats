@@ -92,7 +92,7 @@ test('active skill falls back to the native sidebar shortcut when the tracker is
   };
   const h = harness({ document });
   assert.equal(h.run('SourceAdapter.capture(document).action.skillName'), 'Defense');
-  assert.equal(h.run(`guildTrialBonusActive({ schema: 4, state: 'Active', activeName: 'Defense Trial', stateEndsAt: 200000 }, AppState.live.action.skillName)`), true);
+  assert.equal(h.run(`guildTrialBonusActive({ schema: 5, state: 'Active', activeName: 'Defense Trial', stateEndsAt: 200000 }, AppState.live.action.skillName)`), true);
 });
 
 test('enemy remount gaps preserve combat briefly, expire to idle, and do not override a new action', () => {

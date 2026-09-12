@@ -1,3 +1,4 @@
+  const restoreStatusAtStartup = shouldRestoreStatusOnLoad();
   function initialise() {
     installNativeQuantityPrecision();
     if (location.pathname === LEGACY_STATS_PATH) history.replaceState({ iwStatus: true }, '', STATS_PATH);
@@ -19,7 +20,7 @@
       syncHeaderActionBadges();
     })
       .observe(document.body, { childList: true, subtree: true });
-    if (location.pathname === STATS_PATH) showStatusFromCurrentAction();
+    if (restoreStatusAtStartup) restoreStatusOnLoad();
     setTimeout(captureVisibleCaches, 1500);
     AppState.ui.startupSyncAt = Date.now() + 2500;
     setTimeout(() => { AppState.ui.startupSyncAt = null; syncStale(false); }, 2500);

@@ -133,6 +133,8 @@
       if (event.target.closest?.('[data-collect-attunement]')) { event.stopPropagation(); NativeControlAdapter.run(document, { type: 'attunement' }); return; }
       if (event.target.closest?.('[data-collect-taming]')) { event.stopPropagation(); NativeControlAdapter.run(document, { type: 'taming' }); return; }
       if (event.target.closest?.('[data-run-challenge]')) { event.stopPropagation(); NativeControlAdapter.run(document, { type: 'challenge' }); return; }
+      const automationLink = event.target.closest?.('[data-open-automation]');
+      if (automationLink && AppState.ui.page?.contains(automationLink)) { openAutomationFromStatus(automationLink.dataset.openAutomation); return; }
       const launch = event.target.closest?.('[data-route]');
       if (!launch || !AppState.ui.page?.contains(launch)) return;
       location.href = launch.dataset.route;
@@ -140,7 +142,7 @@
     document.addEventListener('keydown', (event) => {
       if (handlePreferencesKey(event)) return;
       if (event.target.closest?.('button')) return;
-      const launch = event.target.closest?.('.iw-status-link[data-route]');
+      const launch = event.target.closest?.('.iw-status-link[data-route], [data-open-automation]');
       if (!launch || (event.key !== 'Enter' && event.key !== ' ')) return;
       event.preventDefault();
       launch.click();
