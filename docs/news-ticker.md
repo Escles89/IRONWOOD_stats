@@ -1,13 +1,13 @@
 # Ironwood Dispatch: lines and conditions
 
-The Dispatch mixes fictional in-world reporting with facts observed by the dashboard. It is not an official news feed. All lines live in [`src/content/news-lines.json`](../src/content/news-lines.json); the userscript build embeds them, so selecting headlines never fetches a profile, inventory, or external news source.
+The Dispatch uses recognizable game, film, television, book, and technology references, adapted to Ironwood and facts observed by the dashboard. Generic village and activity jokes have been removed or rewritten. It is not an official news feed. All lines live in [`src/content/news-lines.json`](../src/content/news-lines.json); the userscript build embeds them, so selecting headlines never fetches a profile, inventory, or external news source.
 
 ## Categories
 
 | JSON category | When eligible | What it uses |
 | --- | --- | --- |
-| `general` | Always | Village, guild, inventory, and adventurer jokes. |
-| `geek` | Always | Programming and technology humor. |
+| `general` | Always | Named fictional worlds and characters applied to village, guild, and inventory life. |
+| `geek` | Always | Recognizable software, technology, and IT-culture references. |
 | `sci_fi` | Always | Space travel, science fiction, and familiar genre references. |
 | `pop_culture` | Always | Fantasy, games, and popular-culture nods. |
 | `league_of_legends`, `diablo`, `rollercoaster_tycoon`, `cookie_clicker`, `runescape` | Always | Dedicated game references and crossover jokes. |
@@ -59,7 +59,7 @@ Names and values are inserted literally and rendered as escaped text. The ticker
 | `{level}` | Observed level-up events only. |
 | `{item}`, `{amount}` | Observed special-loot events only. |
 
-Use only placeholders that the category supplies. Add lines as nonempty JSON strings; keep humor playful and avoid describing fictional jokes as real balance changes or official announcements. Run `npm run build` after editing the library, then run the project checks.
+Use only placeholders that the category supplies. Every line must contain an identifiable reference: a named work, character, product, or distinctive concept such as Teemo, a wrinkler, or the Grand Exchange. A generic joke under a franchise category is not enough. Keep references integral to the joke rather than attaching a title to unrelated filler. Add lines as nonempty JSON strings; keep humor playful and avoid describing fictional jokes as real balance changes or official announcements. Run `npm run build` after editing the library, then run the project checks.
 
 ## Presentation
 
@@ -67,9 +67,11 @@ Portal colors, a compact category/source line, and an animated entrance accompan
 
 Source labels are fictional attribution for the shared headline library. They do not fetch real posts or imply publication by real outlets. Add or rename them in `_sources`; categories continue to decide which headlines are eligible.
 
-## Library size (v1.13.136)
+## Library size (v1.13.163)
 
-544 unique headline templates across 38 categories, plus 20 fictional source labels. Every headline category has at least 12 lines. Player names and other substitutions are variants of a template, not additional headlines.
+608 unique reference-based headline templates across 38 categories, plus 20 fictional source labels. Every category has sixteen lines. This expansion adds 350 messages to the 258-message reference-only library without removing any. Player names and other substitutions are variants of a template, not additional headlines. References cover all contexts, including live combat and progression events, without changing eligibility or rotation rules.
+
+Minecraft references are limited to six templates across the library (down from thirty). The other twenty-four were replaced with different references, including Frostpunk, Potion Craft, Pikmin, Morrowind, Discworld, BioShock, and Borderlands. Keep franchise variety within active-skill categories as well as across the whole library; those categories receive extra selection weight.
 
 ## Outlet identities
 

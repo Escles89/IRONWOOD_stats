@@ -119,12 +119,12 @@ test('source attribution rotates without consecutive repeats and includes press 
   assert.ok(lines._sources.some(source=>source.includes('Forum')));
 });
 
-test('expanded library has at least twelve lines per category with no duplicate templates', () => {
+test('reference library retains every context with sixteen unique templates', () => {
   const categories = Object.entries(lines).filter(([key])=>!key.startsWith('_'));
   const all = categories.flatMap(([,values])=>values);
-  assert.equal(all.length,544);
+  assert.equal(all.length,608);
   assert.equal(new Set(all).size,all.length);
-  for(const [key,values] of categories) assert.ok(values.length>=12,key);
+  for(const [key,values] of categories) assert.equal(values.length,16,key);
   for(const key of ['league_of_legends','diablo','rollercoaster_tycoon','cookie_clicker','runescape']) assert.ok(lines[key].length>=12);
 });
 

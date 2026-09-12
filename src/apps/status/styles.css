@@ -829,6 +829,8 @@
       .iw-automation-link:focus-visible { outline:2px solid #8ad6ff; outline-offset:-2px; }
 
       .iw-status-list .iw-pending-shards { display:flex; align-items:center; gap:6px; }
+      /* The shard fills its asset bounds more fully than the neighboring skill sprites. */
+      .iw-status-list .iw-status-row small .iw-pending-shards img { box-sizing:border-box; padding:1px; }
       .iw-status-list small.iw-tribute-balances { grid-template-columns:var(--iw-meta-icon) max-content 5px var(--iw-meta-icon) 5px max-content; column-gap:6px; }
       .iw-status-list .iw-attunement-pair::before, .iw-status-list .iw-tribute-amount::before { content:none; }
       .iw-status-list .iw-attunement-skill { display:flex; align-items:center; justify-content:center; }

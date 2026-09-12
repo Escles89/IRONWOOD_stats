@@ -2,7 +2,7 @@
 
 Edit `news-lines.json` to add or change ticker headlines. Each category contains an array of nonempty strings. `general`, `idle`, and `combat` are shared categories; skill categories use the exact displayed skill name, such as `Woodcutting` or `Two-handed`.
 
-These are fictional in-world headlines, not official game announcements. Active skill and combat lines are favored over general headlines. Lines rotate after at least 14 seconds without consecutive repeats. The pause button freezes the current line; reduced-motion preferences disable transition effects.
+These are fictional reference-based headlines, not official game announcements. Every message must include an identifiable game, book, film, television, or technology reference that contributes to the joke. Generic activity jokes are not eligible, even in a named franchise category. Active skill and combat lines are favored over general headlines. Lines rotate after at least 14 seconds without consecutive repeats. The pause button freezes the current line; reduced-motion preferences disable transition effects.
 
 The build embeds the JSON into the userscript, so the ticker needs no network requests. Run `npm run build` after editing the library.
 
