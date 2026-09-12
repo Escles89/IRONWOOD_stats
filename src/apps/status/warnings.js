@@ -3,7 +3,7 @@
     queueMinutes: 60, queueUrgentMinutes: 10,
     automationHours: 24, automationUrgentHours: 1,
     materials: 1000, materialsUrgent: 500,
-    researchPoints: 10000, tribute: 10000
+    tribute: 10000
   });
 
   function normalizeWarningPrefs(saved) {
@@ -49,15 +49,19 @@
   function statusResourceWarnings(cache, prefs = getWarningPrefs()) {
     const low = (amount, threshold) => Number.isFinite(amount) && amount >= 0 && threshold > 0 && amount < threshold;
     const rp = cache.adventure?.researchPoints;
+    const mapCost = cache.adventure?.mapCost;
+    const cycleCost = Number.isFinite(mapCost) && mapCost >= 0 ? mapCost * 9 + 16000 : null;
+    const rpState = low(rp, 16000) ? 'urgent' : cycleCost !== null && low(rp, cycleCost) ? 'warning' : '';
     const tributes = ['Forest', 'Mountain', 'Ocean'].filter(region => low(cache.attunement?.tributes?.[region], prefs.tribute));
     return {
-      rp: low(rp, prefs.researchPoints) ? `Low RP: ${formatNumber(rp)}` : '',
+      rp: rpState ? `Low RP: ${formatNumber(rp)} · ${rpState === 'urgent' ? '16,000 RP needed to start an adventure' : `${formatNumber(cycleCost)} RP needed for nine maps and an adventure`}` : '',
+      rpState,
       tributes: tributes.length ? `Low Tribute: ${tributes.map(region => `${region} ${formatNumber(cache.attunement.tributes[region])}`).join(' · ')} (below ${formatNumber(prefs.tribute)})` : ''
     };
   }
 
-  function renderResourceWarning(message) {
-    return message ? `<span class="iw-task-icon waiting" role="img" title="${escapeHtml(message)}" aria-label="${escapeHtml(message)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 20H3L12 3Z"></path><path d="M12 9v5M12 17h.01"></path></svg></span>` : '';
+  function renderResourceWarning(message, state = '') {
+    return message ? `<span class="iw-task-icon waiting${state ? ` iw-rp-alert ${state}` : ''}" role="img" title="${escapeHtml(message)}" aria-label="${escapeHtml(message)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 20H3L12 3Z"></path><path d="M12 9v5M12 17h.01"></path></svg></span>` : '';
   }
 
   function readTributeBalance(text) {

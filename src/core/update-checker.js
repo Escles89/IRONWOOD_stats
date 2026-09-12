@@ -20,7 +20,7 @@
   const UPDATE_CHECK_KEY = 'iw-status-update-check-v1';
   const UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000;
   const UPDATE_RETRY_INTERVAL = 15 * 60 * 1000;
-  const scriptUpdate = { loaded: false, latestVersion: '', nextCheckAt: 0, pending: null };
+  const scriptUpdate = { loaded: false, latestVersion: '', nextCheckAt: 0, pending: null, manual: false, settingsResult: '' };
 
   function isNewerScriptVersion(candidate, installed = USERSCRIPT_VERSION) {
     const valid = value => typeof value === 'string' && /^\d+(?:\.\d+)*$/.test(value)
@@ -58,27 +58,58 @@
     const heading = document.querySelector('header-component .title.iw-status-heading');
     const versionLabel = statusVersionLabel();
     if (heading && heading.dataset.iwVersion !== versionLabel) heading.dataset.iwVersion = versionLabel;
-    const existing = document.getElementById('iw-script-update');
-    if (!SCRIPT_UPDATE_SOURCE || !isNewerScriptVersion(scriptUpdate.latestVersion)) {
-      existing?.remove();
-      return;
+    document.getElementById('iw-script-update')?.remove();
+    const button = document.querySelector('[data-check-script-update]');
+    if (button) {
+      const label = scriptUpdateButtonLabel();
+      if (button.textContent !== label) button.textContent = label;
+      button.disabled = scriptUpdate.manual;
+      button.setAttribute('aria-busy', String(scriptUpdate.manual));
     }
-    const coins = document.querySelector('header-component .header .coins');
-    if (!coins) return;
-    const label = `Ironwood Status v${scriptUpdate.latestVersion} available (installed v${USERSCRIPT_VERSION}). View on Greasy Fork`;
-    const indicator = existing || document.createElement('a');
-    if (!existing) {
-      indicator.id = 'iw-script-update';
-      indicator.href = SCRIPT_UPDATE_SOURCE.pageUrl;
-      indicator.target = '_blank';
-      indicator.rel = 'noopener noreferrer';
-      indicator.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V4m-7 7 7-7 7 7"/></svg>';
+  }
+
+  function scriptUpdateButtonLabel() {
+    if (scriptUpdate.manual) return 'Checking…';
+    if (scriptUpdate.settingsResult === 'error') return 'Check failed · Retry';
+    if (isNewerScriptVersion(scriptUpdate.latestVersion)) return `Update available · v${scriptUpdate.latestVersion}`;
+    return scriptUpdate.settingsResult === 'success' ? 'Up to date' : 'Check for updates';
+  }
+
+  async function checkSettingsUpdate() {
+    if (scriptUpdate.manual) return;
+    scriptUpdate.manual = true;
+    scriptUpdate.settingsResult = '';
+    installUpdateIndicator();
+    try {
+      scriptUpdate.settingsResult = await checkScriptUpdate({ force: true }) ? 'success' : 'error';
+    } finally {
+      scriptUpdate.manual = false;
+      installUpdateIndicator();
     }
-    if (indicator.title !== label) {
-      indicator.title = label;
-      indicator.setAttribute('aria-label', label);
+  }
+
+  function renderScriptUpdateButton() {
+    return `<button type="button" class="iw-update-check-button" data-check-script-update ${scriptUpdate.manual ? 'disabled' : ''}>${escapeHtml(scriptUpdateButtonLabel())}</button>`;
+  }
+
+  async function checkAndInstallScriptUpdate() {
+    if (scriptUpdate.manual) return;
+    scriptUpdate.manual = true;
+    installUpdateIndicator();
+    try {
+      const success = await checkScriptUpdate({ force: true });
+      scriptUpdate.settingsResult = success ? 'success' : 'error';
+      if (!success) {
+        showActionToast({ kind: 'warning', title: 'Update check failed', detail: 'Please try again.' });
+      } else if (isNewerScriptVersion(scriptUpdate.latestVersion)) {
+        location.assign(SCRIPT_UPDATE_SOURCE.updateUrl.replace(/\.meta\.js$/, '.user.js'));
+      } else {
+        showActionToast({ kind: 'success', title: 'No update available', detail: `Installed: v${USERSCRIPT_VERSION}.` });
+      }
+    } finally {
+      scriptUpdate.manual = false;
+      installUpdateIndicator();
     }
-    if (coins.nextElementSibling !== indicator) coins.after(indicator);
   }
 
   function statusVersionLabel() {
@@ -87,11 +118,11 @@
       ? ` · Public v${publicVersion}` : ''}`;
   }
 
-  async function checkScriptUpdate() {
+  async function checkScriptUpdate({ force = false } = {}) {
     loadScriptUpdate();
     installUpdateIndicator();
-    if (!SCRIPT_UPDATE_SOURCE || document.hidden || Date.now() < scriptUpdate.nextCheckAt) return;
     if (scriptUpdate.pending) return scriptUpdate.pending;
+    if (!SCRIPT_UPDATE_SOURCE || (!force && (document.hidden || Date.now() < scriptUpdate.nextCheckAt))) return false;
     scriptUpdate.pending = (async () => {
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 8000);
@@ -102,9 +133,11 @@
         if (!version) throw new Error('Invalid update metadata');
         scriptUpdate.latestVersion = version;
         scriptUpdate.nextCheckAt = Date.now() + UPDATE_CHECK_INTERVAL;
+        return true;
       } catch (_) {
         // An offline check must never interrupt the dashboard or erase a known update.
         scriptUpdate.nextCheckAt = Date.now() + UPDATE_RETRY_INTERVAL;
+        return false;
       } finally {
         window.clearTimeout(timeout);
         try {
@@ -114,6 +147,6 @@
         installUpdateIndicator();
       }
     })();
-    try { await scriptUpdate.pending; }
+    try { return await scriptUpdate.pending; }
     finally { scriptUpdate.pending = null; }
   }

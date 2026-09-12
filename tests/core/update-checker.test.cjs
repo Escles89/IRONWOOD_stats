@@ -100,32 +100,32 @@ test('versions compare numeric segments and reject invalid metadata', () => {
   assert.equal(h.context.publishedScriptVersion(metadata('nope')), '');
 });
 
-test('new update inserts one accessible link after coins and survives header replacement', async () => {
-  let requests = 0;
-  const { h, children, coins } = setup(async (url, options) => {
-    requests++;
-    assert.equal(url, 'https://update.greasyfork.org/scripts/123456/Status.meta.js');
-    assert.equal(options.credentials, 'omit');
-    return { ok: true, text: async () => metadata('99.0.0') };
-  });
+test('new updates appear on the options button instead of beside coins', async () => {
+  const { h, children } = setup(async () => ({ ok: true, text: async () => metadata('99.0.0') }));
   await h.context.checkScriptUpdate();
-  const arrow = children[1];
-  assert.equal(arrow.id, 'iw-script-update');
-  assert.equal(coins.nextElementSibling, arrow);
-  assert.match(arrow.attributes['aria-label'], /99.0.0 available/);
-  assert.equal(arrow.href, 'https://greasyfork.org/scripts/123456');
-  assert.equal(arrow.rel, 'noopener noreferrer');
-  h.context.installUpdateIndicator();
-  await h.context.checkScriptUpdate();
-  assert.equal(children.length, 2);
-  assert.equal(children[1], arrow);
-  assert.equal(requests, 1);
-  children.splice(1); // Angular replaces the native header.
-  h.context.installUpdateIndicator();
-  assert.equal(children[1].id, 'iw-script-update');
-  h.run(`scriptUpdate.latestVersion = USERSCRIPT_VERSION`);
-  h.context.installUpdateIndicator();
   assert.equal(children.length, 1);
+  assert.match(h.context.renderScriptUpdateButton(), /Update available/);
+});
+
+test('manual check bypasses cached schedules and opens the userscript installer only for a fresh newer version', async () => {
+  let requests = 0, version = '99.0.0', fail = false;
+  const { h } = setup(async () => { requests++; if (fail) throw Error('offline'); return { ok: true, text: async () => metadata(version) }; });
+  const destinations = [], toasts = [];
+  h.context.location.assign = url => destinations.push(url);
+  h.context.showActionToast = toast => toasts.push(toast);
+  await h.context.checkScriptUpdate();
+  await h.context.checkAndInstallScriptUpdate();
+  assert.equal(requests, 2);
+  assert.deepEqual(destinations, ['https://update.greasyfork.org/scripts/123456/Status.user.js']);
+  fail = true;
+  await h.context.checkAndInstallScriptUpdate();
+  assert.equal(destinations.length, 1);
+  assert.equal(toasts.at(-1).kind, 'warning');
+  fail = false; version = require('../../package.json').version;
+  await h.context.checkAndInstallScriptUpdate();
+  assert.equal(destinations.length, 1);
+  assert.equal(toasts.at(-1).title, 'No update available');
+  assert.equal(h.run('scriptUpdate.manual'), false);
 });
 
 test('current/local-ahead versions and failed checks never show an update', async () => {
@@ -159,11 +159,13 @@ test('checks coalesce, pause while hidden, cache across reloads and retry failur
   for (const [key, value] of h.storage) reloaded.storage.set(key, value);
   await reloaded.context.checkScriptUpdate();
   assert.equal(requests, 1);
-  assert.equal(children[1].id, 'iw-script-update');
+  assert.equal(children.length, 1);
+  assert.match(reloaded.context.renderScriptUpdateButton(), /Update available/);
   reloaded.time(100000 + 6 * 60 * 60 * 1000);
   await reloaded.context.checkScriptUpdate();
   assert.equal(requests, 2);
-  assert.equal(children[1].id, 'iw-script-update');
+  assert.equal(children.length, 1);
+  assert.match(reloaded.context.renderScriptUpdateButton(), /Update available/);
   await reloaded.context.checkScriptUpdate();
   assert.equal(requests, 2);
   reloaded.time(100000 + (6 * 60 + 15) * 60 * 1000);
@@ -184,4 +186,23 @@ test('timeout aborts a slow request and blocked storage does not break checks', 
   await check;
   assert.equal(children.length, 1);
   assert.equal(h.run('scriptUpdate.nextCheckAt - Date.now()'), 15 * 60 * 1000);
+});
+
+test('each settings open checks immediately and reports availability without opening the installer', async () => {
+  let requests = 0, version = '99.0.0', fail = false;
+  const { h } = setup(async () => { requests++; if (fail) throw Error('offline'); return { ok:true, text:async () => metadata(version) }; });
+  h.context.render = () => {};
+  h.context.location.assign = () => { throw Error('Settings must not install automatically'); };
+  h.context.openPreferences();
+  assert.equal(h.context.scriptUpdateButtonLabel(), 'Checking…');
+  await h.run('scriptUpdate.pending');
+  await Promise.resolve();
+  assert.match(h.context.scriptUpdateButtonLabel(), /Update available · v99.0.0/);
+  version = require('../../package.json').version;
+  await h.context.checkSettingsUpdate();
+  assert.equal(requests, 2);
+  assert.equal(h.context.scriptUpdateButtonLabel(), 'Up to date');
+  fail = true;
+  await h.context.checkSettingsUpdate();
+  assert.equal(h.context.scriptUpdateButtonLabel(), 'Check failed · Retry');
 });

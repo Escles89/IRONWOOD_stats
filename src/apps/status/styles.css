@@ -845,3 +845,21 @@
         .iw-action-card > .iw-card-header > span:first-child { flex:0 0 auto; max-width:100%; overflow-wrap:anywhere; }
         .iw-action-card > .iw-card-header > .iw-action-badges { flex:0 0 auto; max-width:100%; justify-content:flex-start; }
       }
+      .iw-rp-alert.warning { animation:iw-warning-badge-glow 1.8s ease-in-out infinite; }
+      .iw-task-icon.iw-rp-alert.urgent { color:#ffaaa2; border-color:#ed655d; background:rgba(237,101,93,.08); animation:iw-death-badge-glow 1.8s ease-in-out infinite; }
+      .iw-status-list .iw-rp-balance.urgent, .iw-status-list .iw-rp-balance.urgent > span { color:#ffaaa2; }
+      @media (prefers-reduced-motion:reduce) { .iw-rp-alert.warning, .iw-task-icon.iw-rp-alert.urgent { animation:none; } }
+      .iw-options-header-actions { display:flex; align-items:center; gap:10px; }
+      .iw-update-check-button { padding:6px 9px; border:1px solid #3d6476; border-radius:4px; background:#17394b; color:#c7e7ef; font:inherit; font-size:12px; cursor:pointer; }
+      .iw-update-check-button:hover { background:#204859; }
+      .iw-update-check-button:disabled { opacity:.65; cursor:wait; }
+      @media (max-width:480px) {
+        .iw-options-heading { flex-wrap:wrap; }
+        .iw-options-header-actions { margin-left:auto; }
+      }
+      .iw-modal-panel .iw-modal-close { display:grid; place-items:center; box-sizing:border-box; padding:0; margin:0; line-height:0; }
+      .iw-modal-panel .iw-modal-close svg { display:block; width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
+      .iw-modal-panel .iw-options-done, .iw-modal-panel .iw-update-check-button { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; text-align:center; margin:0; }
+      .iw-modal-panel .iw-options-done { font-family:inherit; font-size:13px; font-weight:600; line-height:20px; padding:4px 11px; }
+      #iw-global-dialogs .iw-modal-panel footer > .iw-options-done { display:grid; grid-template-columns:1fr; grid-template-rows:auto; place-items:center; text-align:center; }
+      #iw-global-dialogs .iw-dialog-button-label { display:block; width:100%; margin:0; padding:0; text-align:center; line-height:20px; }

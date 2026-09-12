@@ -11,15 +11,12 @@ test('warning preferences preserve existing queue defaults and normalize saved t
   h.run('setWarningPrefs({queueMinutes:5,materials:100,researchPoints:25000})');
   assert.equal(h.run('getWarningPrefs().queueUrgentMinutes'),5);
   assert.equal(h.run('getWarningPrefs().materialsUrgent'),100);
-  assert.equal(h.run('getWarningPrefs().researchPoints'),25000);
   h.run('setWarningPrefs({tribute:60000})');
-  assert.equal(h.run('getWarningPrefs().researchPoints'),25000);
   h.run("localStorage.setItem(WARNING_PREFS_KEY,'broken')");
   assert.equal(h.run('getWarningPrefs().queueMinutes'),60);
   h.run("localStorage.setItem(WARNING_PREFS_KEY,JSON.stringify({queueMinutes:-1,materials:1.5,researchPoints:'0'}))");
   assert.equal(h.run('getWarningPrefs().queueMinutes'),60);
   assert.equal(h.run('getWarningPrefs().materials'),1000);
-  assert.equal(h.run('getWarningPrefs().researchPoints'),10000);
 });
 
 test('custom time and material boundaries control amber/red and can be disabled',()=>{
@@ -50,10 +47,10 @@ test('RP and each Tribute warn independently for known low balances, including z
     const warnings=h.context.statusResourceWarnings({adventure:{researchPoints:value},attunement:{tributes:{Forest:value}}});
     assert.equal(warnings.rp,'');assert.equal(warnings.tributes,'');
   }
-  assert.equal(h.context.statusResourceWarnings({adventure:{researchPoints:10000}}).rp,'');
+  assert.equal(h.context.statusResourceWarnings({adventure:{researchPoints:16000}}).rp,'');
   const prefs=h.context.setWarningPrefs({researchPoints:0,tribute:0});
   const warnings=h.context.statusResourceWarnings({adventure:{researchPoints:0},attunement:{tributes:{Forest:0}}},prefs);
-  assert.equal(warnings.rp,'');assert.equal(warnings.tributes,'');
+  assert.equal(warnings.rpState,'urgent');assert.equal(warnings.tributes,'');
 });
 
 test('Tribute reader retains compact precision and distinguishes missing values from zero',()=>{
@@ -93,6 +90,20 @@ test('Status warnings retain activity indicators and claims and react to setting
   assert.match(html,/data-collect-attunement/);
   h.run('setWarningPrefs({researchPoints:0,tribute:0});StatusRenderer.render(AppState)');
   html=h.run('AppState.ui.page.innerHTML');
-  assert.doesNotMatch(html,/iw-resource-warning-text/);
+  assert.match(html,/iw-resource-warning-text urgent/);
   assert.match(html,/Adventure in progress/);
+});
+
+test('adventure RP reserves nine maps plus 16K and turns red only below the adventure start cost',()=>{
+  const h=harness();
+  const warning=(rp,mapCost)=>h.context.statusResourceWarnings({adventure:{researchPoints:rp,mapCost}});
+  assert.equal(warning(15999,2000).rpState,'urgent');
+  assert.equal(warning(16000,2000).rpState,'warning');
+  assert.equal(warning(33999,2000).rpState,'warning');
+  assert.equal(warning(34000,2000).rpState,'');
+  assert.equal(warning(34000,3000).rpState,'warning');
+  assert.equal(warning(20000,null).rpState,'');
+  assert.equal(warning(15000,null).rpState,'urgent');
+  assert.equal(warning(null,2000).rpState,'');
+  assert.match(warning(20000,2000).rp,/34,000 RP needed/);
 });

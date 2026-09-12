@@ -4,7 +4,7 @@
     const warningInput = (label, key, unit) => `<label class="iw-warning-field"><span>${label}</span><div><input type="number" inputmode="numeric" min="0" max="1000000000" step="1" data-warning-pref="${key}" value="${warnings[key]}" aria-label="${label} (${unit})"><small>${unit}</small></div></label>`;
     return `<div class="iw-modal ${AppState.ui.questModalOpen ? '' : 'iw-modal-hidden'}" data-modal-backdrop>
       <section class="iw-modal-panel" role="dialog" aria-modal="true" aria-labelledby="iw-options-title">
-        <div class="iw-options-heading"><div><h2 id="iw-options-title">Dashboard options</h2><small>Changes are saved automatically.</small></div><button class="iw-modal-close" data-modal-close aria-label="Close options">×</button></div>
+        <div class="iw-options-heading"><div><h2 id="iw-options-title">Dashboard options</h2><small>Changes are saved automatically.</small></div><div class="iw-options-header-actions">${renderScriptUpdateButton()}<button class="iw-modal-close" data-modal-close aria-label="Close options"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div></div>
         <div class="iw-options-body">
           <section class="iw-options-section"><h3>Display</h3>
             ${toggle('Show multiplayer control', "Show Ironwood's default multiplayer menu in the sidebar.", 'data-multiplayer-toggle', multiplayerControlEnabled())}
@@ -23,10 +23,9 @@
               ${warningInput('Automation queue · red', 'automationUrgentHours', 'hours')}
               ${warningInput('Materials · amber', 'materials', 'per material')}
               ${warningInput('Materials · red', 'materialsUrgent', 'per material')}
-              ${warningInput('Low research points', 'researchPoints', 'RP')}
               ${warningInput('Low Tribute · any region', 'tribute', 'per region')}
             </div>
-            <p class="iw-options-help">RP and Tribute warnings use known cached balances. Missing data never triggers a low-balance warning.</p>
+            <p class="iw-options-help">Adventure RP: amber below nine map costs + 16,000 RP; red below 16,000 RP. Warnings use known cached balances.</p>
           </section>
           <section class="iw-options-section iw-options-wide"><h3>Potions</h3>
             <div class="iw-potion-options">
@@ -54,7 +53,7 @@
             <div class="iw-quest-grid">${questSkills.map(skill => { const checked = prefs.some(preference => questMatchesPreference({ id: skill.name, skill: skill.name }, preference)); return `<label class="${skill.done ? 'done' : ''}"><input type="checkbox" data-quest="${escapeHtml(skill.name)}" ${checked ? 'checked' : ''} ${!checked && prefs.length >= 5 ? 'disabled' : ''}><img src="${escapeHtml(skill.image)}" alt=""><span>${escapeHtml(skill.name)}</span>${skill.done ? '<b title="Completed today">✓</b>' : '<b></b>'}</label>`; }).join('') || '<p class="iw-options-help">Open Quests to load the available skills.</p>'}</div>
           </details>
         </div>
-        <footer><button class="iw-small-button iw-options-done" data-modal-close>Done</button></footer>
+        <footer><button class="iw-small-button iw-options-done" data-modal-close><span class="iw-dialog-button-label">Done</span></button></footer>
       </section>
     </div>`;
   }
@@ -66,6 +65,7 @@
     AppState.ui.lastSignature = '';
     render();
     document.querySelector('.iw-modal:not(.iw-modal-hidden) [data-modal-close]')?.focus();
+    checkSettingsUpdate();
   }
   function closePreferences() {
     AppState.ui.questModalOpen = false;
