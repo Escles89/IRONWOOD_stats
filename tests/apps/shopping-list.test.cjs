@@ -761,3 +761,27 @@ test('capacity exposes uncertain limits and preserves a proven lower bound from 
   s.runtime.actionCatalog['30'].drops[0].amount = 2;
   assert.match(s.render(), /Can make now<\/dt><dd>Unknown<\/dd>/);
 });
+
+test('covered Metal Parts and Potion Mix hide conversion branches until their balances are needed', () => {
+  const s = setup(new Map(), conversionFixture);
+  s.save('101', '3');
+  s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
+  s.emit('change', '[data-shopping-conversion]', '104', null, { shoppingResource: 'potionMix' });
+  assert.match(s.render(), /data-shopping-node="item:103"/);
+  assert.match(s.render(), /data-shopping-node="item:104"/);
+  s.user.metalParts = 12;
+  s.user.potionMix = 15;
+  const covered = s.render();
+  assert.match(covered, /data-shopping-node="resource:metalParts"/);
+  assert.match(covered, /data-shopping-node="resource:potionMix"/);
+  assert.doesNotMatch(covered, /data-shopping-node="item:103"/);
+  assert.doesNotMatch(covered, /data-shopping-node="item:104"/);
+  assert.match(s.detail('resource:metalParts'), /0 conversions/);
+  s.user.metalParts = 11;
+  s.user.potionMix = 14;
+  assert.match(s.render(), /data-shopping-node="item:103"/);
+  assert.match(s.render(), /data-shopping-node="item:104"/);
+  s.user.metalParts = 12;
+  s.runtime.actionCatalog['30'].materials.push({ id: '103', amount: 1 });
+  assert.match(s.render(), /data-shopping-node="item:103"/);
+});
