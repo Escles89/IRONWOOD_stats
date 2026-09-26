@@ -460,7 +460,7 @@ test('the icon tree shows dependencies and propagates an insufficient leaf to it
   s.user.charcoal = 1000;
   let html = s.save();
   assert.match(html, /class="iw-shopping-tree"/);
-  assert.match(html, /<ul class="iw-shopping-branches">/);
+  assert.match(html, /<ul class="iw-shopping-branches"[^>]*>/);
   assert.match(html, /data-shopping-node="item:101" data-supply="insufficient"/);
   assert.match(html, /data-shopping-node="item:102" data-supply="insufficient"/);
   assert.match(html, /data-shopping-node="item:103" data-supply="insufficient"/);

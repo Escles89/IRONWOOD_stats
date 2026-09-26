@@ -71,13 +71,33 @@
       const note = edge?.cycle ? ' · Cycle stopped' : reference ? ' · Shared requirement' : '';
       const label = `${node.name} — ${shoppingSupplyLabel(node)}${note}${node.special ? ' · Resource balance' : ''}`;
       const content = `<button type="button" class="iw-shopping-node" data-shopping-step-link="${escapeHtml(node.key)}" aria-haspopup="dialog" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${renderShoppingIcon(node)}</button>`;
-      const children = reference ? '' : node.edges.filter(input => !input.wood).map(input => {
+      const children = reference ? [] : node.edges.filter(input => !input.wood).map(input => {
         const child = nodes.get(input.key);
-        return child ? branch(child, input) : '';
-      }).join('');
-      return `<li data-shopping-node="${escapeHtml(node.key)}" data-supply="${node.supply}">${content}${children ? `<ul class="iw-shopping-branches">${children}</ul>` : ''}</li>`;
+        return child ? branch(child, input) : null;
+      }).filter(Boolean);
+      const childWidth = children.reduce((sum, child) => sum + child.width, 0);
+      const width = Math.max(edge ? 48 : 56, childWidth) + 24;
+      const connections = children.length ? renderShoppingConnections(children, childWidth) : '';
+      return { width, supply: node.supply, markup: `<li style="width:${width}px" data-shopping-node="${escapeHtml(node.key)}" data-supply="${node.supply}">${content}${children.length ? `<ul class="iw-shopping-branches" style="width:${childWidth}px">${connections}${children.map(child => child.markup).join('')}</ul>` : ''}</li>` };
     }
-    return `<ul class="iw-shopping-tree">${branch(snapshot.nodes[0])}</ul>`;
+    return `<ul class="iw-shopping-tree">${branch(snapshot.nodes[0]).markup}</ul>`;
+  }
+
+  function renderShoppingConnections(children, width) {
+    let left = 0;
+    const paths = children.map(child => {
+      const x = left + child.width / 2, center = width / 2;
+      left += child.width;
+      const direction = Math.sign(x - center), radius = Math.min(8, Math.abs(x - center) / 2);
+      const d = direction === 0 ? `M ${center} 0 V 43`
+        : `M ${center} 0 V ${20 - radius} Q ${center} 20 ${center + direction * radius} 20 H ${x - direction * radius} Q ${x} 20 ${x} ${20 + radius} V 43`;
+      return { d, supply: child.supply };
+    });
+    // Shared sections inherit the most severe branch. Paint its continuous
+    // path last so a covered sibling cannot make a shortage look covered.
+    const severity = { covered: 0, unknown: 1, insufficient: 2 };
+    paths.sort((a, b) => severity[a.supply] - severity[b.supply]);
+    return `<svg class="iw-shopping-connections" viewBox="0 0 ${width} 43" aria-hidden="true" focusable="false">${paths.map(path => `<path data-supply="${path.supply}" d="${path.d}"/>${path.supply === 'covered' ? `<path class="iw-shopping-flow" d="${path.d}"/>` : ''}`).join('')}</svg>`;
   }
 
   function renderShoppingConversion(resource, ui) {
