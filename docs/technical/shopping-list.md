@@ -103,3 +103,11 @@ Presentation follow-up: diamonds gently breathe over 3.2 seconds using opacity a
 Connection-flow refinement: continuous SVG paths replace the separate CSS border segments, closing rounded-corner and endpoint gaps. Tree layout assigns explicit subtree widths so paths meet their icon centers at every depth. Green paths have a moving light dash over a solid green base; amber/red paths remain solid. Overlapping shared segments are painted in severity order so green siblings cannot cover a shortage. Bend radius shrinks for nearly centered children to avoid reversing along short horizontal spans. Reduced motion removes the moving overlay and diamond pulse. The live green Gold Gloves chain was visually checked with both single-child and branching connections.
 
 Final connector verification: all 347 tests pass after updating the tree markup assertion for explicit sizing. Live mobile panel width and scroll width both measured 370 px; the temporary viewport was reset. Review findings (unused CSS variables and overlapping elbows on short spans) were corrected.
+
+## Recipe Calc presentation
+
+The card is now branded Recipe Calc with a small trademark symbol. Its header has a labelled refresh icon and compact Edit control; Inputs and Clear target live with the target editor. Green connection highlights now move from ingredients toward the finished item.
+
+Production modals present Required, Owned and To produce as three metric cards, followed by attempt count, skill/level and a short native recipe link. Yield, eligibility, stock allocation and projected surplus remain available under Recipe details. Ingredient captions and observation footnotes are shorter. The disclosure state belongs to the selected item and survives live observations; owner switches and opening another item reset it. Workflow coverage verifies Inputs discoverability and disclosure persistence while balances update.
+
+Verification: the live Super Multi Craft Potion modal shows the new metric cards and collapsed notes. At a 390px viewport, modal width and scroll width both measured 364px; the viewport was restored. Build and complete check pass all 348 tests, including 36 shopping workflows. Both review axes have zero unresolved findings.

@@ -334,8 +334,8 @@ test('a diamond combines shared intermediate demand before allocating stock and 
   s.save('101', '1');
   const html = s.detail('item:104');
   assert.match(html, /1 Dust/);
-  assert.match(html, /Required 2 · Owned 1.5 · 0.5 to produce/);
-  assert.match(html, /Stock used 1.5 · Required output 0.5 · 1 base attempts · Projected surplus 0.5 \(not owned inventory\)/);
+  assert.match(html, /Required<\/dt><dd>2<\/dd>.*Owned<\/dt><dd>1.5<\/dd>.*To produce<\/dt><dd>0.5<\/dd>/);
+  assert.match(html, /Stock used 1.5.*Required output 0.5.*Projected surplus 0.5 \(not owned inventory\)/);
   assert.equal((s.modal().match(/role="dialog"/g) || []).length, 1);
   assert.match(html, /Shared requirement/);
   for (const id of ['101', '102', '103', '104']) assert.ok(html.includes(`data-shopping-node="item:${id}" data-supply="insufficient"`));
@@ -622,7 +622,7 @@ test('conversion cycles remain uncertain and covered balances do not consume con
   s.user.metalParts = 12;
   assert.doesNotMatch(s.render(), /Incomplete plan/);
   assert.match(s.detail('resource:metalParts'), /0 conversions/);
-  assert.match(s.modal(), /Stock used 12 · Required output 0/);
+  assert.match(s.modal(), /Stock used 12.*Required output 0/);
 });
 
 test('partly unknown conversion demand preserves known source and ingredient subtotals', () => {
@@ -699,4 +699,22 @@ test('shared Charcoal demand across multiple recipes uses each log balance only 
   assert.match(s.render(), /8 Charcoal/);
   assert.match(s.detail('resource:charcoal'), /Required 20 · Owned 1/);
   assert.match(s.modal(), /11 from wood · 8 still to acquire/);
+});
+
+test('Recipe Calc keeps Inputs in Edit and preserves expanded recipe details during observations', () => {
+  const s = setup();
+  s.save();
+  assert.match(s.render(), /Recipe Calc<sup>™<\/sup>/);
+  assert.doesNotMatch(s.page.innerHTML, /data-shopping-step-link="defaults"/);
+  s.emit('click', '[data-shopping-edit]');
+  assert.match(s.page.innerHTML, /data-shopping-step-link="defaults"/);
+  s.emit('click', '[data-shopping-cancel]');
+  s.detail();
+  s.emit('toggle', '[data-shopping-recipe-details]', true, null, { shoppingStep: 'item:101' });
+  s.user.inventory['101'].amount = 40;
+  s.render();
+  assert.match(s.modal(), /data-shopping-recipe-details[^>]* open/);
+  assert.match(s.modal(), /60 base attempts/);
+  s.emit('toggle', '[data-shopping-recipe-details]', false, null, { shoppingStep: 'item:101' });
+  assert.doesNotMatch(s.modal(), /data-shopping-recipe-details[^>]* open/);
 });

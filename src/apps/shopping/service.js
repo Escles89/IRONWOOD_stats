@@ -3,7 +3,7 @@
   function shoppingObserve(authoritative = false) {
     const ui = AppState.ui.shopping, runtime = quickRuntime(), owner = quickOwner(runtime);
     if (ui.owner !== owner) {
-      Object.assign(ui, { owner, conversions: {}, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', selectedStep: null, refreshing: false, unavailable: false, revision: 0 });
+      Object.assign(ui, { owner, conversions: {}, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', selectedStep: null, expandedStep: null, refreshing: false, unavailable: false, revision: 0 });
       if (owner) {
         try {
           const saved = JSON.parse(localStorage.getItem(SHOPPING_KEY + owner));
@@ -130,7 +130,7 @@
 
   function shoppingRenderKey() {
     const ui = AppState.ui.shopping;
-    return [ui.owner, ui.revision, ui.plan, ui.conversions, ui.editing, ui.draft, ui.filter, ui.selectedStep, ui.refreshing, ui.unavailable, ui.message,
+    return [ui.owner, ui.revision, ui.plan, ui.conversions, ui.editing, ui.draft, ui.filter, ui.selectedStep, ui.expandedStep, ui.refreshing, ui.unavailable, ui.message,
       location.pathname, ui.plan ? Math.floor(Date.now() / 60000) : null];
   }
 
@@ -159,6 +159,7 @@
     AppState.ui.mastery.open = false;
     AppState.ui.questModalOpen = false;
     AppState.ui.guideOpen = false;
+    if (ui.selectedStep !== key) ui.expandedStep = null;
     ui.selectedStep = key;
     render();
     document.querySelector('.iw-shopping-modal [data-modal-close]')?.focus();
@@ -195,4 +196,10 @@
     ui.message = '';
     shoppingPersist();
     render();
+  }
+
+  function shoppingToggleDetails(control) {
+    const ui = AppState.ui.shopping;
+    if (control.dataset.shoppingOwner !== ui.owner || control.dataset.shoppingStep !== ui.selectedStep) return;
+    ui.expandedStep = control.open ? ui.selectedStep : null;
   }
