@@ -1289,7 +1289,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     if (rows.length < 2 || !rows.every((row) => row.parentElement === rows[0].parentElement)) return;
     const rank = new Map(TRAIT_REGION_ORDER.map((skill, index) => [skill, index]));
     const skillFor = (row) => {
-      const name = clean(row.querySelector(':scope > .title')?.textContent);
+      const name = clean(row?.querySelector(':scope > .title')?.textContent);
       return TRAIT_REGION_ORDER.find((skill) => name === skill || name.startsWith(`${skill} `)) || '';
     };
     const ordered = rows.map((row, index) => ({ row, index, order: rank.get(skillFor(row)) ?? TRAIT_REGION_ORDER.length }))
@@ -1297,21 +1297,22 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       .map((entry) => entry.row);
     const parent = rows[0].parentElement;
     const headers = [...parent.querySelectorAll(':scope > .iw-trait-region-header')];
+    // Native rows can mount incrementally. Only require headers we can insert,
+    // using the first present skill in each region rather than a missing row.
     const desiredHeaders = [
-      ...TRAIT_REGIONS.map((region) => ({ name: region.name, firstSkill: region.skills[0] })),
-      { name: 'All Regions', firstSkill: 'Defense' }
-    ];
+      ...TRAIT_REGIONS.map(region => ({ ...region, skills: region.skills.filter(skill => skill !== 'Defense') })),
+      { name: 'All Regions', skills: ['Defense'] }
+    ].map(region => ({ name: region.name, firstRow: ordered.find(row => region.skills.includes(skillFor(row))) }))
+      .filter(region => region.firstRow);
     const orderCorrect = ordered.every((row, index) => row === rows[index]);
     const headersCorrect = headers.length === desiredHeaders.length && desiredHeaders.every((wanted) => {
       const header = headers.find((candidate) => candidate.dataset.region === wanted.name);
-      return header && !header.querySelector('.iw-set-tier') && skillFor(header.nextElementSibling) === wanted.firstSkill;
+      return header && !header.querySelector('.iw-set-tier') && header.nextElementSibling === wanted.firstRow;
     });
     if (orderCorrect && headersCorrect) return;
     headers.forEach((header) => header.remove());
     ordered.forEach((row) => parent.appendChild(row));
-    desiredHeaders.forEach(({ name, firstSkill }) => {
-      const firstRow = ordered.find((row) => skillFor(row) === firstSkill);
-      if (!firstRow) return;
+    desiredHeaders.forEach(({ name, firstRow }) => {
       const header = document.createElement('div');
       header.className = 'iw-trait-region-header';
       header.dataset.region = name;
