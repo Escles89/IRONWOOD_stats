@@ -5,6 +5,7 @@
   }
   function render() {
     syncQuickSkills();
+    masteryObserve();
     renderGlobalDialog();
     if (document.hidden || !AppState.ui.page || AppState.ui.page.hidden) return;
     try {

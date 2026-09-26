@@ -58,6 +58,7 @@
       if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
     }, true);
     document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-mastery-select]')) { selectMastery(event.target.value); return; }
       if (event.target.matches?.('[data-debug-toggle]')) {
         localStorage.setItem(DEBUG_KEY, event.target.checked ? 'true' : 'false');
         AppState.ui.debugUpdatedAt = 0;
@@ -150,6 +151,10 @@
     });
     document.addEventListener('click', (event) => {
       if (event.target.closest?.('[data-check-script-update]')) { checkAndInstallScriptUpdate(); return; }
+      const masteryTrigger = event.target.closest?.('[data-mastery-open]');
+      if (masteryTrigger) { openMastery(masteryTrigger); return; }
+      if (event.target.closest?.('[data-mastery-native]')) { closePreferences(); return; }
+      if (event.target.closest?.('[data-mastery-refresh]')) { refreshMastery(); return; }
       if (event.target.closest?.('[data-news-pause]')) { toggleNewsPause(); return; }
       const guideJump = event.target.closest?.('[data-guide-jump]');
       if (guideJump) { navigateGuideSection(guideJump.dataset.guideJump); return; }

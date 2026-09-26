@@ -17,7 +17,8 @@
     }
     let runtime;
     chunks.push([[`iw-status-state-sync-${Date.now()}-${++nativeSyncRuntimeSequence}`], {}, requireModule => {
-      const exports = [...candidates].flatMap(id => Object.values(requireModule(id)));
+      const modules = [...candidates].map(id => requireModule(id));
+      const exports = modules.flatMap(module => Object.values(module));
       const platformFactory = exports.find(value => typeof value === 'function' && Function.prototype.toString.call(value).includes('Platform: '));
       if (!platformFactory) return;
       // Ask Angular for the existing platform only. The parent factory throws if
@@ -37,10 +38,13 @@
       const routeComponents = routes => (routes || []).flatMap(route => [route.component, ...routeComponents(route.children)]);
       const SkillPage = routeComponents(router?.config)
         .find(Type => typeof Type?.prototype?.calcCraftTime === 'function');
+      const MasteryPage = routeComponents(router?.config)
+        .find(Type => typeof Type?.prototype?.materialsComplete === 'function');
       runtime = {
         state: service('syncUser'), firebase: service('getUser'), action: service('handleActionSync'),
         automations: service('handleAutomationSync'), expedition: service('handleExpeditionSync'),
         zone: Zone && injector.get(Zone, null), router,
+        mastery: discoverNativeMastery(MasteryPage, modules),
         attunementCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Woodcutting' && item.skillId != null) && Object.values(value).every(item => item?.skillId != null)),
         skillCatalog: exports.find(value => value && typeof value === 'object' && value['8']?.name === 'Defense' && value['1']?.name === 'Woodcutting' && Array.isArray(value['1'].actions)),
         actionCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Copper Rock' && Array.isArray(item.drops))),
@@ -134,6 +138,7 @@
             if (inventory) setCache('inventory', { ...inventory, needsReconcile: true });
           }
           AppState.ui.nativeSync.lastSuccessAt = Date.now();
+          masteryObserve(runtime, true);
         });
       } catch (error) {
         AppState.ui.nativeSync.error = error.message;

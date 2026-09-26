@@ -64,6 +64,16 @@ Guild indicators are gray when unavailable and dashed gray when participation ne
 
 Linked rows open their native game pages; Daily quest preferences are in Settings. Disabled Claim controls can indicate automation is off, no eligible work is known, or an operation is already processing. Expand a row in the in-game Guide to see its actual icon designs beside these explanations.
 
+## Skill Mastery tracker
+
+Click the **mastery symbol** in Current Action to open the Skill Mastery modal. The symbol is also available when idle. Choose one **Skill Mastery** to see its native requirements, contributed items, owned inventory and **Missing now**. For 100 required, 20 contributed and 50 owned, 30 are missing. Taming comes first in the game’s skill order. Materials use a compact list with native resource icons and four aligned quantity columns. On phones each row wraps below the item name, keeping all four labelled quantities; the modal scrolls while its close controls remain visible. Escape closes it and returns focus to the symbol. XP and coins appear separately; having the materials does not mean they have been contributed or that mastery is complete.
+
+Your selection and observations stay in this browser for the current character and game mode. Completed masteries are hidden from the selector. If your saved selection becomes complete, choose another unfinished mastery. Completion comes from the native completion flag, never from having enough materials.
+
+Contribution and inventory observation ages are shown separately. A contribution change makes the combined shortfall incomplete until **Refresh** reads both balances together. This also handles Mastery Contracts, which can increase contributions without consuming inventory. Refresh uses the game's read-only synchronization and works independently of automation and fallback lookup settings. Old observations alone never trigger a background read. An unavailable source or invalid item identity produces **Unknown**, not zero.
+
+**Open native mastery page** lets you inspect the game's mastery screen. The tracker never submits materials, spends coins or claims mastery. **Pending loot** and **Missing after collection** are explicitly unavailable in this first version; pending loot and unfinished queues never count as owned inventory.
+
 ## Potions and House production
 
 Potions separate equipped quantities from stored inventory. **Settings → Potions** adds Regular, Super, Divine or All types. This changes the display; it does not buy, equip or drink anything.

@@ -59,6 +59,7 @@
   }
 
   function openPreferences(trigger) {
+    AppState.ui.mastery.open = false;
     AppState.ui.preferencesTrigger = trigger;
     AppState.ui.guideOpen = false;
     AppState.ui.questModalOpen = true;
@@ -68,6 +69,7 @@
     checkSettingsUpdate();
   }
   function closePreferences() {
+    AppState.ui.mastery.open = false;
     AppState.ui.questModalOpen = false;
     AppState.ui.guideOpen = false;
     AppState.ui.lastSignature = '';
@@ -75,11 +77,11 @@
     AppState.ui.preferencesTrigger?.focus();
   }
   function handlePreferencesKey(event) {
-    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen) return false;
+    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open) return false;
     if (event.key === 'Escape') { event.preventDefault(); closePreferences(); return true; }
     if (event.key !== 'Tab') return false;
     const dialog = document.querySelector('.iw-modal:not(.iw-modal-hidden) .iw-modal-panel');
-    const controls = [...(dialog?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary') || [])].filter(control => control.getClientRects().length);
+    const controls = [...(dialog?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], summary') || [])].filter(control => control.getClientRects().length);
     const first = controls[0], last = controls.at(-1);
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -89,7 +91,7 @@
   // Dialogs live outside the route content so they work on every native page.
   function renderGlobalDialog() {
     let host = document.querySelector('#iw-global-dialogs');
-    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen) { host?.remove(); return; }
+    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open) { host?.remove(); return; }
     if (!host) {
       host = document.createElement('div');
       host.id = 'iw-global-dialogs';
@@ -97,7 +99,7 @@
     }
     if (AppState.ui.guideOpen && host._iwGuide) return;
     const cache = getCache();
-    const markup = AppState.ui.guideOpen ? renderGuide() : renderPreferences({
+    const markup = AppState.ui.mastery.open ? renderMasteryModal() : AppState.ui.guideOpen ? renderGuide() : renderPreferences({
       prefs: getPrefs(), automationOn: automationEnabled(), cacheLookupsOn: cacheLookupsEnabled(),
       headerIcons: headerIconsEnabled(), challengePrefs: getChallengePrefs(),
       questSkills: [...new Map((cache.quests?.quests || []).filter(quest => quest.skill)
@@ -113,6 +115,7 @@
   }
 
   function openGuide(trigger) {
+    AppState.ui.mastery.open = false;
     AppState.ui.preferencesTrigger = trigger;
     AppState.ui.questModalOpen = false;
     AppState.ui.guideOpen = true;

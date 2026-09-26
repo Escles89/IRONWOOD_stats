@@ -2,7 +2,7 @@
   "name": "ironwood-status",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
-  "version": "1.13.166",
+  "version": "1.13.167",
   "engines": {
     "node": ">=22"
   },

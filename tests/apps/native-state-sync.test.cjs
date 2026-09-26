@@ -88,16 +88,26 @@ test('runtime discovery uses native metadata and refuses to bootstrap an applica
   const orderedSkills=[skillMap[1],skillMap[8]];
   function craftLimit(user,action){return action.materials&&Math.floor(user.charcoal+user.compost+user.metalParts+user.sigilPieces+user.potionMix+user.arcanePowder);}
   class SkillPage { calcCraftTime(){return {seconds:10};} }
+  const masteryData={ah:{'1':{id:'1',name:'Woodcutting',items:{'101':'101'},badgeId:'1'}},sH:123,M6:456};
+  const masteryMath={lgf:()=>789};
+  class MasteryPage {
+    constructor(){this.MASTERY_DATA=masteryData.ah;this.MASTERY_COST=masteryData.sH;this.MASTERY_EXP=masteryData.M6;this.calcMasteryItems=masteryMath.lgf;}
+    materialsComplete(){}
+  }
   class Router { navigateByUrl(){throw Error('Must not navigate');} createUrlTree(){} }
-  instances.set(Router,{config:[{children:[{component:SkillPage}]}]});
+  instances.set(Router,{config:[{children:[{component:SkillPage},{component:MasteryPage}]}]});
   const chunks=[[[],{runtime:function(){return 'Platform: syncUser( getUser( handleActionSync( handleAutomationSync( handleExpeditionSync(';},materials:function(){return '.materials .arcanePowder Math.floor';},unrelated:function(){}}]];
   const loaded=[];
   const installed=new Set();
-  chunks.push=chunk=>{const id=chunk[0][0];if(installed.has(id))return;installed.add(id);chunk[2](id=>{loaded.push(id);return id==='materials'?{craftLimit}:{...Types,platformFactory,orderedSkills,skillMap,Router};});};
+  chunks.push=chunk=>{const id=chunk[0][0];if(installed.has(id))return;installed.add(id);chunk[2](id=>{loaded.push(id);return id==='materials'?{craftLimit,...masteryMath}:{...Types,platformFactory,orderedSkills,skillMap,Router,...masteryData};});};
   h.context.window.webpackChunkidle_game=chunks;
   const found=h.context.findNativeSyncRuntime();
   assert.equal(found.state,instances.get(State));
   assert.equal(found.zone,instances.get(Zone));
+  assert.equal(found.mastery.catalog,masteryData.ah);
+  assert.equal(found.mastery.cost,123);
+  assert.equal(found.mastery.exp,456);
+  assert.equal(found.mastery.required('1',1),789);
   assert.deepEqual(loaded,['runtime','materials']);
   assert.equal(found.skillCatalog,skillMap);
   assert.equal(found.craftLimit,craftLimit);

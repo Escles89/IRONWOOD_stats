@@ -1,6 +1,6 @@
 # Skill Mastery materials tracker
 
-Status: Design confirmed by the player on 2026-09-26. Ready for implementation; implementation has not started as part of this specification work.
+Status: Design confirmed by the player on 2026-09-26. The first slice is implemented in #2. During implementation the player amended the presentation: open a modal by clicking the mastery symbol, with no persistent panel on Status, a compact material list, and completed masteries hidden from the selector. The pending-loot slice remains #3.
 
 ## Implementation tickets
 
@@ -13,14 +13,14 @@ The player usually pursues one Skill Mastery and needs to see what that mastery 
 
 ## Solution
 
-Add an informational card on Status for one selected Skill Mastery. Show Required, Contributed, Owned, Pending loot, Missing now and Missing after collection for each required item. Show XP and coins separately when known. Keep the card after mastery completion until the player chooses another mastery.
+Add an informational modal opened from the mastery symbol on Status for one selected Skill Mastery. Show Required, Contributed, Owned, Pending loot, Missing now and Missing after collection for each required item. Show XP and coins separately when known. When the selected mastery is complete, ask the player to choose another unfinished mastery.
 
 This feature is independent of the shopping list and planned next action in the first version. Connecting them is a longer-term goal.
 
 ## Confirmed Behavior
 
-- Track one explicitly selected mastery, including a completed mastery; never automatically choose another.
-- Keep the card on Status only.
+- Track one explicitly selected unfinished mastery; hide completed masteries from the list and never automatically choose another.
+- Open the modal from the mastery symbol in Current Action, or the idle view. Do not add a persistent Status panel.
 - Save the selected mastery per character and game mode in this browser across reloads.
 - Read requirements from the native game rather than hard-coded historical costs.
 - Count contributed items separately from owned inventory. Mastery Contracts can increase contributions independently of inventory.
@@ -29,7 +29,7 @@ This feature is independent of the shopping list and planned next action in the 
 - Keep both the material shortfall now and the conditional shortfall after collection visible.
 - Show useful partial information with explicit gaps. Unknown values are not zero.
 - Recalculate as new observations arrive, show their ages, and offer explicit read-only refresh.
-- Link to the native mastery page. Do not submit items, spend coins or complete mastery from this card.
+- Link to the native mastery page. Do not submit items, spend coins or complete mastery from this modal.
 
 ## Calculation Contract
 
@@ -47,7 +47,7 @@ Collection must transfer quantities between pending loot and inventory without d
 
 ## Confirmed Presentation
 
-Use a selector labelled Skill Mastery and display the selected name in the card. Keep completed masteries selectable. Provide native-page navigation and Refresh; no contribution or completion buttons. On narrow screens, preserve all quantities in stacked item details rather than dropping columns.
+Use a selector labelled Skill Mastery and display the selected name in the modal. Order masteries like the native skill list, including Taming first. Hide completed masteries from the selector; a completed saved selection asks for another unfinished mastery. Provide native-page navigation and Refresh; no contribution or completion buttons. Use a compact list like the native Mastery page, with the native resource icon, one item per row and aligned quantities. On narrow screens, wrap labelled quantities beneath the item name rather than dropping them.
 
 Distinguish actual mastery completion from materials owned, materials contributed and XP/coin eligibility. Completion must come from native completion state, not a derived zero shortfall.
 
@@ -61,7 +61,7 @@ Follow the existing cache contract: usable older snapshots remain labelled obser
 
 ## Acceptance and Validation
 
-Exercise the real card and refresh workflow through the assembled userscript harness, with native runtime, storage and time as boundaries:
+Exercise the real modal and refresh workflow through the assembled userscript harness, with native runtime, storage and time as boundaries:
 
 1. Select a mastery, reload, and verify character/game-mode isolation.
 2. Verify the 100/20/50/10 example, zero-floor behavior and contributions advanced by Mastery Contracts.
@@ -69,8 +69,8 @@ Exercise the real card and refresh workflow through the assembled userscript har
 4. Confirm collection and contribution updates do not count an item in two places.
 5. Show stale or inconsistent observations and refresh without gameplay mutation.
 6. Show insufficient XP or coins despite sufficient owned materials.
-7. Keep a genuinely completed mastery selected until the player chooses another.
-8. Confirm Status-only placement, native navigation, keyboard access and mobile readability.
+7. Hide genuinely completed masteries and ask for another selection when the saved mastery is complete.
+8. Confirm mastery-symbol entry, no persistent Status panel, modal close/focus behavior, native navigation, keyboard access and mobile readability.
 
 For implementation, validate native capture against the live interface without changing gameplay, then run the repository build and complete check command. Static inspection and fixtures must not be described as live validation.
 

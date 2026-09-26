@@ -390,10 +390,10 @@
 
       .iw-queue-warning.sufficient { color:#78efa9; background:rgba(56,221,137,.08); border-color:#38dd89; box-shadow:none; }
       .iw-action-badges { height:auto; flex-wrap:wrap; justify-content:flex-end; }
-      .iw-action-badges > span { flex-shrink:0; }
+      .iw-action-badges > :is(span, button) { flex-shrink:0; }
       .iw-action-card > .iw-card-header { min-height:48px; height:auto; gap:12px; }
       .iw-action-card .iw-action-badges, .iw-guide-example-bar, .iw-guide-example-bar .iw-action-badges { gap:6px; }
-      .iw-action-card .iw-action-badges > span:not(.iw-combat-live) { width:34px; height:34px; border-radius:5px; }
+      .iw-action-card .iw-action-badges > :is(span, button):not(.iw-combat-live) { width:34px; height:34px; border-radius:5px; }
       .iw-action-card .iw-location-badge img, .iw-action-card .iw-mastery-badge img { width:24px; height:24px; }
       .iw-action-card .iw-adventure-badge img, .iw-action-card .iw-guild-event-badge img, .iw-action-card .iw-guild-trial-badge img { width:27px; height:27px; }
       .iw-action-card .iw-active-badge .iw-spin { width:22px; height:22px; margin:-11px 0 0 -11px; }
@@ -1060,3 +1060,34 @@
         .iw-quick-skill .iw-quick-row-icon { width:38px; }
       }
       @media (pointer:coarse) { #iw-quick-controls:not(.iw-quick-native) .iw-quick-icon-button { width:40px; height:40px; } }
+/* All mastery quantities remain labelled and visible at narrow widths. */
+.iw-mastery-panel { width: min(780px, 100%); }
+button.iw-mastery-badge { padding: 0; cursor: pointer; }
+button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offset: 3px; }
+.iw-mastery-body { padding: 14px; display: grid; gap: 10px; overflow-y: auto; min-height: 0; }
+.iw-mastery-body p, .iw-mastery-body h3 { margin: 0; }
+.iw-mastery-body select { width: 100%; max-width: 360px; min-height: 44px; padding: 8px; color: inherit; background: #242732; border: 1px solid #666a7b; border-radius: 6px; }
+.iw-mastery-body a { color: #b6caff; text-decoration: underline; }
+.iw-mastery-selection, .iw-mastery-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.iw-mastery-summary h3 { font-size: 15px; }
+.iw-mastery-summary p { color: #babecb; font-size: 12px; }
+.iw-mastery-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.iw-mastery-table th, .iw-mastery-table td { padding: 8px 6px; border-bottom: 1px solid #294052; text-align: right; font-variant-numeric: tabular-nums; }
+.iw-mastery-table thead th { color: #a8bdca; font-size: 11px; font-weight: 500; }
+.iw-mastery-table th:first-child { text-align: left; font-weight: 500; }
+.iw-mastery-table tbody tr:last-child > * { border-bottom: 0; }
+.iw-mastery-resource { display: flex; align-items: center; gap: 8px; }
+.iw-mastery-resource img { width: 24px; height: 24px; object-fit: contain; flex-shrink: 0; }
+@media (max-width: 420px) {
+  .iw-mastery-selection { align-items: stretch; flex-direction: column; gap: 6px; }
+  .iw-mastery-body select { max-width: none; }
+  .iw-mastery-table, .iw-mastery-table tbody { display: block; }
+  .iw-mastery-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .iw-mastery-table tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px 0; border-bottom: 1px solid #294052; }
+  .iw-mastery-table th[scope="row"] { grid-column: 1 / -1; padding: 0 0 5px; }
+  .iw-mastery-table th, .iw-mastery-table td { border: 0; }
+  .iw-mastery-table td { padding: 3px 4px 3px 0; text-align: left; overflow-wrap: anywhere; }
+  .iw-mastery-table td::before { content: attr(data-label); display: block; font-size: 10px; color: #a8bdca; }
+}
+.iw-mastery-note, .iw-mastery-age { color: #babecb; font-size: 12px; line-height: 1.5; }
+.iw-mastery-body :focus-visible { outline: 2px solid #b6caff; outline-offset: 3px; }
