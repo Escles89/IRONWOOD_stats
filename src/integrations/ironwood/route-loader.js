@@ -10,6 +10,9 @@
     if (AppState.ui.lookupActivity.length > 20) AppState.ui.lookupActivity.shift();
     const frame = document.createElement('iframe');
     frame.className = 'iw-sync-frame';
+    frame.setAttribute('aria-hidden', 'true');
+    frame.tabIndex = -1;
+    frame.inert = true;
     frame.src = path;
     document.body.appendChild(frame);
     try {

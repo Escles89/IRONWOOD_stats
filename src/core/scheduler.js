@@ -26,7 +26,7 @@
   }
 
   function checkDailyAutomations() {
-    if (document.hidden || AppState.ui.syncing) return;
+    if (document.hidden || AppState.ui.syncing || AppState.ui.quickSkills.busy) return;
     if (['quests', 'adventure'].some(key => dailyAutomationStatus(key).due)) return syncStale(false);
   }
 
@@ -47,7 +47,7 @@
   }
 
   async function refreshAllCachedData() {
-    if (AppState.ui.syncing) return;
+    if (AppState.ui.syncing || AppState.ui.quickSkills.busy) return;
     AppState.ui.syncing = true;
     AppState.ui.manualCacheRefresh = true;
     syncCacheRefreshButton();
@@ -89,7 +89,7 @@
 
   async function syncStale(force = false) {
     if (!cacheLookupsEnabled()) return;
-    if (AppState.ui.syncing) return;
+    if (AppState.ui.syncing || AppState.ui.quickSkills.busy) return;
     AppState.ui.syncing = true;
     try {
       await syncDailyTask('quests', force, automate =>
@@ -122,6 +122,7 @@
   }
 
   function scheduleStatusRender() {
+    if (!document.hidden) syncQuickSkills();
     if (!document.hidden) syncStatusNavIcon();
     if (!document.hidden && AppState.ui.page?.hidden) syncHeaderActionBadges();
     if (document.hidden || !AppState.ui.page || AppState.ui.page.hidden || AppState.ui.renderFrame !== null) return;

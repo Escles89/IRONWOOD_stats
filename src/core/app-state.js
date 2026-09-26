@@ -44,6 +44,7 @@
         headerActionSnapshot: null,
         preferencesTrigger: null,
         collectingLoot: false,
+        quickSkills: { owner: null, data: null, open: false, busy: false, prompt: null, trigger: null, message: '', signature: '' },
         pendingLootClaim: null,
         lastAdventureCapture: 0,
         visibleCaptureTimes: {},

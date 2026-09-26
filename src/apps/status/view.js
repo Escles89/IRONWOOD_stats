@@ -108,6 +108,7 @@
       } else if (current.getAttribute(attr.name) !== attr.value) current.setAttribute(attr.name, attr.value);
     }
     // Quantity children and their independent animation timelines belong to updateLiveValues.
+    if (next.hasAttribute('data-quick-controls-slot')) return;
     if (next.matches('[data-live-loot], [data-live-material-available], [data-live-consumable-equipped], [data-live-consumable-stored], [data-live-mastery-contract]') && current.querySelector('.iw-quantity-value')) return;
     const children = [...current.childNodes];
     const incoming = [...next.childNodes];
@@ -254,7 +255,7 @@
     return `${renderNewsTicker(action)}<div class="iw-stats-grid">
         ${action ? `
         <section class="iw-card iw-action-card ${action.isCombat ? `iw-combat-card${combatDeath ? ' iw-death' : ''}` : ''}" style="--combat-progress:${action.progress ?? 0}%">
-          <div class="iw-card-header"><span>${escapeHtml(action.skillName || 'Current Action')}</span>${actionBadges}</div>
+          <div class="iw-card-header"><span>${escapeHtml(action.skillName || 'Current Action')}</span><div class="iw-action-header-tools">${actionBadges}</div></div>
           <div class="iw-action-body">
             <div class="iw-action-heading">
               <div class="iw-action-image">${action.image ? `<img src="${escapeHtml(action.image)}" alt="">` : ''}</div>
@@ -274,6 +275,7 @@
                 <span class="iw-queue-stat" title="Loot waiting to collect"><img src="${escapeHtml(loot[0]?.image || action.image || '/assets/misc/inventory.png')}" alt="Loot"><b data-live-queue-loot>${formatQuantityMarkup({amount:totalItems, approximate:loot.some(quantityIsApproximate)})}</b></span>
                 <span class="iw-queue-stat" title="Total queued"><svg viewBox="0 0 24 24" aria-label="Queued" role="img"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"></path></svg><b>${formatQuantityMarkup({amount:finiteQueue.total})}</b></span>
                 <span class="iw-queue-stat" title="Owned in inventory"><img src="/assets/misc/inventory.png" alt="Owned"><b>${formatQuantityMarkup(craftedInventory)}</b></span>
+                <div data-quick-controls-slot></div>
               ` : `<span class="iw-queue-stat" title="Actions completed / queued"><svg viewBox="0 0 24 24" aria-label="Actions completed / queued" role="img"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"></path></svg><b>${formatQuantityMarkup({amount:finiteQueue.completed})} / ${formatQuantityMarkup({amount:finiteQueue.total})}</b></span>`}
             </div>` : ''}
           </div>
@@ -288,7 +290,7 @@
         </section>` : `
         <section class="iw-card iw-empty iw-action-card"><strong>No action in progress</strong><span>Start an action and its live stats will appear here.</span></section>`}
         ${compactCraftingLoot ? '' : `<section class="iw-card iw-loot-card">
-          <div class="iw-card-header"><span>Current Loot</span><div class="iw-summary"><span data-live-loot-total>${formatItemQuantity({amount:totalItems, approximate:loot.some(quantityIsApproximate)})} items waiting</span>${action && loot.length ? `<button class="iw-collect-button iw-claim-button" data-collect-loot data-claim-state="${AppState.ui.collectingLoot ? 'busy' : 'ready'}" ${automationOn && !AppState.ui.collectingLoot ? '' : 'disabled'} title="${automationOn ? 'Claim loot and continue' : 'Automation is disabled'}">Claim</button>` : ''}</div></div>
+          <div class="iw-card-header"><span>Current Loot</span><div class="iw-summary"><span data-live-loot-total>${formatItemQuantity({amount:totalItems, approximate:loot.some(quantityIsApproximate)})} items waiting</span><div data-quick-controls-slot></div></div></div>
           ${loot.length ? `<div class="iw-data-table iw-loot-table">
             <div class="iw-table-head"><span>Item</span><span>Loot</span><span>Inventory</span></div>${loot.map((item) => `
             <div class="iw-table-row ${isHighValueDrop(item) ? 'iw-rare-drop' : ''}">

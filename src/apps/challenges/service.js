@@ -124,6 +124,7 @@
   }
 
   async function automateChallenge() {
+    if (AppState.ui.quickSkills.busy) return;
     if (!automationEnabled()) return;
     if (AppState.ui.runningChallenge) return;
     AppState.ui.runningChallenge = true;

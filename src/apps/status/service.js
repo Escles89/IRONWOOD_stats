@@ -4,6 +4,7 @@
     setCache(key, { summary: text || 'No active information found' });
   }
   function render() {
+    syncQuickSkills();
     renderGlobalDialog();
     if (document.hidden || !AppState.ui.page || AppState.ui.page.hidden) return;
     try {
@@ -246,6 +247,7 @@
     AppState.ui.headerBadgeMarkup = actionBadges;
     updateStatusMarkup(renderStatusMarkup({ actionBadges, headerIcons, combatDeath, noticeNow, queueWarning, materialWarning, materialWarningText, cache, adventureActive, adventureActionActive, guildEventActionActive, guildTrialActionActive, prefs, automationOn, cacheLookupsOn, masteryAchieved, automationRows, questSkills, challengePrefs, dailyQuestComplete, taskIndicator, adventureIndicator, guildTrialIndicator, guildEventIndicator, attunementSkills, attunementDetails, challengeError, challengeIndicator, tamingDetails, tamingIndicator, resourceWarnings, adventureSupplement, potionTypes, consumableRows, displayedPotions, inventoryCounts, totalItems, compactCraftingLoot, craftedInventory, action, loot, consumables, materials, masteryProgress, finiteQueue, locationBadges, displayActionName }));
     syncHeaderActionBadges();
+    syncQuickSkills();
     StatusRenderer.updateLive(AppState);
     updateDebugPanel();
     } catch (error) {

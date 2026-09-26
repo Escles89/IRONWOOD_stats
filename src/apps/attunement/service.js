@@ -84,6 +84,7 @@
   }
 
   async function collectAllAttunementLoot() {
+    if (AppState.ui.quickSkills.busy) return;
     if (!automationEnabled()) return;
     if (AppState.ui.collectingAttunementLoot) return;
     AppState.ui.collectingAttunementLoot = true;

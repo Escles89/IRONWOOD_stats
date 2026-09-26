@@ -8,16 +8,18 @@
     installHeaderTools();
     installInterfaceControls();
     installEventDelegation();
+    syncQuickSkills();
     checkScriptUpdate();
     window.addEventListener('popstate', () => location.pathname === STATS_PATH ? showStats({ push: false }) : hideStats());
     new MutationObserver((records) => {
       // Dashboard updates are output, not new native data to capture.
-      if (records.every(record => AppState.ui.page?.contains(record.target) || document.querySelector('#iw-global-dialogs')?.contains(record.target) || document.querySelector('#iw-action-toasts')?.contains(record.target))) return;
+      if (records.every(record => AppState.ui.page?.contains(record.target) || record.target.closest?.('#iw-quick-controls, #iw-quick-skills-panel') || document.querySelector('#iw-global-dialogs')?.contains(record.target) || document.querySelector('#iw-action-toasts')?.contains(record.target))) return;
       installNativeQuantityPrecision();
       installNavButton(); installInterfaceControls(); createPage(); captureVisibleCaches();
       installUpdateIndicator();
       installHeaderTools();
       syncHeaderActionBadges();
+      syncQuickSkills();
     })
       .observe(document.body, { childList: true, subtree: true });
     if (restoreStatusAtStartup) restoreStatusOnLoad();

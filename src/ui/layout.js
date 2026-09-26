@@ -85,16 +85,22 @@
     if (logo.dataset.iwStatusVersion !== label) logo.dataset.iwStatusVersion = label;
   }
 
+  function hideStatusRouteElements() {
+    const wrapper = routeWrapper();
+    if (!wrapper || !AppState.ui.page) return;
+    AppState.ui.hiddenRouteElements = [...wrapper.children].filter((element) => element !== AppState.ui.page && element.tagName !== 'ROUTER-OUTLET');
+    AppState.ui.hiddenRouteElements.forEach((element) => {
+      element.dataset.iwStatsDisplay ??= element.style.display;
+      element.style.display = 'none';
+    });
+  }
+
   function showStats({ push = true } = {}) {
     captureVisibleCaches();
     const wrapper = routeWrapper();
     if (!wrapper || !AppState.ui.page) return;
     if (location.pathname !== STATS_PATH) AppState.ui.previousUrl = `${location.pathname}${location.search}${location.hash}`;
-    AppState.ui.hiddenRouteElements = [...wrapper.children].filter((element) => element !== AppState.ui.page && element.tagName !== 'ROUTER-OUTLET');
-    AppState.ui.hiddenRouteElements.forEach((element) => {
-      element.dataset.iwStatsDisplay = element.style.display;
-      element.style.display = 'none';
-    });
+    hideStatusRouteElements();
     AppState.ui.page.hidden = false;
     AppState.ui.navButton?.classList.add('active-link');
     setStatusHeader(true);
@@ -140,8 +146,38 @@
     showStats({ push: true });
   }
 
+  async function refreshStatusActionSource() {
+    const page = AppState.ui.page;
+    const onStatus = () => location.pathname === STATS_PATH && page && AppState.ui.page === page && !page.hidden;
+    if (!onStatus()) return;
+    const runtime = quickRuntime(), target = quickRunningTarget(runtime), owner = quickOwner(runtime);
+    if (!target || !owner) return;
+    const route = `/skill/${target.skillId}/action/${target.actionId}`;
+    const ready = () => document.querySelector('skill-page action-component > .card .bars .fill, skill-page combat-component .interface.monster, skill-page combat-component > .card');
+    if (AppState.ui.previousUrl === route && ready()) return;
+    if (!runtime.router?.navigateByUrl) throw new Error('The native action page is unavailable. Reopen Status.');
+    // Reconcile the read-only source underneath Status after a confirmed switch.
+    // The gameplay mutation already happened in its disposable native frame.
+    // Keep the browser URL/history on Status and respect navigation away.
+    const navigated = await runtime.zone.run(() => runtime.router.navigateByUrl(route, { skipLocationChange: true }));
+    if (!onStatus()) return;
+    if (navigated === false) throw new Error('The native action page did not open. Reopen Status.');
+    if (quickOwner(runtime) !== owner || !quickSameAction(runtime.state.user.action, target)) return;
+    AppState.ui.previousUrl = route;
+    hideStatusRouteElements();
+    const started = Date.now();
+    while (!ready()) {
+      if (!onStatus() || quickOwner(runtime) !== owner || !quickSameAction(runtime.state.user.action, target)) return;
+      if (Date.now() - started >= 5000) throw new Error('The live action view is still loading. Reopen Status.');
+      await wait(50);
+    }
+    await primeNativeEstimates();
+    if (!onStatus()) return;
+    AppState.ui.lastSignature = '';
+  }
+
   async function recoverStatusActionView() {
-    if (location.pathname !== STATS_PATH || AppState.ui.recoveringActionView || AppState.ui.collectingLoot || AppState.ui.collectingTaming
+    if (location.pathname !== STATS_PATH || AppState.ui.quickSkills.busy || AppState.ui.recoveringActionView || AppState.ui.collectingLoot || AppState.ui.collectingTaming
       || !AppState.live.actionRebuildStartedAt || Date.now() - AppState.live.actionRebuildStartedAt < 1500
       || Date.now() - (AppState.ui.lastActionViewRecovery || 0) < 10000) return;
     const shortcut = document.querySelector('nav-component action-component button.button, nav-component combat-component button.button');
@@ -175,6 +211,7 @@
       delete element.dataset.iwStatsDisplay;
     });
     AppState.ui.hiddenRouteElements = [];
+    syncQuickSkills();
   }
 
   function leaveStats() {

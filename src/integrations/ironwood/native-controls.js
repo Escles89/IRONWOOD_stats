@@ -5,8 +5,9 @@
       && !button.classList.contains('row') && /^(Gather|Mine|Craft|Smelt|Smith|Enchant|Farm|Brew|Fish|Cook|Delve|Imbue|Explore|Tame|Fight|Start)$/i.test(clean(button.textContent)));
   }
   async function collectLootAndContinue() {
+    if (quickRunningTarget(quickRuntime())) return quickResume(null, { loot: true });
     if (!automationEnabled()) return;
-    if (AppState.ui.collectingLoot) return;
+    if (quickBusy()) return;
     const stopButton = [...document.querySelectorAll('skill-page button.action-stop')]
       .find((button) => /Stop\s*&\s*Loot/i.test(clean(button.textContent)) && !button.disabled);
     if (!stopButton) return;
@@ -51,6 +52,7 @@
 
   const NativeControlAdapter = {
     run(document, command) {
+      if (AppState.ui.quickSkills.busy) return;
       const actions = {
         loot: collectLootAndContinue,
         automations: collectAllAutomationLoot,

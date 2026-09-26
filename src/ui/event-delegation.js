@@ -1,9 +1,47 @@
   function installEventDelegation() {
+    document.addEventListener('submit', event => {
+      if (AppState.ui.quickSkills.busy && event.target.closest?.('skill-page')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      if (!event.target.matches?.('[data-quick-amount-form]')) return;
+      event.preventDefault();
+      quickSubmitAmount(event.target);
+    }, true);
+    document.addEventListener('input', event => {
+      const form = event.target.closest?.('[data-quick-amount-form]');
+      if (form) quickUpdateQuantity(form);
+    }, true);
     document.addEventListener('toggle', event => {
       if (event.target.matches?.('[data-quest-options]')) AppState.ui.questOptionsExpanded = event.target.open;
       if (event.target.matches?.('[data-debug-section]')) { AppState.ui.debugUpdatedAt = 0; scheduleStatusRender(); }
     }, true);
     document.addEventListener('click', event => {
+      if (event.target.matches?.('[data-quick-backdrop]')) { quickClose(); return; }
+      if (AppState.ui.quickSkills.busy && event.target.closest?.('skill-page button.action-start, skill-page button.action-stop, skill-page modal-component button[type="submit"]')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      const amountChoice = event.target.closest?.('[data-quick-amount-choice]');
+      if (amountChoice) {
+        if (!amountChoice.disabled) quickSubmitAmount(amountChoice.closest('form'), amountChoice.dataset.quickAmountChoice);
+        return;
+      }
+      const quickControl = event.target.closest?.('[data-quick-skills], [data-quick-loot], [data-quick-resume], [data-quick-page], [data-quick-edit], [data-quick-close], [data-quick-cancel]');
+      if (quickControl) {
+        event.preventDefault();
+        if (quickControl.disabled) return;
+        const data = quickControl.dataset;
+        if ('quickSkills' in data) quickOpen(quickControl);
+        else if ('quickLoot' in data) quickResume(null, { loot: true });
+        else if ('quickPage' in data) quickOpenPage(data.quickPage);
+        else if ('quickResume' in data) quickResume(data.quickResume);
+        else if ('quickEdit' in data) quickResume(data.quickEdit, { edit: true });
+        else quickClose();
+        return;
+      }
       const toastDismiss = event.target.closest?.('[data-toast-dismiss]');
       if (toastDismiss) { dismissActionToast(toastDismiss.dataset.toastDismiss); return; }
       const potionTypeButton = event.target.closest?.('[data-potion-type-remove]');
@@ -142,6 +180,7 @@
       location.href = launch.dataset.route;
     });
     document.addEventListener('keydown', (event) => {
+      if (handleQuickSkillKey(event)) return;
       if (handlePreferencesKey(event)) return;
       if (event.target.closest?.('button')) return;
       const launch = event.target.closest?.('.iw-status-link[data-route], [data-open-automation]');

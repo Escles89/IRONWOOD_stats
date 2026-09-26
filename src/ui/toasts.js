@@ -124,6 +124,7 @@
     const rewards = new Map();
     const restores = [];
     let confirmed = false;
+    let detailsKnown = false;
     let active = true;
     const add = (key, reward) => {
       if (!Number.isFinite(reward.amount) || reward.amount <= 0) return;
@@ -148,6 +149,7 @@
             if (!active || !reward || !Number.isFinite(reward.amount) || reward.amount <= 0) return true;
             const key = message.type === types.Item ? `item:${message.itemId}` : message.type === types.Coin ? 'coins' : `xp:${message.skillId}`;
             if (!rewards.has(key)) add(key, reward);
+            detailsKnown = true;
             return false;
           });
           if (remaining.length) return original.call(this, remaining);
@@ -161,14 +163,25 @@
         async function observed(...args) {
           const automation = method === 'lootAutomation' ? runtime.automations?.automations?.[args[0]] : null;
           const automationLoot = automation ? Object.entries(automation.loot || {}).map(([id, owned]) => [id, { amount: owned.amount }]) : null;
+          const actionLoot = method === 'stopAction' && runtime.action?.actionLoot
+            ? Object.entries(runtime.action.actionLoot).map(([id, owned]) => [id, { amount: owned.amount }]) : null;
+          const character = runtime.state?.user?.displayName;
           const response = await original.apply(this, args);
           const Observable = response?.constructor;
           if (typeof Observable?.prototype?.subscribe !== 'function') return response;
           return new Observable(subscriber => response.subscribe({
             next(value) {
-              if (active && (value?.user || (method === 'lootAutomation' && value?.inventory)) && !value.error) {
+              const stopUser = method === 'stopAction' && value?.inventory && typeof value.displayName === 'string'
+                && value.displayName === character && value.action == null;
+              if (active && (value?.user || (method === 'lootAutomation' && value?.inventory) || stopUser) && !value.error) {
                 confirmed = true;
-                for (const [id, owned] of (automationLoot || Object.entries(value.loot || {}))) add(`item:${id}`, itemReward(id, owned?.amount));
+                const loot = automationLoot || (stopUser ? actionLoot : null) || (value.loot ? Object.entries(value.loot) : null);
+                if (loot) detailsKnown = true;
+                for (const [id, owned] of (loot || [])) {
+                  const reward = itemReward(id, owned?.amount);
+                  const key = reward.image === '/assets/misc/coin.png' ? 'coins' : `item:${id}`;
+                  add(key, reward);
+                }
               }
               subscriber.next(value);
             },
@@ -179,7 +192,7 @@
         restores.push(() => { if (runtime.firebase[method] === observed) runtime.firebase[method] = original; });
       }
     } catch (error) { console.debug?.('[Ironwood Status] Collection reward observation unavailable', error.message); }
-    return { confirmed: () => confirmed, rewards: () => [...rewards.values()], restore() { active = false; restores.reverse().forEach(restore => restore()); } };
+    return { confirmed: () => confirmed, detailsKnown: () => detailsKnown, rewards: () => [...rewards.values()], restore() { if (!active) return; active = false; restores.reverse().forEach(restore => restore()); } };
   }
 
   function showCollectionRecap(title, rewards = [], error = '', summary = '') {

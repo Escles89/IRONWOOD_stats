@@ -84,15 +84,25 @@ test('runtime discovery uses native metadata and refuses to bootstrap an applica
   const instances=new Map(Types.map(Type=>[Type,new Type()]));
   let platform={_modules:[{injector:{get:Type=>instances.get(Type)}}]};
   function platformFactory(parent,name){const label=`Platform: ${name}`;return ()=>platform||parent(label);}
-  const chunks=[[[],{runtime:function(){return 'Platform: syncUser( getUser( handleActionSync( handleAutomationSync( handleExpeditionSync(';},unrelated:function(){}}]];
+  const skillMap={1:{id:'1',name:'Woodcutting',actions:[]},8:{id:'8',name:'Defense',image:'misc/defense.png'}};
+  const orderedSkills=[skillMap[1],skillMap[8]];
+  function craftLimit(user,action){return action.materials&&Math.floor(user.charcoal+user.compost+user.metalParts+user.sigilPieces+user.potionMix+user.arcanePowder);}
+  class SkillPage { calcCraftTime(){return {seconds:10};} }
+  class Router { navigateByUrl(){throw Error('Must not navigate');} createUrlTree(){} }
+  instances.set(Router,{config:[{children:[{component:SkillPage}]}]});
+  const chunks=[[[],{runtime:function(){return 'Platform: syncUser( getUser( handleActionSync( handleAutomationSync( handleExpeditionSync(';},materials:function(){return '.materials .arcanePowder Math.floor';},unrelated:function(){}}]];
   const loaded=[];
   const installed=new Set();
-  chunks.push=chunk=>{const id=chunk[0][0];if(installed.has(id))return;installed.add(id);chunk[2](id=>{loaded.push(id);return {...Types,platformFactory};});};
+  chunks.push=chunk=>{const id=chunk[0][0];if(installed.has(id))return;installed.add(id);chunk[2](id=>{loaded.push(id);return id==='materials'?{craftLimit}:{...Types,platformFactory,orderedSkills,skillMap,Router};});};
   h.context.window.webpackChunkidle_game=chunks;
   const found=h.context.findNativeSyncRuntime();
   assert.equal(found.state,instances.get(State));
   assert.equal(found.zone,instances.get(Zone));
-  assert.deepEqual(loaded,['runtime']);
+  assert.deepEqual(loaded,['runtime','materials']);
+  assert.equal(found.skillCatalog,skillMap);
+  assert.equal(found.craftLimit,craftLimit);
+  assert.equal(found.craftTime,SkillPage.prototype.calcCraftTime);
+  assert.equal(found.router,instances.get(Router));
   assert.equal(h.context.findNativeSyncRuntime(),found);
   const frame={webpackChunkidle_game:chunks};
   assert.equal(h.context.findNativeSyncRuntime(frame).state,instances.get(State));

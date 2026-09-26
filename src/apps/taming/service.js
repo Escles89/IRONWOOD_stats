@@ -99,6 +99,7 @@
   }
 
   async function collectTamingLoot() {
+    if (AppState.ui.quickSkills.busy) return;
     if (!automationEnabled()) return;
     if (AppState.ui.collectingTaming) return;
     AppState.ui.collectingTaming = true;

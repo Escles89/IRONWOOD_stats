@@ -12,7 +12,8 @@
       if (typeof factory !== 'function') continue;
       const source = Function.prototype.toString.call(factory);
       if (source.includes('.bootstrapModule(')) continue;
-      if (['Platform: ', 'syncUser(', 'getUser(', 'handleActionSync(', 'handleAutomationSync(', 'handleExpeditionSync(', 'items/challenge-scroll.png', 'createNotifications('].some(marker => source.includes(marker))) candidates.add(id);
+      if (['Platform: ', 'syncUser(', 'getUser(', 'handleActionSync(', 'handleAutomationSync(', 'handleExpeditionSync(', 'items/challenge-scroll.png', 'createNotifications(', 'navigateByUrl('].some(marker => source.includes(marker))
+        || ['.materials', '.arcanePowder', 'Math.floor'].every(marker => source.includes(marker))) candidates.add(id);
     }
     let runtime;
     chunks.push([[`iw-status-state-sync-${Date.now()}-${++nativeSyncRuntimeSequence}`], {}, requireModule => {
@@ -29,12 +30,26 @@
         return Type ? injector.get(Type, null) : null;
       };
       const Zone = exports.find(value => typeof value?.prototype?.run === 'function' && typeof value.prototype.runOutsideAngular === 'function');
+      const Router = exports.find(value => typeof value?.prototype?.navigateByUrl === 'function' && typeof value.prototype.createUrlTree === 'function');
+      const router = Router && injector.get(Router, null);
+      // SkillPage is private to the application's module. Its existing route
+      // exposes the component without bootstrapping or navigating the game.
+      const routeComponents = routes => (routes || []).flatMap(route => [route.component, ...routeComponents(route.children)]);
+      const SkillPage = routeComponents(router?.config)
+        .find(Type => typeof Type?.prototype?.calcCraftTime === 'function');
       runtime = {
         state: service('syncUser'), firebase: service('getUser'), action: service('handleActionSync'),
         automations: service('handleAutomationSync'), expedition: service('handleExpeditionSync'),
-        zone: Zone && injector.get(Zone, null),
+        zone: Zone && injector.get(Zone, null), router,
         attunementCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Woodcutting' && item.skillId != null) && Object.values(value).every(item => item?.skillId != null)),
-        skillCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Defense' && item.image === 'misc/defense.png')),
+        skillCatalog: exports.find(value => value && typeof value === 'object' && value['8']?.name === 'Defense' && value['1']?.name === 'Woodcutting' && Array.isArray(value['1'].actions)),
+        actionCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Copper Rock' && Array.isArray(item.drops))),
+        skillOrder: exports.find(value => Array.isArray(value) && value.length >= 17 && value[0] === '15' && value.includes('8') && value.includes('17')),
+        craftTime: SkillPage?.prototype.calcCraftTime,
+        skillEstimates: SkillPage?.prototype.calcEstimates,
+        skillLevel: exports.find(value => typeof value === 'function' && ['3500', '3.5', 'Math.log'].every(marker => Function.prototype.toString.call(value).includes(marker)) && Function.prototype.toString.call(value).length < 300),
+        skillLevelXp: exports.find(value => typeof value === 'function' && ['3500', '3.5', 'Math.floor'].every(marker => Function.prototype.toString.call(value).includes(marker)) && !Function.prototype.toString.call(value).includes('Math.log') && Function.prototype.toString.call(value).length < 250),
+        craftLimit: exports.find(value => typeof value === 'function' && ['.materials', '.charcoal', '.compost', '.metalParts', '.sigilPieces', '.potionMix', '.arcanePowder', 'Math.floor'].every(marker => Function.prototype.toString.call(value).includes(marker)) && Function.prototype.toString.call(value).length < 1600),
         regionCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Forest' && Array.isArray(item.skills) && item.tributeId != null)),
         skillRegion: exports.find(value => typeof value === 'function' && ['.Defense', '.weaponType', '.equipment['].every(marker => Function.prototype.toString.call(value).includes(marker)) && Function.prototype.toString.call(value).length < 600),
         notificationComponent: exports.find(value => typeof value?.prototype?.createNotifications === 'function'),
@@ -86,7 +101,8 @@
     return true;
   }
 
-  function synchronizeNativeGame() {
+  function synchronizeNativeGame({ quickAction = false } = {}) {
+    if (AppState.ui.quickSkills.busy && !quickAction) return Promise.reject(new Error('A quick action is in progress'));
     if (nativeGameSyncPromise) return nativeGameSyncPromise;
     nativeGameSyncPromise = (async () => {
       AppState.ui.nativeSync = { ...AppState.ui.nativeSync, running: true, startedAt: Date.now(), error: '' };
@@ -94,7 +110,7 @@
         const runtime = findNativeSyncRuntime();
         const { state, firebase, action, automations, expedition, zone } = runtime;
         if (!state.user || state.newVersion || state.swappingCharacter) throw new Error('Reload the game before synchronizing');
-        const character = state.user.id ?? state.user.name;
+        const character = state.user.displayName ?? state.user.id ?? state.user.name;
         const solo = state.isSolo;
         const response = await zone.run(() => requestNativeUser(firebase));
         // Native async/await can resume outside Angular's zone. Re-enter it for
@@ -105,8 +121,8 @@
           const time = response?.time;
           const serverTimestamp = typeof time === 'number' ? time : typeof time === 'string' && time.trim() ? Date.parse(time) : NaN;
           if (!response?.user?.inventory || !Number.isFinite(serverTimestamp)) throw new Error('Game synchronization returned incomplete state');
-          if (state.swappingCharacter || state.isSolo !== solo || (state.user.id ?? state.user.name) !== character
-            || (response.user.id ?? response.user.name) !== character) throw new Error('Character changed during synchronization');
+          if (state.swappingCharacter || state.isSolo !== solo || (state.user.displayName ?? state.user.id ?? state.user.name) !== character
+            || (response.user.displayName ?? response.user.id ?? response.user.name) !== character) throw new Error('Character changed during synchronization');
           // Use the same reconciliation sequence as the native header's checkSync.
           // A fresh server snapshot avoids copying an iframe's stale action history.
           state.syncUser(response.user);

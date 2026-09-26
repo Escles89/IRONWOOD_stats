@@ -128,6 +128,7 @@
   }
 
   async function collectAllAutomationLoot() {
+    if (AppState.ui.quickSkills?.busy) return;
     if (!automationEnabled() || AppState.ui.collectingAutomation || AppState.ui.refreshingAutomations) return;
     const cached = getCache().automations;
     const structures = (cached?.structures || [])
