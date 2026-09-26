@@ -272,7 +272,8 @@ test('the gear selects a followed skill and the header reports obtained masterie
   assert.match(html, /src="\/assets\/misc\/woodcutting.png"/);
   assert.match(html, /1 \/ 2 masteries obtained/);
   assert.match(html, /is-obtained[^>]*title="Mining · Obtained"/);
-  assert.match(html, /is-pending[^>]*title="Woodcutting · Not obtained"/);
+  assert.match(html, /src="\/assets\/badges\/mining.png" alt="Mining mastery obtained"/);
+  assert.doesNotMatch(html, /is-pending|iw-mastery-empty|Woodcutting mastery obtained/);
   assert.doesNotMatch(html, /data-mastery-pick=/);
   html = s.settings();
   assert.match(html, /data-mastery-pick="1"/);
@@ -289,4 +290,23 @@ test('the gear selects a followed skill and the header reports obtained masterie
   assert.match(html, /Mastery count unavailable/);
   assert.doesNotMatch(html, /is-obtained/);
   assert.deepEqual(s.calls, []);
+});
+
+
+test('requirement progress caps covered balances and leaves unknown balances indeterminate', () => {
+  const s = setup();
+  let html = s.change('1');
+  assert.match(html, /60 needed/);
+  assert.match(html, /aria-label="Coins requirement"[^>]*aria-valuenow="40"/);
+  s.user.skills['1'].exp = 400;
+  html = s.render();
+  assert.match(html, /aria-label="XP requirement"[^>]*aria-valuenow="100"/);
+  assert.match(html, /400 of 200 · Covered/);
+  s.runtime.mastery.exp = 0;
+  assert.match(s.render(), /aria-label="XP requirement"[^>]*aria-valuenow="100"/);
+  delete s.user.coins;
+  html = s.render();
+  assert.match(html, /aria-label="Coins requirement"[^>]*Unknown/);
+  assert.doesNotMatch(html, /aria-label="Coins requirement"[^>]*aria-valuenow=/);
+  assert.doesNotMatch(html, /NaN|Infinity/);
 });
