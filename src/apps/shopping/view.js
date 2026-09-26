@@ -71,7 +71,7 @@
       const note = edge?.cycle ? ' · Cycle stopped' : reference ? ' · Shared requirement' : '';
       const label = `${node.name} — ${shoppingSupplyLabel(node)}${note}${node.special ? ' · Resource balance' : ''}`;
       const content = `<button type="button" class="iw-shopping-node" data-shopping-step-link="${escapeHtml(node.key)}" aria-haspopup="dialog" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${renderShoppingIcon(node)}</button>`;
-      const children = reference ? '' : node.edges.map(input => {
+      const children = reference ? '' : node.edges.filter(input => !input.wood).map(input => {
         const child = nodes.get(input.key);
         return child ? branch(child, input) : '';
       }).join('');

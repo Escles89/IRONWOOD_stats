@@ -97,3 +97,5 @@ The planner reserves every existing recipe requirement before allocating spare o
 The assembled workflow tests cover mixed wood types, competing recipe requirements, shared Charcoal demand, round-up surplus, deep balance changes, unknown stock, pending loot exclusion and Charcoal already covered by stock. Live native validation showed 39,559,770 required, 116,345 owned and 382,187 convertible from spare wood, correctly leaving 39,061,238 to acquire. All eight native wood types appeared in the modal.
 
 Final verification: build, complete check, deterministic assembly, syntax and whitespace validation pass all 347 tests, including 35 shopping workflows. Standards and Spec reviews have zero unresolved findings.
+
+Presentation follow-up: diamonds gently breathe over 3.2 seconds using opacity and scale, disabled under reduced-motion preferences. Charcoal conversion wood branches are hidden from the tree while the complete wood breakdown and calculations remain available in Charcoal details. Direct wood ingredients of other recipes remain visible. Live tree inspection confirmed the hidden branches; all 347 tests and both reviews pass.
