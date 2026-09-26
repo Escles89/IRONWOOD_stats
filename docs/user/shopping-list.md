@@ -1,6 +1,6 @@
 # Shopping list
 
-On Status, choose a finished item and enter a positive whole-number **Target owned quantity**. This is the total you want to own: a target of 100 with 30 already owned leaves 70 to acquire. Filter the item list by name, choose a recipe when several current crafting recipes apply, then save.
+On Status, choose a craftable finished item and enter a positive whole-number **Target owned quantity**. This is the total you want to own: a target of 100 with 30 already owned leaves 70 to acquire. Filter the item list by name, then save. The list contains only outputs of current main crafting recipes, excluding raw materials, runes, obsolete recipes and failure-only outputs such as burnt food. The sole recipe is selected automatically. A recipe choice is shown only if multiple recipes become available or a saved recipe needs replacing.
 
 The card shows direct ingredient shortages and separate native resource balances such as Charcoal. Expand **Direct recipe detail** for each ingredient's per-attempt cost, required total, owned amount and missing amount. Craftable ingredients are marked as intermediate items to acquire. Recursive recipes are not included yet.
 

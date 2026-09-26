@@ -50,6 +50,8 @@ An item requiring a recipe choice remains unresolved until the player chooses; d
 
 ## Confirmed Presentation
 
+Player refinement on 2026-09-26: restrict the selector to craftable outputs of current main crafting recipes; omit failure-only outputs. Automatically use a sole current recipe and show a choice only for alternatives or an invalidated saved recipe.
+
 Provide an item selector, a positive whole-number target and an editable saved target. The summary lists material shortfalls; expandable steps show selected recipes, required output, stock used, nominal production and uncertainty. Persist recipe choices with this plan and prompt again if a saved recipe is no longer valid.
 
 Use clear distinctions: Target satisfied refers to owned finished items; Base materials covered refers to the observed inputs for a supported recipe plan. Neither means the finished item has been crafted. A recipe with uncertain output cannot promise that its nominal inputs are sufficient.

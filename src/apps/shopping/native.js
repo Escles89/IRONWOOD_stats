@@ -43,8 +43,13 @@
         recipes.push({ outputs: outputs.ids, key: `${skillId}:${recipe.id}`, skillId, skillName: skill.name, recipe });
       }
     }
-    const index = { recipes, complete, byItem: new Map(), revision: ++discovery.revision,
+    const index = { recipes, complete, byItem: new Map(), craftableItems: new Set(), revision: ++discovery.revision,
       skills: runtime?.skillCatalog, actions: runtime?.actionCatalog, items: runtime?.catalog };
+    for (const entry of recipes) {
+      if (Array.isArray(entry.recipe.materials)) {
+        for (const id of shoppingOutputs({ drops: entry.recipe.drops }).ids) index.craftableItems.add(id);
+      }
+    }
     for (const entry of recipes) for (const id of entry.outputs) {
       if (!index.byItem.has(id)) index.byItem.set(id, []);
       index.byItem.get(id).push(entry);

@@ -252,3 +252,22 @@ test('unchanged observations reuse native recipe discovery and hidden dashboards
   assert.match(s.page.innerHTML, /Target satisfied/);
   assert.equal(catalogReads, 0);
 });
+
+test('the item picker contains only current craftable outputs and hides a single recipe choice', () => {
+  const s = setup();
+  s.runtime.catalog['103'] = { id: '103', name: 'Obsolete Potion' };
+  s.runtime.catalog['104'] = { id: '104', name: 'Burnt Bar' };
+  s.runtime.catalog['105'] = { id: '105', name: 'Common Mining Rune' };
+  s.runtime.actionCatalog['99'] = { id: '99', name: 'Obsolete Potion', materials: [], drops: [{ id: '103', chance: 1000 }] };
+  s.runtime.actionCatalog['30'].failDrops = [{ id: '104', chance: 1000 }];
+  const html = s.render();
+  assert.match(html, /<option value="101"/);
+  for (const id of ['102', '103', '104', '105']) assert.doesNotMatch(html, new RegExp(`<option value="${id}"`));
+  s.emit('change', '[data-shopping-item]', '101');
+  assert.doesNotMatch(s.render(), /<select name="recipe"/);
+  assert.match(s.save('101', '100', ''), /70 nominal attempts/);
+  s.runtime.actionCatalog['31'] = { ...s.runtime.actionCatalog['30'], id: '31', name: 'Alternative' };
+  s.runtime.skillCatalog['3'].actions.push({ id: '31' });
+  s.emit('click', '[data-shopping-edit]');
+  assert.match(s.render(), /<select name="recipe"/);
+});
