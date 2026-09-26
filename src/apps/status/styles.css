@@ -1117,7 +1117,7 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
 @media (max-width: 420px) {
   .iw-mastery-table, .iw-mastery-table tbody { display: block; }
   .iw-mastery-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .iw-mastery-table tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px 0; border-bottom: 1px solid #294052; }
+  .iw-mastery-table tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 8px 0; border-bottom: 1px solid #294052; }
   .iw-mastery-table th[scope="row"] { grid-column: 1 / -1; padding: 0 0 5px; }
   .iw-mastery-table th, .iw-mastery-table td { border: 0; }
   .iw-mastery-table td { padding: 3px 4px 3px 0; text-align: left; overflow-wrap: anywhere; }

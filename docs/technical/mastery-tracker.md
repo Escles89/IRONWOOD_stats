@@ -1,6 +1,6 @@
 # Skill Mastery tracker
 
-Issue: [#2](https://github.com/Escles89/IRONWOOD_stats/issues/2). The pending-loot extension remains separate in #3. During implementation the player replaced the persistent Status card with a modal opened by the mastery symbol, with a compact material list and completed masteries hidden from the selector. These changes supersede the original ticket’s panel placement and completed-selection presentation.
+Issue: [#2](https://github.com/Escles89/IRONWOOD_stats/issues/2). The Current Loot extension is implemented in [#3](https://github.com/Escles89/IRONWOOD_stats/issues/3). During implementation the player replaced the persistent Status card with a modal opened by the mastery symbol, with a compact material list and completed masteries hidden from the selector. These changes supersede the original ticket’s panel placement and completed-selection presentation.
 
 The feature lives in `apps/mastery/`. Runtime discovery uses the existing Angular router's Mastery component type and its named `MASTERY_DATA`, `MASTERY_COST`, `MASTERY_EXP` and `calcMasteryItems` bindings. Module/export identifiers are resolved from the current loaded client, without constructing components, hard-coding costs or calling gameplay endpoints. Unsupported or ambiguous bindings leave the feature visibly unavailable.
 
@@ -28,3 +28,23 @@ Validated implementation commits `9a0c804`, `a2719de` and `dc3bbf7` against issu
 - Taming's eight material icons loaded. Carrot, Raw Lobster, Redwood Log and Infernal Ore were gray with zero missing. At a 390 × 844 viewport all four quantities remained present per item without horizontal overflow. The mastery, location and activity buttons remained 34 × 34 px.
 - Tab from Done wrapped to Refresh; Shift+Tab from Refresh wrapped to Done. Escape closed the modal and returned focus to the mastery trigger. Taming was restored as the followed skill, and the temporary viewport override was reset.
 - Live checks did not submit materials, claim mastery or alter the current Chilli/Farming action. Submission/contract races and character switching are harness validation, not live gameplay validation. Pending loot and Missing after collection remain explicitly unavailable, as scoped for follow-up issue #3.
+
+
+## Current Loot extension — issue #3 (2026-09-26)
+
+The existing mastery modal now shows all six material quantities. `readMasteryCurrentLoot` reads the native action service’s `actionLoot` map, using native catalog item IDs. This replaces the legacy DOM loot list as the evidence source for this feature: the legacy reader cannot distinguish absent markup from an empty list, and its displayed quantities can be rounded. Native evidence can remain complete while the route DOM rebuilds; missing DOM itself never establishes zero.
+
+Complete evidence requires a ready character and native action service, a loaded item map, and either an identified main action (skill membership, action ID, start date and initialized action seed) or explicit idle with an empty map. Unsupported or malformed item entries make coverage incomplete while preserving valid entries. The skill catalog contains action objects with `id` fields. Taming actions, House production, Attunement and queue amounts are never read as Current Loot.
+
+The snapshot records loot coverage, quantities, action identity and observation age. A retained observation from the same action is labelled historical and cannot produce an exact after-collection total. Persisted loot is validated and demoted to historical on reload; a new action instance or owner cannot inherit it as current evidence. Partial current evidence reports the amount covered by known loot.
+
+Mastery reads owned inventory directly from the native user together with its action loot. It does not increment that inventory from the script’s separate display-cache claim receipt. During native collection, Quick Loot, pending claim confirmation or synchronization, combined balances are incomplete. Once the native transfer settles, its new inventory and cleared loot map are observed together; repeated observations and refresh do not transfer anything again. Existing contribution reconciliation remains in force for both shortfalls. Refresh refuses to race a native collection and continues to use the existing read-only synchronization.
+
+Validation distinguishes the following evidence:
+
+- **Static client inspection:** inspected Ironwood v1.6.5’s `handleStopAction`, `clearLoop`, `handleHistory`, `handleActionSync`, loading flags and action catalog. Native collection sets `actionLoading`, transfers loot into inventory, synchronizes the returned user, clears the loot map, then releases loading. The tracker sends no collection request.
+- **Assembled harness workflows:** the 100/20/50/10 example, zero floors, verified empty versus missing/partial maps, malformed and mismatched identities, historical observations, validated reloads, main-action/character/mode changes, unrelated reward sources, collection transfer, contribution races, route rebuilds, read-only refresh and collection/refresh coordination. Native runtime, storage, DOM and time are the fixture boundaries.
+- **Live read-only checks, Ironwood v1.6.5:** Current Loot appeared in the Taming modal with 685 pending Infernal Ore, while the owned and contributed columns stayed separate. An explicit Refresh settled successfully with 687 pending and 15,761 owned. Keyboard Enter selected Alchemy through the gear picker. At a 390 × 844 viewport all six quantities wrapped into two labelled rows per material without horizontal overflow. All eight material rows retained six labelled quantities. Tab from Done wrapped to Refresh, Shift+Tab returned to Done, and Escape closed the modal and restored the mastery trigger. Taming was restored as the followed skill and the temporary viewport was reset. The current Chilli/Farming action continued.
+- No live collection or material submission was performed. Exactly-once transfer, partial-source failures and character-switch races are harness evidence, not live mutation validation.
+
+Final verification: `npm run build` and `npm run check` passed, including all 312 tests, source/generated syntax checks, deterministic assembly and whitespace validation. Separate Standards and Spec reviews found no remaining findings.

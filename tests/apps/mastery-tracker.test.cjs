@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const harness = require('../harness.cjs');
 
-function setup(storage = new Map()) {
+function setup(storage = new Map(), configure = () => {}) {
   const listeners = {}, calls = [], errors = [], nodes = new Map();
   const page = { hidden: false, innerHTML: '', style: { setProperty() {} }, contains: () => true,
     querySelector: () => null, querySelectorAll: () => [] };
@@ -21,6 +21,7 @@ function setup(storage = new Map()) {
     mastery: { catalog: { '1': { id: '1', name: 'Woodcutting', items: { '101': '101' } }, '2': { id: '2', name: 'Mining', items: { '101': '101' } } }, cost: 100, exp: 200, required: () => 100 },
     zone: { run: fn => fn() }, action: { handleActionSync() {} }, automations: { handleAutomationSync() {} }, expedition: { handleExpeditionSync() {} },
     firebase: { getUser() { calls.push('read'); return { subscribe(o) { o.next({ user: structuredClone(runtime.state.user), time: 100000 }); o.complete(); return { unsubscribe() {} }; } }; } } };
+  configure(runtime);
   const h = harness({ document, page, setTimeout, clearTimeout, console: { error: (...args) => errors.push(args) },
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) } });
   h.context.findNativeSyncRuntime = () => runtime;
@@ -70,9 +71,173 @@ test('selecting a native mastery shows independent material, XP and coin require
   assert.match(html, /src="\/assets\/items\/pine-log.png" alt=""/);
   assert.match(html, /XP.*80.*200.*Insufficient/s);
   assert.match(html, /Coins.*40.*100.*Insufficient/s);
-  assert.match(html, /Pending loot.*unavailable/s);
-  assert.match(html, /Missing after collection.*unavailable/s);
+  assert.match(html, /data-label="Pending loot">Unknown/);
+  assert.match(html, /data-label="Missing after collection">Unknown/);
   assert.match(html, /href="\/mastery"/);
+  assert.deepEqual(s.calls, []);
+});
+
+function currentLoot(s, loot = { '101': { amount: 10 } }) {
+  s.user.action = { skillId: '1', actionId: '10', startDate: '2026-09-26T12:00:00Z' };
+  s.runtime.skillCatalog = { '1': { id: '1', actions: [{ id: '10' }] } };
+  s.runtime.actionCatalog = { '10': { id: '10', name: 'Pine Tree' } };
+  Object.assign(s.runtime.state, { loadingApp: false, syncingData: false });
+  Object.assign(s.runtime.action, { actionLoot: loot, actionLoading: false, actionSeed: () => 0.5 });
+}
+
+test('Current Loot covers a conditional mastery shortfall without becoming owned inventory', () => {
+  const s = setup(); currentLoot(s);
+  let html = s.change('1');
+  assert.match(html, /data-label="Owned">50/);
+  assert.match(html, /data-label="Pending loot">10/);
+  assert.match(html, /data-label="Missing now">30/);
+  assert.match(html, /data-label="Missing after collection">20/);
+  s.runtime.action.actionLoot['101'].amount = 40;
+  html = s.render();
+  assert.match(html, /data-label="Missing after collection">0/);
+  assert.match(html, /data-label="Missing now">30/);
+  assert.match(html, /if.*collect/i);
+  assert.deepEqual(s.calls, []);
+});
+
+test('empty Current Loot is zero only with a ready native source; missing and partial evidence stay incomplete', () => {
+  const s = setup(); currentLoot(s, {});
+  assert.match(s.change('1'), /data-label="Pending loot">0/);
+  assert.match(s.render(), /data-label="Missing after collection">30/);
+  s.runtime.action.actionLoot = { '101': { amount: 10 }, '999': { amount: 90 } };
+  let html = s.render();
+  assert.match(html, /data-label="Pending loot">10/);
+  assert.match(html, /data-label="Missing after collection">Unknown/);
+  assert.match(html, /known loot covers 10.*incomplete/i);
+  delete s.runtime.action.actionLoot;
+  s.h.time(400000);
+  html = s.render();
+  assert.match(html, /10 \(last observed\)/);
+  assert.match(html, /Current Loot observed 5 min ago/);
+  assert.match(html, /data-label="Missing after collection">Unknown/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('collection transitions never combine transferred inventory with old pending loot', async () => {
+  const s = setup(); currentLoot(s); s.change('1');
+  // Native collection updates inventory before clearing its pending map.
+  s.runtime.action.actionLoading = true;
+  s.user.inventory['101'].amount = 60;
+  let html = s.render();
+  assert.match(html, /data-label="Owned">Unknown/);
+  assert.match(html, /data-label="Missing after collection">Unknown/);
+  s.runtime.action.actionLoot = {};
+  s.user.action = null;
+  s.runtime.action.actionLoading = false;
+  html = s.render();
+  assert.match(html, /data-label="Owned">60/);
+  assert.match(html, /data-label="Pending loot">0/);
+  assert.match(html, /data-label="Missing now">20/);
+  assert.match(html, /data-label="Missing after collection">20/);
+  html = await s.refresh();
+  assert.match(html, /data-label="Owned">60/);
+  assert.match(html, /data-label="Missing after collection">20/);
+  assert.deepEqual(s.calls, ['read']);
+});
+
+test('saved loot is validated and remains historical until the same action is observed again', () => {
+  const s = setup(); currentLoot(s); s.change('1');
+  const reload = setup(new Map(s.storage), runtime => { delete runtime.mastery; });
+  assert.match(reload.render(), /data-label="Missing after collection">Unknown/);
+  const key = 'iw-status-mastery-v1:' + JSON.stringify(['Player', false]);
+  const saved = JSON.parse(s.storage.get(key));
+  saved.snapshots['1'].loot = { complete: true, items: { '101': -50 }, observedAt: 100000, actionKey: 'idle', retained: false };
+  s.storage.set(key, JSON.stringify(saved));
+  const invalid = setup(s.storage, runtime => { delete runtime.mastery; });
+  assert.match(invalid.render(), /data-label="Pending loot">Unknown/);
+  assert.doesNotMatch(invalid.render(), /-50/);
+});
+
+test('unresolved requirement identities cannot be matched to pending loot', () => {
+  const s = setup(); currentLoot(s);
+  s.runtime.mastery.catalog['1'].items['101'] = '999';
+  const html = s.change('1');
+  assert.match(html, /Unknown item \(101\)/);
+  assert.match(html, /data-label="Pending loot">Unknown/);
+  assert.match(html, /data-label="Missing after collection">Unknown/);
+});
+
+test('loot follows the exact main action and character, excluding queues and parallel rewards', () => {
+  const s = setup(); currentLoot(s); s.change('1');
+  s.runtime.automations.loot = { '101': { amount: 900 } };
+  s.runtime.expedition.loot = { '101': { amount: 800 } };
+  s.user.attunement = { loot: { '101': { amount: 700 } } };
+  s.user.action.amount = 500;
+  assert.match(s.render(), /data-label="Pending loot">10/);
+  // A new instance of the same action must not inherit an unavailable old map.
+  s.user.action.startDate = '2026-09-26T13:00:00Z';
+  delete s.runtime.action.actionLoot;
+  let html = s.render();
+  assert.match(html, /data-label="Pending loot">Unknown/);
+  assert.doesNotMatch(html, /last observed/);
+  s.runtime.action.actionLoot = { '101': { amount: 4 } };
+  assert.match(s.render(), /data-label="Missing after collection">26/);
+  s.user.displayName = 'Other';
+  assert.doesNotMatch(s.render(), /data-label="Pending loot"/);
+  s.change('1');
+  assert.match(s.render(), /data-label="Pending loot">4/);
+  s.runtime.state.isSolo = s.user.isSolo = true;
+  assert.doesNotMatch(s.render(), /data-label="Pending loot"/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('loading, malformed, mismatched and unavailable native sources never imply empty loot', () => {
+  for (const invalidate of [
+    s => { delete s.runtime.action.actionLoot; },
+    s => { s.runtime.action.actionLoot = []; },
+    s => { s.runtime.action.actionLoot = { '101': null }; },
+    s => { s.runtime.skillCatalog['1'].actions = {}; },
+    s => { s.runtime.action.actionLoot = { '101': { amount: -1 } }; },
+    s => { s.runtime.action.actionLoot = { '101': { amount: 10, id: '999' } }; },
+    s => { s.runtime.catalog['101'].id = '999'; },
+    s => { s.runtime.action.actionLoading = true; },
+    s => { s.runtime.action.actionSeed = null; },
+    s => { s.runtime.state.loadingApp = true; },
+    s => { s.runtime.state.syncingData = true; },
+    s => { s.runtime.state.appActive = false; },
+    s => { delete s.user.action; },
+    s => { s.user.action.skillId = '15'; },
+    s => { s.user.action = null; },
+  ]) {
+    const s = setup(); currentLoot(s); invalidate(s);
+    const html = s.change('1');
+    assert.match(html, /data-label="Pending loot">Unknown/);
+    assert.match(html, /data-label="Missing after collection">Unknown/);
+    assert.deepEqual(s.calls, []);
+  }
+});
+
+test('loot remains conditional across submission races, read-only refresh and route rebuilds', async () => {
+  const s = setup(); currentLoot(s); s.change('1');
+  s.user.masteries.skills['1'].items['101'] = 60;
+  assert.match(s.render(), /data-label="Missing after collection">Unknown/);
+  s.user.inventory['101'].amount = 10;
+  const html = await s.refresh();
+  assert.match(html, /data-label="Missing after collection">20/);
+  // DOM is absent throughout this harness: native evidence survives routing.
+  s.h.context.location.pathname = '/mastery';
+  assert.match(s.render(), /data-label="Pending loot">10/);
+  s.h.context.location.pathname = '/status';
+  assert.match(s.render(), /data-label="Missing after collection">20/);
+  s.h.time(400000);
+  assert.match(s.render(), /Current Loot observed 5 min ago/);
+  assert.deepEqual(s.calls, ['read']);
+  s.runtime.firebase.getUser = () => { throw Error('Offline'); };
+  assert.match(await s.refresh(), /Refresh unavailable: Offline/);
+  assert.match(s.render(), /data-label="Missing after collection">20/);
+});
+
+test('Refresh waits for native collection rather than mixing a new snapshot into its transfer', async () => {
+  const s = setup(); currentLoot(s); s.change('1');
+  s.runtime.action.actionLoading = true;
+  const html = await s.refresh();
+  assert.match(html, /data-mastery-refresh disabled/);
+  assert.match(html, /data-label="Missing after collection">Unknown/);
   assert.deepEqual(s.calls, []);
 });
 
