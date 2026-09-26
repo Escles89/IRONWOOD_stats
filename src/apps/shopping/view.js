@@ -122,12 +122,14 @@
     const amount = value => value === null ? 'Unknown' : formatNumber(value);
     const capacity = snapshot.capacity;
     const canMake = capacity.exact ? amount(capacity.amount) : capacity.amount ? `≥ ${amount(capacity.amount)}` : 'Unknown';
+    const remainder = snapshot.shortfall === null ? null : Math.max(0, snapshot.shortfall - capacity.amount);
+    const cannotMake = capacity.exact || remainder === 0 ? remainder : null;
     const ownedPercent = snapshot.owned === null ? 0 : Math.min(100, snapshot.owned / ui.plan.quantity * 100);
     const craftPercent = Math.min(100 - ownedPercent, capacity.amount / ui.plan.quantity * 100);
     const shortages = snapshot.leaves.filter(row => !row.unresolved && row.acquire !== 0);
     return `<div class="iw-shopping-overview">
       <div class="iw-shopping-overview-heading"><button class="iw-shopping-target-icon" type="button" data-shopping-step-link="${escapeHtml(snapshot.key)}" aria-haspopup="dialog" aria-label="View ${escapeHtml(snapshot.name)} details">${renderShoppingIcon(snapshot)}</button><div><strong>${escapeHtml(snapshot.name)}</strong><span>${snapshot.shortfall === 0 ? 'Target satisfied' : `${amount(snapshot.shortfall)} to acquire`}</span></div></div>
-      <dl class="iw-shopping-totals"><div><dt>Target</dt><dd>${amount(ui.plan.quantity)}</dd></div><div><dt>Owned</dt><dd>${amount(snapshot.owned)}</dd></div><div class="iw-shopping-capacity" data-exact="${capacity.exact}"><dt>Can make now</dt><dd>${canMake}</dd></div></dl>
+      <dl class="iw-shopping-totals"><div><dt>Target</dt><dd>${amount(ui.plan.quantity)}</dd></div><div><dt>Owned</dt><dd>${amount(snapshot.owned)}</dd></div><div class="iw-shopping-capacity" data-exact="${capacity.exact}"><dt>Can make now</dt><dd>${canMake}</dd></div><div class="iw-shopping-uncovered" data-state="${cannotMake === null ? 'unknown' : cannotMake > 0 ? 'shortage' : 'covered'}"><dt>Can’t make yet</dt><dd>${amount(cannotMake)}</dd></div></dl>
       <div class="iw-shopping-coverage" role="img" aria-label="Target coverage: ${amount(snapshot.owned)} owned; ${canMake} additional from materials"><span style="width:${ownedPercent}%"></span><span style="width:${craftPercent}%"></span></div>
       <div class="iw-shopping-overview-note"><span>Full recipe chain · material limit · before bonuses</span>${!capacity.exact ? '<span>Exact capacity unknown</span>' : ''}</div>
     </div>

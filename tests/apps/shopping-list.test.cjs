@@ -802,3 +802,15 @@ test('connections distinguish owned stock from ingredients that still need craft
   assert.doesNotMatch(s.render(), /<path data-supply="craftable"/);
   assert.match(s.render(), /Iron Ore — Covered by owned stock/);
 });
+
+test('Cannot make yet shows the uncovered target remainder without inventing uncertain capacity', () => {
+  const s = setup();
+  s.save('101', '100');
+  assert.match(s.render(), /Can’t make yet<\/dt><dd>64<\/dd>/);
+  s.save('101', '31');
+  assert.match(s.render(), /Can’t make yet<\/dt><dd>0<\/dd>/);
+  s.runtime.actionCatalog['30'].drops[0].amount = 2;
+  assert.match(s.render(), /Can’t make yet<\/dt><dd>Unknown<\/dd>/);
+  s.save('101', '20');
+  assert.match(s.render(), /Can’t make yet<\/dt><dd>0<\/dd>/);
+});
