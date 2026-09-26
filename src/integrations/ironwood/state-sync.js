@@ -155,6 +155,7 @@
     // Native v1.6.5 conversion dialogs use item -> fixed resource yield tables.
     // Match two distinct artwork/yield anchors, never minified export names.
     const anchors = {
+      charcoal: [['items/wood-pine.png', 1], ['items/wood-ancient.png', 8]],
       metalParts: [['items/sword-copper.png', 2], ['items/armor-iron-body.png', 6]],
       potionMix: [['items/potion-basic-health.png', 6], ['items/potion-super-combat-efficiency.png', 34]]
     };

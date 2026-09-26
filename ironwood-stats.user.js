@@ -1042,6 +1042,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     // Native v1.6.5 conversion dialogs use item -> fixed resource yield tables.
     // Match two distinct artwork/yield anchors, never minified export names.
     const anchors = {
+      charcoal: [['items/wood-pine.png', 1], ['items/wood-ancient.png', 8]],
       metalParts: [['items/sword-copper.png', 2], ['items/armor-iron-body.png', 6]],
       potionMix: [['items/potion-basic-health.png', 6], ['items/potion-super-combat-efficiency.png', 34]]
     };
@@ -4396,13 +4397,14 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     const graph = shoppingGraph(runtime, plan, index), user = runtime.state.user;
     return JSON.stringify([index.revision, plan,
       graph.order.map(node => node.special ? shoppingNumber(user[node.id]) : shoppingOwned(runtime, node.id)),
+      graph.order.some(node => node.key === 'resource:charcoal') ? shoppingConversionChoices(runtime, 'charcoal').map(choice => shoppingOwned(runtime, choice.id)) : [],
       SHOPPING_SKILLS.map(id => user.skills?.[id]?.exp), shoppingPending(runtime)]);
   }
 
   const SHOPPING_CONVERSIONS = ['potionMix', 'metalParts'];
 
   function shoppingConversionChoices(runtime, resource) {
-    if (!SHOPPING_CONVERSIONS.includes(resource)) return [];
+    if (resource !== 'charcoal' && !SHOPPING_CONVERSIONS.includes(resource)) return [];
     return Object.entries(runtime?.conversionCatalog?.[resource] || {})
       .filter(([id, output]) => shoppingItem(runtime, id) && shoppingQuantity(output))
       .map(([id, output]) => ({ id, output, name: shoppingItem(runtime, id).name }))
@@ -4475,7 +4477,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       if (missing === 0) { detail.attempts = 0; detail.output = 0; detail.gaps = []; detail.fixed = true; }
       const row = { ...detail, id: node.id, key: node.key, special: node.special, recipeKey: node.recipeKey, sourceId: node.sourceId, production: Boolean(detail.chosen || detail.conversion),
         image: node.special ? SHOPPING_RESOURCE_IMAGES[node.id] : shoppingItem(runtime, node.id)?.image,
-        required, knownRequired, owned, used, missing, edges: [], surplus: detail.output === null || missing === null ? null : Math.max(0, (detail.output || 0) - missing) };
+        required, knownRequired, owned, used, missing, acquire: missing, edges: [], surplus: detail.output === null || missing === null ? null : Math.max(0, (detail.output || 0) - missing) };
       if (owned === null && required !== 0) row.gaps.push('Owned balance unknown.');
       if (required === null) row.gaps.push('Required quantity unknown; upstream costs are incomplete.');
       calculated.set(node.key, row);
@@ -4495,6 +4497,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
         }
       }
     }
+    shoppingApplyWood(runtime, calculated);
     const nodes = [...calculated.values()];
     // Uncertainty travels back to every parent depending on that production.
     for (const row of [...nodes].reverse()) {
@@ -4502,10 +4505,11 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       const verifiedLeaf = row.special && !row.sourceId || !row.recipeKey && !catalog.byItem.has(row.id) && catalog.complete && shoppingItem(runtime, row.id);
       row.unresolved = !row.production && !verifiedLeaf;
       row.uncertain = row.missing !== 0 && (row.required === null || row.owned === null || uncertain
-        || (row.production ? !row.fixed || row.gaps.length > 0 : !verifiedLeaf));
+        || row.woodUncertain || (row.production ? !row.fixed || row.gaps.length > 0 : !verifiedLeaf));
       if (uncertain && row.missing !== 0) row.gaps.push('Uncertain recipe chain: intermediate requirements do not guarantee the target.');
       if (row.uncertain) row.fixed = false;
-      const insufficient = (!row.production && !row.unresolved && (row.missing > 0 || row.required === null && row.owned !== null && row.knownRequired > row.owned))
+      const remaining = row.acquire;
+      const insufficient = (!row.production && !row.unresolved && (remaining > 0 || row.required === null && row.owned !== null && row.knownRequired > row.owned))
         || row.edges.some(edge => !edge.cycle && edge.required !== 0 && calculated.get(edge.key)?.supply === 'insufficient');
       row.supply = row.missing === 0 ? 'covered' : insufficient ? 'insufficient' : row.uncertain ? 'unknown' : 'covered';
     }
@@ -4515,6 +4519,46 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     const result = { ...root, shortfall: root.missing, nodes, leaves, cycles, unresolved: gaps, incomplete: gaps.length > 0 || cycles.length > 0 };
     if (result.incomplete && !result.gaps.some(gap => gap.startsWith('Incomplete evidence'))) result.gaps = [...result.gaps, 'Incomplete evidence; known amounts are partial and cannot establish material coverage.'];
     return result;
+  }
+
+  // Reserve every recipe's stock before considering wood for conversion. Only
+  // owned, unallocated logs contribute; projected crafted output never does.
+  function shoppingApplyWood(runtime, calculated) {
+    const charcoal = calculated.get('resource:charcoal');
+    if (!charcoal) return;
+    const choices = shoppingConversionChoices(runtime, 'charcoal').sort((a, b) => b.output - a.output || a.id.localeCompare(b.id));
+    if (!choices.length) return;
+    let remaining = charcoal.missing, output = 0, unknown = false;
+    charcoal.wood = [];
+    for (const choice of choices) {
+      const key = `item:${choice.id}`, existing = calculated.get(key);
+      const owned = shoppingPending(runtime) ? null : shoppingOwned(runtime, choice.id);
+      const reserved = existing ? existing.required : 0;
+      const available = owned === null || reserved === null || existing?.edges.length ? null : Math.max(0, Math.floor(owned - reserved));
+      const used = remaining === null || available === null ? 0 : Math.min(available, Math.ceil(remaining / choice.output));
+      const produced = shoppingNumber(used * choice.output);
+      unknown ||= available === null || produced === null;
+      charcoal.wood.push({ ...choice, owned, reserved, available, used, produced });
+      if (!used || produced === null) continue;
+      output = shoppingNumber(output + produced);
+      if (output === null) { unknown = true; break; }
+      remaining = Math.max(0, remaining - produced);
+      charcoal.edges.push({ id: choice.id, key, name: choice.name, required: used, perAttempt: 1, wood: true });
+      const row = existing || { id: choice.id, key, name: choice.name, image: shoppingItem(runtime, choice.id)?.image,
+        special: false, recipeKey: '', choices: [], gaps: [], edges: [], required: 0, knownRequired: 0, owned, used: 0, missing: 0, acquire: 0, fixed: true };
+      row.required += used;
+      row.knownRequired += used;
+      row.used += used;
+      // Wood is a leaf. Process it before its new Charcoal parent in the
+      // reverse supply pass, even when another recipe also consumes it.
+      calculated.delete(key);
+      calculated.set(key, row);
+    }
+    charcoal.woodOutput = output;
+    charcoal.woodUncertain = remaining !== 0 && unknown;
+    charcoal.acquire = charcoal.woodUncertain ? null : remaining;
+    charcoal.surplus = output === null || charcoal.missing === null ? null : Math.max(0, output - charcoal.missing);
+    if (charcoal.woodUncertain) charcoal.gaps.push('Some available wood balances are unknown; Charcoal coverage is incomplete.');
   }
 
   // Source: apps/shopping/service.js
@@ -4734,7 +4778,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
         ${choices.length > 1 || invalidated ? `<label>Crafting recipe<select name="recipe" data-shopping-recipe><option value="">Choose a recipe</option>${choices.map(entry => `<option value="${entry.key}" ${entry.key === draft.recipeKey ? 'selected' : ''}>${escapeHtml(entry.skillName)} · ${escapeHtml(entry.recipe.name)}</option>`).join('')}</select></label>` : choices.length === 1 ? `<span>Crafted with ${escapeHtml(choices[0].skillName)} · ${escapeHtml(choices[0].recipe.name)}</span>` : ''}<button class="iw-small-button" type="submit">Save target</button>${ui.plan ? '<button type="button" class="iw-small-button" data-shopping-cancel>Cancel</button>' : ''}</form>` : ''}
       ${snapshot ? `${ui.unavailable ? '<p role="status">Showing last observation. Current balances unavailable.</p>' : ''}
         <p class="iw-shopping-target"><strong>${escapeHtml(snapshot.name)}</strong><span>Target ${amount(ui.plan.quantity)} · Owned ${amount(snapshot.owned)} · ${snapshot.shortfall === 0 ? 'Target satisfied' : `${amount(snapshot.shortfall)} to acquire`}</span></p>
-        <p class="iw-shopping-shortage">${snapshot.leaves.filter(row => !row.unresolved && row.missing !== 0).map(row => `${amount(row.missing)} ${escapeHtml(row.name)}`).join(' · ') || (snapshot.incomplete || ui.unavailable ? 'Some requirements are unknown.' : snapshot.shortfall === 0 ? '' : 'Materials covered.')}${snapshot.incomplete ? ' · Incomplete plan — inspect warning icons.' : ''}</p>
+        <p class="iw-shopping-shortage">${snapshot.leaves.filter(row => !row.unresolved && row.acquire !== 0).map(row => `${amount(row.acquire)} ${escapeHtml(row.name)}`).join(' · ') || (snapshot.incomplete || ui.unavailable ? 'Some requirements are unknown.' : snapshot.shortfall === 0 ? '' : 'Materials covered.')}${snapshot.incomplete ? ' · Incomplete plan — inspect warning icons.' : ''}</p>
         <div class="iw-shopping-tree-scroll" aria-label="Recipe chain">${renderShoppingTree(snapshot)}</div>
         <p class="iw-muted iw-shopping-age">Observed ${Math.max(0, Math.floor((Date.now() - snapshot.observedAt) / 60000))} min ago.</p>` : ''}
       ${ui.message ? `<p role="status">${escapeHtml(ui.message)}</p>` : ''}</div></section>`;
@@ -4763,12 +4807,13 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       ${node.production ? `<p>Required ${amount(node.required)} · Owned ${amount(node.owned)} · ${amount(node.missing)} to produce</p>` : ''}
       ${node.required === null ? `<p>Known required subtotal ${amount(node.knownRequired)}; complete requirement unknown.</p>` : ''}
       ${node.production ? `<p>Stock used ${amount(node.used)} · Required output ${amount(node.missing)} · ${node.attempts === null ? 'Attempt count unknown' : `${amount(node.attempts)} ${node.conversion ? 'conversions' : `${node.fixed ? 'base' : 'nominal'} attempts`}`} · Projected surplus ${amount(node.surplus)} (not owned inventory)</p>` : ''}
+      ${node.wood ? renderShoppingWood(node) : ''}
       ${node.conversion ? `<p>1 ${escape(node.conversion.name)} → ${amount(node.conversion.output)} ${escape(node.name)}</p>` : ''}
       ${node.special && SHOPPING_CONVERSIONS.includes(node.id) ? renderShoppingConversion(node.id, ui) : ''}
       ${node.chosen ? `<p>${escape(node.chosen.skillName)} · ${escape(node.chosen.recipe.name)}. ${escape(node.yieldText)}.</p><p>${escape(node.eligibility)}</p><a data-shopping-native-recipe="${node.chosen.key}" data-shopping-owner="${escape(ui.owner)}" href="/skill/${node.chosen.skillId}/action/${node.chosen.recipe.id}">Open native recipe</a>` : ''}
       ${!node.special && (node.choices.length > 1 || node.recipeKey && !node.chosen) ? `<label>Recipe for ${escape(node.name)}<select data-shopping-chain-recipe data-shopping-owner="${escape(ui.owner)}" data-shopping-recipe-item="${node.id}" ${ui.unavailable ? 'disabled' : ''}><option value="">Choose a current recipe</option>${node.choices.map(entry => `<option value="${entry.key}" ${entry.key === node.recipeKey ? 'selected' : ''}>${escape(entry.skillName)} · ${escape(entry.recipe.name)}</option>`).join('')}</select></label>` : ''}
       ${node.gaps.map(gap => `<p>${escape(gap)}</p>`).join('')}
-      <table><caption>${node.edges.length ? 'Inputs for this step; Owned and Missing show the combined plan totals for each input.' : 'Combined requirement'}</caption><thead><tr><th>Ingredient</th>${columns.map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${tableRows.map(row => `<tr><th>${escape(row.name)}<small>${row.special ? 'Resource balance' : 'Inventory'}</small>${row.cycle ? '<small>Cycle: branch stopped</small>' : ''}</th>${[['Per attempt', row.perAttempt], ['Required', row.required], ['Owned', row.total?.owned], ['Stock used', row.total?.used], ['Missing', row.cycle ? row.required : row.total?.missing]].filter(([label]) => columns.includes(label)).map(([label, value]) => `<td data-label="${label}">${amount(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+      ${node.wood ? '' : `<table><caption>${node.edges.length ? 'Inputs for this step; Owned and Missing show the combined plan totals for each input.' : 'Combined requirement'}</caption><thead><tr><th>Ingredient</th>${columns.map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${tableRows.map(row => `<tr><th>${escape(row.name)}<small>${row.special ? 'Resource balance' : 'Inventory'}</small>${row.cycle ? '<small>Cycle: branch stopped</small>' : ''}</th>${[['Per attempt', row.perAttempt], ['Required', row.required], ['Owned', row.total?.owned], ['Stock used', row.total?.used], ['Missing', row.cycle ? row.required : row.total?.missing]].filter(([label]) => columns.includes(label)).map(([label, value]) => `<td data-label="${label}">${amount(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>`}
     </div>`;
   }
 
@@ -4806,6 +4851,14 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       <option value="" ${!selected ? 'selected' : ''}>Use resource balance only</option>
       ${invalidated ? `<option value="${selected}" selected>Saved input unavailable</option>` : ''}
       ${choices.map(choice => `<option value="${choice.id}" ${choice.id === selected ? 'selected' : ''}>${escapeHtml(choice.name)} · ${formatNumber(choice.output)} per item</option>`).join('')}</select></label>${!choices.length ? '<p>Conversion recipes unavailable.</p>' : ''}`;
+  }
+
+  function renderShoppingWood(node) {
+    const amount = value => value === null ? 'Unknown' : formatNumber(value);
+    return `<p>Required ${amount(node.required)} · Owned ${amount(node.owned)}</p>
+      <p>${amount(node.woodOutput)} from wood · ${amount(node.acquire)} still to acquire · Projected surplus ${amount(node.surplus)}</p>
+      <table><caption>Available wood after other recipe requirements. Higher-yield wood is allocated first.</caption><thead><tr><th>Wood</th><th>Charcoal per log</th><th>Available</th><th>To convert</th><th>Charcoal output</th></tr></thead><tbody>
+      ${node.wood.map(row => `<tr><th>${escapeHtml(row.name)}</th><td data-label="Charcoal per log">${amount(row.output)}</td><td data-label="Available">${amount(row.available)}</td><td data-label="To convert">${amount(row.used)}</td><td data-label="Charcoal output">${amount(row.produced)}</td></tr>`).join('')}</tbody></table>`;
   }
 
   // Source: apps/status/selectors.js

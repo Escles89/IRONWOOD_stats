@@ -130,13 +130,14 @@
     const graph = shoppingGraph(runtime, plan, index), user = runtime.state.user;
     return JSON.stringify([index.revision, plan,
       graph.order.map(node => node.special ? shoppingNumber(user[node.id]) : shoppingOwned(runtime, node.id)),
+      graph.order.some(node => node.key === 'resource:charcoal') ? shoppingConversionChoices(runtime, 'charcoal').map(choice => shoppingOwned(runtime, choice.id)) : [],
       SHOPPING_SKILLS.map(id => user.skills?.[id]?.exp), shoppingPending(runtime)]);
   }
 
   const SHOPPING_CONVERSIONS = ['potionMix', 'metalParts'];
 
   function shoppingConversionChoices(runtime, resource) {
-    if (!SHOPPING_CONVERSIONS.includes(resource)) return [];
+    if (resource !== 'charcoal' && !SHOPPING_CONVERSIONS.includes(resource)) return [];
     return Object.entries(runtime?.conversionCatalog?.[resource] || {})
       .filter(([id, output]) => shoppingItem(runtime, id) && shoppingQuantity(output))
       .map(([id, output]) => ({ id, output, name: shoppingItem(runtime, id).name }))

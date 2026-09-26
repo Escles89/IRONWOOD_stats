@@ -53,7 +53,7 @@
       if (missing === 0) { detail.attempts = 0; detail.output = 0; detail.gaps = []; detail.fixed = true; }
       const row = { ...detail, id: node.id, key: node.key, special: node.special, recipeKey: node.recipeKey, sourceId: node.sourceId, production: Boolean(detail.chosen || detail.conversion),
         image: node.special ? SHOPPING_RESOURCE_IMAGES[node.id] : shoppingItem(runtime, node.id)?.image,
-        required, knownRequired, owned, used, missing, edges: [], surplus: detail.output === null || missing === null ? null : Math.max(0, (detail.output || 0) - missing) };
+        required, knownRequired, owned, used, missing, acquire: missing, edges: [], surplus: detail.output === null || missing === null ? null : Math.max(0, (detail.output || 0) - missing) };
       if (owned === null && required !== 0) row.gaps.push('Owned balance unknown.');
       if (required === null) row.gaps.push('Required quantity unknown; upstream costs are incomplete.');
       calculated.set(node.key, row);
@@ -73,6 +73,7 @@
         }
       }
     }
+    shoppingApplyWood(runtime, calculated);
     const nodes = [...calculated.values()];
     // Uncertainty travels back to every parent depending on that production.
     for (const row of [...nodes].reverse()) {
@@ -80,10 +81,11 @@
       const verifiedLeaf = row.special && !row.sourceId || !row.recipeKey && !catalog.byItem.has(row.id) && catalog.complete && shoppingItem(runtime, row.id);
       row.unresolved = !row.production && !verifiedLeaf;
       row.uncertain = row.missing !== 0 && (row.required === null || row.owned === null || uncertain
-        || (row.production ? !row.fixed || row.gaps.length > 0 : !verifiedLeaf));
+        || row.woodUncertain || (row.production ? !row.fixed || row.gaps.length > 0 : !verifiedLeaf));
       if (uncertain && row.missing !== 0) row.gaps.push('Uncertain recipe chain: intermediate requirements do not guarantee the target.');
       if (row.uncertain) row.fixed = false;
-      const insufficient = (!row.production && !row.unresolved && (row.missing > 0 || row.required === null && row.owned !== null && row.knownRequired > row.owned))
+      const remaining = row.acquire;
+      const insufficient = (!row.production && !row.unresolved && (remaining > 0 || row.required === null && row.owned !== null && row.knownRequired > row.owned))
         || row.edges.some(edge => !edge.cycle && edge.required !== 0 && calculated.get(edge.key)?.supply === 'insufficient');
       row.supply = row.missing === 0 ? 'covered' : insufficient ? 'insufficient' : row.uncertain ? 'unknown' : 'covered';
     }
@@ -93,4 +95,44 @@
     const result = { ...root, shortfall: root.missing, nodes, leaves, cycles, unresolved: gaps, incomplete: gaps.length > 0 || cycles.length > 0 };
     if (result.incomplete && !result.gaps.some(gap => gap.startsWith('Incomplete evidence'))) result.gaps = [...result.gaps, 'Incomplete evidence; known amounts are partial and cannot establish material coverage.'];
     return result;
+  }
+
+  // Reserve every recipe's stock before considering wood for conversion. Only
+  // owned, unallocated logs contribute; projected crafted output never does.
+  function shoppingApplyWood(runtime, calculated) {
+    const charcoal = calculated.get('resource:charcoal');
+    if (!charcoal) return;
+    const choices = shoppingConversionChoices(runtime, 'charcoal').sort((a, b) => b.output - a.output || a.id.localeCompare(b.id));
+    if (!choices.length) return;
+    let remaining = charcoal.missing, output = 0, unknown = false;
+    charcoal.wood = [];
+    for (const choice of choices) {
+      const key = `item:${choice.id}`, existing = calculated.get(key);
+      const owned = shoppingPending(runtime) ? null : shoppingOwned(runtime, choice.id);
+      const reserved = existing ? existing.required : 0;
+      const available = owned === null || reserved === null || existing?.edges.length ? null : Math.max(0, Math.floor(owned - reserved));
+      const used = remaining === null || available === null ? 0 : Math.min(available, Math.ceil(remaining / choice.output));
+      const produced = shoppingNumber(used * choice.output);
+      unknown ||= available === null || produced === null;
+      charcoal.wood.push({ ...choice, owned, reserved, available, used, produced });
+      if (!used || produced === null) continue;
+      output = shoppingNumber(output + produced);
+      if (output === null) { unknown = true; break; }
+      remaining = Math.max(0, remaining - produced);
+      charcoal.edges.push({ id: choice.id, key, name: choice.name, required: used, perAttempt: 1, wood: true });
+      const row = existing || { id: choice.id, key, name: choice.name, image: shoppingItem(runtime, choice.id)?.image,
+        special: false, recipeKey: '', choices: [], gaps: [], edges: [], required: 0, knownRequired: 0, owned, used: 0, missing: 0, acquire: 0, fixed: true };
+      row.required += used;
+      row.knownRequired += used;
+      row.used += used;
+      // Wood is a leaf. Process it before its new Charcoal parent in the
+      // reverse supply pass, even when another recipe also consumes it.
+      calculated.delete(key);
+      calculated.set(key, row);
+    }
+    charcoal.woodOutput = output;
+    charcoal.woodUncertain = remaining !== 0 && unknown;
+    charcoal.acquire = charcoal.woodUncertain ? null : remaining;
+    charcoal.surplus = output === null || charcoal.missing === null ? null : Math.max(0, output - charcoal.missing);
+    if (charcoal.woodUncertain) charcoal.gaps.push('Some available wood balances are unknown; Charcoal coverage is incomplete.');
   }

@@ -87,3 +87,13 @@ Final verification: `npm run build` and `npm run check` passed all 344 tests, in
 Connector refinement: recipe branches now use thicker lines, rounded outer corners, diamond output junctions and directional tips at ingredient icons. Incoming stems follow the ingredient's supply color; uncertain stems are dashed, and hover/keyboard focus accents the connection. Single-child paths remain straight. Geometry and the multilevel live tree were visually checked; all 344 checks pass and both review axes report zero findings. This change affects styling only.
 
 The next visual refinement removes directional arrows. Filled diamonds now show green for covered supply, amber for uncertain supply and red for insufficient supply. Their independent color variable preserves status during connection hover/focus. Verified on the live multilevel tree; the full 344-test check and both review axes pass.
+
+## Charcoal from all available wood
+
+Charcoal automatically considers all native wood conversion inputs, without a default selection. The native `createCharcoal` flow credits quantity times the fixed yield table: Pine 1, Spruce 2, Birch 3, Teak 4, Mahogany 5, Ironbark 6, Redwood 7 and Ancient 8. Discovery validates the native table using Pine/Ancient artwork and yield anchors.
+
+The planner reserves every existing recipe requirement before allocating spare owned wood, highest yield first, rounding to whole logs. Shared wood is allocated once. Projected conversion output and surplus remain separate from the native Charcoal balance. The remaining acquisition shortfall drives the summary and supply colors. Wood stock changes invalidate the observation even when a wood type was not used in the previous plan. Unknown balances remain uncertain; pending loot and projected production never provide convertible wood. Used wood appears beneath Charcoal in the tree; its modal lists all eight yields, available logs, planned conversions and output. No conversion is executed.
+
+The assembled workflow tests cover mixed wood types, competing recipe requirements, shared Charcoal demand, round-up surplus, deep balance changes, unknown stock, pending loot exclusion and Charcoal already covered by stock. Live native validation showed 39,559,770 required, 116,345 owned and 382,187 convertible from spare wood, correctly leaving 39,061,238 to acquire. All eight native wood types appeared in the modal.
+
+Final verification: build, complete check, deterministic assembly, syntax and whitespace validation pass all 347 tests, including 35 shopping workflows. Standards and Spec reviews have zero unresolved findings.

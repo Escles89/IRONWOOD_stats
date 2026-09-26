@@ -639,3 +639,64 @@ test('partly unknown conversion demand preserves known source and ingredient sub
   assert.match(s.detail('item:102'), /Known required subtotal 6; complete requirement unknown/);
   assert.match(s.render(), /Incomplete plan/);
 });
+
+function woodFixture(runtime) {
+  runtime.conversionCatalog = { charcoal: { '106': 1, '107': 8 } };
+  Object.assign(runtime.catalog, { '106': { id: '106', name: 'Pine Log', image: 'items/wood-pine.png' }, '107': { id: '107', name: 'Ancient Log', image: 'items/wood-ancient.png' } });
+  runtime.state.user.inventory = { '106': { amount: 3 }, '107': { amount: 2 } };
+  runtime.state.user.charcoal = 1;
+  runtime.actionCatalog['30'].materials = [{ id: '107', amount: 1 }];
+  runtime.actionCatalog['30'].charcoal = 12;
+}
+
+test('Charcoal uses all spare wood types after reserving recipe stock and observes changing wood balances', () => {
+  const s = setup(new Map(), woodFixture);
+  s.save('101', '1');
+  // 12 required - 1 charcoal owned; one Ancient Log is reserved for crafting.
+  // The other Ancient Log (8) and three Pine Logs (3) cover all 11.
+  assert.match(s.render(), /Materials covered/);
+  assert.match(s.detail('resource:charcoal'), /11 from wood · 0 still to acquire/);
+  assert.match(s.modal(), /Ancient Log/);
+  assert.match(s.modal(), /Pine Log/);
+  assert.match(s.detail('item:107'), /Required<\/th>/);
+  s.user.inventory['106'].amount = 2;
+  assert.match(s.render(), /1 Charcoal/);
+  assert.match(s.detail('resource:charcoal'), /10 from wood · 1 still to acquire/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('Charcoal conversion rounds whole logs, reports surplus and never counts pending loot or unknown stock', () => {
+  const s = setup(new Map(), runtime => {
+    woodFixture(runtime);
+    runtime.actionCatalog['30'].materials = [];
+    runtime.actionCatalog['30'].charcoal = 10;
+  });
+  s.save('101', '1');
+  assert.match(s.detail('resource:charcoal'), /16 from wood · 0 still to acquire · Projected surplus 7/);
+  assert.match(s.render(), /Materials covered/);
+  s.user.inventory['107'].amount = null;
+  assert.match(s.detail('resource:charcoal'), /3 from wood · Unknown still to acquire/);
+  assert.match(s.modal(), /Some available wood balances are unknown/);
+  assert.match(s.render(), /Incomplete plan/);
+  delete s.user.inventory['107'];
+  s.user.loot = { '107': { amount: 1000 } };
+  assert.match(s.render(), /6 Charcoal/);
+  s.user.charcoal = 10;
+  assert.match(s.detail('resource:charcoal'), /0 from wood · 0 still to acquire/);
+  assert.doesNotMatch(s.render(), /data-shopping-node="item:106"/);
+});
+
+test('shared Charcoal demand across multiple recipes uses each log balance only once', () => {
+  const s = setup(new Map(), runtime => {
+    woodFixture(runtime);
+    runtime.actionCatalog['30'].materials = [{ id: '108', amount: 1 }];
+    runtime.actionCatalog['30'].charcoal = 10;
+    runtime.catalog['108'] = { id: '108', name: 'Handle' };
+    runtime.skillCatalog['4'].actions.push({ id: '42' });
+    runtime.actionCatalog['42'] = { id: '42', name: 'Handle', materials: [{ id: '107', amount: 1 }], charcoal: 10, drops: [{ id: '108', chance: 1000 }] };
+  });
+  s.save('101', '1');
+  assert.match(s.render(), /8 Charcoal/);
+  assert.match(s.detail('resource:charcoal'), /Required 20 · Owned 1/);
+  assert.match(s.modal(), /11 from wood · 8 still to acquire/);
+});
