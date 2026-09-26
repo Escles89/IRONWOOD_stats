@@ -3,7 +3,7 @@
   function shoppingObserve(authoritative = false) {
     const ui = AppState.ui.shopping, runtime = quickRuntime(), owner = quickOwner(runtime);
     if (ui.owner !== owner) {
-      Object.assign(ui, { owner, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', expanded: true, openSteps: {}, refreshing: false, unavailable: false, revision: 0 });
+      Object.assign(ui, { owner, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', selectedStep: null, refreshing: false, unavailable: false, revision: 0 });
       if (owner) {
         try {
           const saved = JSON.parse(localStorage.getItem(SHOPPING_KEY + owner));
@@ -57,6 +57,7 @@
       else {
         ui.plan = { itemId, quantity, recipeKey: recipeKey || (choices.length === 1 ? choices[0].key : ''), recipes: ui.plan?.itemId === itemId ? { ...ui.plan.recipes } : {} };
         ui.editing = false;
+        ui.selectedStep = null;
         ui.signature = '';
         ui.snapshot = null;
         ui.message = '';
@@ -70,6 +71,7 @@
   function shoppingEdit() {
     const ui = shoppingObserve();
     if (!ui.owner) return;
+    ui.selectedStep = null;
     ui.editing = true;
     ui.draft = ui.plan ? { ...ui.plan, quantity: String(ui.plan.quantity) } : { itemId: '', quantity: '100', recipeKey: '' };
     ui.filter = '';
@@ -124,7 +126,7 @@
 
   function shoppingRenderKey() {
     const ui = AppState.ui.shopping;
-    return [ui.owner, ui.revision, ui.plan, ui.editing, ui.draft, ui.filter, ui.expanded, ui.openSteps, ui.refreshing, ui.unavailable, ui.message,
+    return [ui.owner, ui.revision, ui.plan, ui.editing, ui.draft, ui.filter, ui.selectedStep, ui.refreshing, ui.unavailable, ui.message,
       location.pathname, ui.plan ? Math.floor(Date.now() / 60000) : null];
   }
 
@@ -149,12 +151,13 @@
   function shoppingOpenStep(control) {
     const ui = shoppingObserve(), key = control.dataset.shoppingStepLink;
     if (!ui.snapshot?.nodes.some(node => node.key === key)) return;
-    ui.expanded = true;
-    (ui.openSteps ||= {})[key] = true;
+    if (!ui.selectedStep) AppState.ui.preferencesTrigger = control;
+    AppState.ui.mastery.open = false;
+    AppState.ui.questModalOpen = false;
+    AppState.ui.guideOpen = false;
+    ui.selectedStep = key;
     render();
-    const step = document.getElementById(`iw-shopping-${key.replace(':', '-')}`);
-    step?.querySelector('summary')?.focus();
-    step?.scrollIntoView?.({ block: 'nearest' });
+    document.querySelector('.iw-shopping-modal [data-modal-close]')?.focus();
   }
 
   async function shoppingOpenRecipe(control) {
@@ -165,9 +168,10 @@
     try {
       if (!runtime.router?.navigateByUrl) throw new Error('Open the recipe from its native skill page.');
       const route = `/skill/${chosen.skillId}/action/${chosen.recipe.id}`;
-      if (runtime.router.url === route) { leaveStats(); return; }
+      if (runtime.router.url === route) { closePreferences(); leaveStats(); return; }
       const navigated = await runtime.zone.run(() => runtime.router.navigateByUrl(route));
       if (navigated === false) throw new Error('The native recipe page did not open.');
+      closePreferences();
       leaveStats();
     } catch (error) {
       ui.message = error.message;

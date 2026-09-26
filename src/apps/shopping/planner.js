@@ -51,7 +51,7 @@
       // available recipes are uncertain, missing or cyclic.
       if (missing === 0) { detail.attempts = 0; detail.output = 0; detail.gaps = []; detail.fixed = true; }
       const row = { ...detail, id: node.id, key: node.key, special: node.special, recipeKey: node.recipeKey,
-        image: node.special ? null : shoppingItem(runtime, node.id)?.image,
+        image: node.special ? SHOPPING_RESOURCE_IMAGES[node.id] : shoppingItem(runtime, node.id)?.image,
         required, knownRequired, owned, used, missing, edges: [], surplus: detail.output === null || missing === null ? null : Math.max(0, (detail.output || 0) - missing) };
       if (owned === null && required !== 0) row.gaps.push('Owned balance unknown.');
       if (required === null) row.gaps.push('Required quantity unknown; upstream costs are incomplete.');

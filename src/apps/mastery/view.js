@@ -37,6 +37,7 @@
   }
 
   function openMastery(trigger) {
+    AppState.ui.shopping.selectedStep = null;
     const ui = masteryObserve();
     AppState.ui.preferencesTrigger = trigger;
     AppState.ui.questModalOpen = false;

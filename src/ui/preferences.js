@@ -59,6 +59,7 @@
   }
 
   function openPreferences(trigger) {
+    AppState.ui.shopping.selectedStep = null;
     AppState.ui.mastery.open = false;
     AppState.ui.preferencesTrigger = trigger;
     AppState.ui.guideOpen = false;
@@ -69,6 +70,7 @@
     checkSettingsUpdate();
   }
   function closePreferences() {
+    AppState.ui.shopping.selectedStep = null;
     AppState.ui.mastery.open = false;
     AppState.ui.questModalOpen = false;
     AppState.ui.guideOpen = false;
@@ -77,7 +79,7 @@
     AppState.ui.preferencesTrigger?.focus();
   }
   function handlePreferencesKey(event) {
-    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open) return false;
+    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open && !AppState.ui.shopping.selectedStep) return false;
     if (event.key === 'Escape') { event.preventDefault(); closePreferences(); return true; }
     if (event.key !== 'Tab') return false;
     const dialog = document.querySelector('.iw-modal:not(.iw-modal-hidden) .iw-modal-panel');
@@ -91,7 +93,7 @@
   // Dialogs live outside the route content so they work on every native page.
   function renderGlobalDialog() {
     let host = document.querySelector('#iw-global-dialogs');
-    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open) { host?.remove(); return; }
+    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open && !AppState.ui.shopping.selectedStep) { host?.remove(); return; }
     if (!host) {
       host = document.createElement('div');
       host.id = 'iw-global-dialogs';
@@ -99,12 +101,13 @@
     }
     if (AppState.ui.guideOpen && host._iwGuide) return;
     const cache = getCache();
-    const markup = AppState.ui.mastery.open ? renderMasteryModal() : AppState.ui.guideOpen ? renderGuide() : renderPreferences({
+    const markup = AppState.ui.shopping.selectedStep ? renderShoppingModal() : AppState.ui.mastery.open ? renderMasteryModal() : AppState.ui.guideOpen ? renderGuide() : renderPreferences({
       prefs: getPrefs(), automationOn: automationEnabled(), cacheLookupsOn: cacheLookupsEnabled(),
       headerIcons: headerIconsEnabled(), challengePrefs: getChallengePrefs(),
       questSkills: [...new Map((cache.quests?.quests || []).filter(quest => quest.skill)
         .map(quest => [quest.skill, { name: quest.skill, image: skillIcon(quest.skill), done: quest.done }])).values()]
     });
+    if (!markup) { host.remove(); return; }
     if (host._iwMarkup === markup) return;
     const template = document.createElement('template');
     template.innerHTML = markup;
@@ -115,6 +118,7 @@
   }
 
   function openGuide(trigger) {
+    AppState.ui.shopping.selectedStep = null;
     AppState.ui.mastery.open = false;
     AppState.ui.preferencesTrigger = trigger;
     AppState.ui.questModalOpen = false;

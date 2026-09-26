@@ -16,8 +16,6 @@
       if (form) quickUpdateQuantity(form);
     }, true);
     document.addEventListener('toggle', event => {
-      if (event.target.matches?.('[data-shopping-step]')) (AppState.ui.shopping.openSteps ||= {})[event.target.dataset.shoppingStep] = event.target.open;
-      if (event.target.matches?.('[data-shopping-details]')) AppState.ui.shopping.expanded = event.target.open;
       if (event.target.matches?.('[data-quest-options]')) AppState.ui.questOptionsExpanded = event.target.open;
       if (event.target.matches?.('[data-debug-section]')) { AppState.ui.debugUpdatedAt = 0; scheduleStatusRender(); }
     }, true);

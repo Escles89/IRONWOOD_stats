@@ -1,5 +1,7 @@
   const SHOPPING_SKILLS = ['3', '4', '11', '12', '10', '16'];
   const SHOPPING_RESOURCES = { charcoal: 'Charcoal', compost: 'Compost', metalParts: 'Metal Parts', sigilPieces: 'Sigil Pieces', potionMix: 'Potion Mix', arcanePowder: 'Arcane Powder' };
+  // Native main-client item artwork; these resources use top-level balances.
+  const SHOPPING_RESOURCE_IMAGES = { charcoal: 'items/charcoal.png', compost: 'items/compost.png', metalParts: 'items/metal-parts.png', sigilPieces: 'items/sigil-pieces.png', potionMix: 'items/potion-mix.png', arcanePowder: 'items/arcane-powder.png' };
   const shoppingNumber = value => Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER ? value : null;
   const shoppingQuantity = value => Number.isSafeInteger(value) && value > 0;
   const shoppingRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
