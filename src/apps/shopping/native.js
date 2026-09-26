@@ -31,7 +31,7 @@
   function shoppingRecipes(runtime) {
     const discovery = AppState.ui.shoppingCatalog;
     const cached = runtime && discovery.cache.get(runtime);
-    if (cached && cached.skills === runtime.skillCatalog && cached.actions === runtime.actionCatalog && cached.items === runtime.catalog) return cached;
+    if (cached && cached.skills === runtime.skillCatalog && cached.actions === runtime.actionCatalog && cached.items === runtime.catalog && cached.conversions === runtime.conversionCatalog) return cached;
     const recipes = [];
     let complete = Boolean(runtime?.catalog && runtime?.actionCatalog);
     for (const skillId of SHOPPING_SKILLS) {
@@ -46,7 +46,7 @@
       }
     }
     const index = { recipes, complete, byItem: new Map(), craftableItems: new Set(), revision: ++discovery.revision,
-      skills: runtime?.skillCatalog, actions: runtime?.actionCatalog, items: runtime?.catalog };
+      skills: runtime?.skillCatalog, actions: runtime?.actionCatalog, items: runtime?.catalog, conversions: runtime?.conversionCatalog };
     for (const entry of recipes) {
       if (Array.isArray(entry.recipe.materials)) {
         for (const id of shoppingOutputs({ drops: entry.recipe.drops }).ids) index.craftableItems.add(id);
@@ -131,4 +131,24 @@
     return JSON.stringify([index.revision, plan,
       graph.order.map(node => node.special ? shoppingNumber(user[node.id]) : shoppingOwned(runtime, node.id)),
       SHOPPING_SKILLS.map(id => user.skills?.[id]?.exp), shoppingPending(runtime)]);
+  }
+
+  const SHOPPING_CONVERSIONS = ['potionMix', 'metalParts'];
+
+  function shoppingConversionChoices(runtime, resource) {
+    if (!SHOPPING_CONVERSIONS.includes(resource)) return [];
+    return Object.entries(runtime?.conversionCatalog?.[resource] || {})
+      .filter(([id, output]) => shoppingItem(runtime, id) && shoppingQuantity(output))
+      .map(([id, output]) => ({ id, output, name: shoppingItem(runtime, id).name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function shoppingConversionDetail(runtime, node, missing) {
+    const choices = shoppingConversionChoices(runtime, node.id);
+    const conversion = choices.find(choice => choice.id === node.sourceId);
+    const attempts = conversion && missing !== null ? Math.ceil(missing / conversion.output) : null;
+    return { name: SHOPPING_RESOURCES[node.id], conversion, choices, rows: [],
+      gaps: node.sourceId && !conversion ? ['Saved conversion input is unavailable. Choose a current input.'] : [],
+      fixed: !node.sourceId || Boolean(conversion), attempts,
+      output: attempts === null ? null : shoppingNumber(attempts * conversion.output) };
   }

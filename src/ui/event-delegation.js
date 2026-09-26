@@ -68,6 +68,7 @@
       if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
     }, true);
     document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-shopping-conversion]')) { shoppingChooseConversion(event.target); return; }
       if (event.target.matches?.('[data-shopping-chain-recipe]')) { shoppingChooseRecipe(event.target); return; }
       if (event.target.matches?.('[data-shopping-item]') || event.target.matches?.('[data-shopping-recipe]')) { shoppingDraft(event.target); return; }
       if (event.target.matches?.('[data-debug-toggle]')) {

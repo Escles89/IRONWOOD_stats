@@ -7,7 +7,7 @@
     const items = Object.values(runtime?.catalog || {}).filter(item => shoppingItem(runtime, item?.id) && index.craftableItems.has(item.id) && (item.id === draft.itemId || item.name.toLowerCase().includes(ui.filter.toLowerCase()))).sort((a, b) => a.name.localeCompare(b.name));
     const choices = (index.byItem.get(draft.itemId) || []);
     const invalidated = ui.plan?.itemId === draft.itemId && ui.plan.recipeKey && !choices.some(entry => entry.key === ui.plan.recipeKey);
-    return `<section class="iw-card iw-shopping-card" aria-label="Finished-item shopping list"><div class="iw-card-header"><span>Shopping list</span><div class="iw-shopping-actions"><button type="button" class="iw-small-button" data-shopping-refresh ${!ui.owner || ui.refreshing || quickBusy() || shoppingPending(runtime) ? 'disabled' : ''}>${ui.refreshing ? 'Refreshing…' : 'Refresh'}</button>${ui.plan ? '<button type="button" class="iw-small-button" data-shopping-edit>Edit</button><button type="button" class="iw-small-button" data-shopping-clear>Clear</button>' : ''}</div></div><div class="iw-shopping-body">
+    return `<section class="iw-card iw-shopping-card" aria-label="Finished-item shopping list"><div class="iw-card-header"><span>Shopping list</span><div class="iw-shopping-actions"><button type="button" class="iw-small-button" data-shopping-step-link="defaults" aria-haspopup="dialog" ${!ui.owner ? 'disabled' : ''}>Inputs</button><button type="button" class="iw-small-button" data-shopping-refresh ${!ui.owner || ui.refreshing || quickBusy() || shoppingPending(runtime) ? 'disabled' : ''}>${ui.refreshing ? 'Refreshing…' : 'Refresh'}</button>${ui.plan ? '<button type="button" class="iw-small-button" data-shopping-edit>Edit</button><button type="button" class="iw-small-button" data-shopping-clear>Clear</button>' : ''}</div></div><div class="iw-shopping-body">
       ${!ui.owner ? '<p>Character identity unavailable.</p>' : ui.editing ? `<form data-shopping-form data-shopping-owner="${escapeHtml(ui.owner)}">
         <label>Filter items<input type="search" data-shopping-filter value="${escapeHtml(ui.filter)}"></label><label>Finished item<select name="item" required data-shopping-item><option value="">Choose an item</option>${items.map(item => `<option value="${item.id}" ${item.id === draft.itemId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label>
         <label>Target owned quantity<input name="quantity" data-shopping-quantity type="number" min="1" step="1" required value="${escapeHtml(draft.quantity)}"></label>
@@ -23,12 +23,13 @@
   function renderShoppingModal() {
     if (location.pathname !== '/status' || AppState.ui.page?.hidden) { AppState.ui.shopping.selectedStep = null; return ''; }
     const ui = shoppingObserve(), snapshot = ui.snapshot;
-    const node = snapshot?.nodes.find(row => row.key === ui.selectedStep);
+    const defaults = ui.selectedStep === 'defaults';
+    const node = defaults ? { name: 'Default inputs' } : snapshot?.nodes.find(row => row.key === ui.selectedStep);
     if (location.pathname !== '/status' || !node) { ui.selectedStep = null; return ''; }
     return `<div class="iw-modal" data-modal-backdrop><section class="iw-modal-panel iw-shopping-modal" role="dialog" aria-modal="true" aria-labelledby="iw-shopping-step-title">
-      <div class="iw-options-heading">${renderShoppingIcon(node)}<div><h2 id="iw-shopping-step-title">${escapeHtml(node.name)}</h2><small>${node.special ? 'Resource balance' : 'Inventory'} · ${shoppingSupplyLabel(node)}</small></div><button type="button" class="iw-modal-close" data-modal-close aria-label="Close item details">×</button></div>
-      <div class="iw-shopping-body">${ui.unavailable ? '<p role="status">Showing last observation. Current balances unavailable.</p>' : ''}${renderShoppingStep(node, snapshot, ui)}
-        <p class="iw-muted">Owned stock only. Pending loot and bonus output are excluded. Observed ${Math.max(0, Math.floor((Date.now() - snapshot.observedAt) / 60000))} min ago.</p>
+      <div class="iw-options-heading">${defaults ? '' : renderShoppingIcon(node)}<div><h2 id="iw-shopping-step-title">${escapeHtml(node.name)}</h2><small>${defaults ? 'Saved for this character and game mode' : `${node.special ? 'Resource balance' : 'Inventory'} · ${shoppingSupplyLabel(node)}`}</small></div><button type="button" class="iw-modal-close" data-modal-close aria-label="Close item details">×</button></div>
+      <div class="iw-shopping-body">${ui.unavailable ? '<p role="status">Showing last observation. Current balances unavailable.</p>' : ''}${defaults ? SHOPPING_CONVERSIONS.map(id => renderShoppingConversion(id, ui)).join('') : renderShoppingStep(node, snapshot, ui)}
+        ${!defaults ? `<p class="iw-muted">Owned stock only. Pending loot and bonus output are excluded. Observed ${Math.max(0, Math.floor((Date.now() - snapshot.observedAt) / 60000))} min ago.</p>` : ''}
         ${ui.message ? `<p role="status">${escapeHtml(ui.message)}</p>` : ''}</div>
     </section></div>`;
   }
@@ -39,9 +40,11 @@
     const columns = node.edges.length ? ['Per attempt', 'Required', 'Owned', 'Missing'] : ['Required', 'Owned', 'Stock used', 'Missing'];
     const tableRows = node.edges.length ? node.edges.map(edge => ({ ...edge, total: snapshot.nodes.find(row => row.key === edge.key) })) : [{ ...node, total: node }];
     return `<div class="iw-shopping-step-detail">
-      ${node.chosen ? `<p>Required ${amount(node.required)} · Owned ${amount(node.owned)} · ${amount(node.missing)} to produce</p>` : ''}
+      ${node.production ? `<p>Required ${amount(node.required)} · Owned ${amount(node.owned)} · ${amount(node.missing)} to produce</p>` : ''}
       ${node.required === null ? `<p>Known required subtotal ${amount(node.knownRequired)}; complete requirement unknown.</p>` : ''}
-      ${node.chosen ? `<p>Stock used ${amount(node.used)} · Required output ${amount(node.missing)}${node.chosen ? ` · ${node.attempts === null ? 'Attempt count unknown' : `${amount(node.attempts)} ${node.fixed ? 'base' : 'nominal'} attempts`} · Projected surplus ${amount(node.surplus)} (not owned inventory)` : ''}</p>` : ''}
+      ${node.production ? `<p>Stock used ${amount(node.used)} · Required output ${amount(node.missing)} · ${node.attempts === null ? 'Attempt count unknown' : `${amount(node.attempts)} ${node.conversion ? 'conversions' : `${node.fixed ? 'base' : 'nominal'} attempts`}`} · Projected surplus ${amount(node.surplus)} (not owned inventory)</p>` : ''}
+      ${node.conversion ? `<p>1 ${escape(node.conversion.name)} → ${amount(node.conversion.output)} ${escape(node.name)}</p>` : ''}
+      ${node.special && SHOPPING_CONVERSIONS.includes(node.id) ? renderShoppingConversion(node.id, ui) : ''}
       ${node.chosen ? `<p>${escape(node.chosen.skillName)} · ${escape(node.chosen.recipe.name)}. ${escape(node.yieldText)}.</p><p>${escape(node.eligibility)}</p><a data-shopping-native-recipe="${node.chosen.key}" data-shopping-owner="${escape(ui.owner)}" href="/skill/${node.chosen.skillId}/action/${node.chosen.recipe.id}">Open native recipe</a>` : ''}
       ${!node.special && (node.choices.length > 1 || node.recipeKey && !node.chosen) ? `<label>Recipe for ${escape(node.name)}<select data-shopping-chain-recipe data-shopping-owner="${escape(ui.owner)}" data-shopping-recipe-item="${node.id}" ${ui.unavailable ? 'disabled' : ''}><option value="">Choose a current recipe</option>${node.choices.map(entry => `<option value="${entry.key}" ${entry.key === node.recipeKey ? 'selected' : ''}>${escape(entry.skillName)} · ${escape(entry.recipe.name)}</option>`).join('')}</select></label>` : ''}
       ${node.gaps.map(gap => `<p>${escape(gap)}</p>`).join('')}
@@ -74,4 +77,13 @@
       return `<li data-shopping-node="${escapeHtml(node.key)}" data-supply="${node.supply}">${content}${children ? `<ul class="iw-shopping-branches">${children}</ul>` : ''}</li>`;
     }
     return `<ul class="iw-shopping-tree">${branch(snapshot.nodes[0])}</ul>`;
+  }
+
+  function renderShoppingConversion(resource, ui) {
+    const choices = shoppingConversionChoices(quickRuntime(), resource), selected = ui.conversions?.[resource] || '';
+    const invalidated = selected && !choices.some(choice => choice.id === selected);
+    return `<label>${escapeHtml(SHOPPING_RESOURCES[resource])} input<select data-shopping-conversion data-shopping-resource="${resource}" data-shopping-owner="${escapeHtml(ui.owner)}" ${shoppingPending(quickRuntime()) ? 'disabled' : ''}>
+      <option value="" ${!selected ? 'selected' : ''}>Use resource balance only</option>
+      ${invalidated ? `<option value="${selected}" selected>Saved input unavailable</option>` : ''}
+      ${choices.map(choice => `<option value="${choice.id}" ${choice.id === selected ? 'selected' : ''}>${escapeHtml(choice.name)} · ${formatNumber(choice.output)} per item</option>`).join('')}</select></label>${!choices.length ? '<p>Conversion recipes unavailable.</p>' : ''}`;
   }

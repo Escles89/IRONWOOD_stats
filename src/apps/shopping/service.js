@@ -3,10 +3,13 @@
   function shoppingObserve(authoritative = false) {
     const ui = AppState.ui.shopping, runtime = quickRuntime(), owner = quickOwner(runtime);
     if (ui.owner !== owner) {
-      Object.assign(ui, { owner, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', selectedStep: null, refreshing: false, unavailable: false, revision: 0 });
+      Object.assign(ui, { owner, conversions: {}, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', selectedStep: null, refreshing: false, unavailable: false, revision: 0 });
       if (owner) {
         try {
           const saved = JSON.parse(localStorage.getItem(SHOPPING_KEY + owner));
+          if (saved?.version === 1 && shoppingRecord(saved.conversions)) {
+            for (const id of SHOPPING_CONVERSIONS) if (quickId(saved.conversions[id])) ui.conversions[id] = saved.conversions[id];
+          }
           if (saved?.version === 1 && quickId(saved.plan?.itemId) && shoppingQuantity(saved.plan.quantity)
             && shoppingValidRecipeChoices(saved.plan.recipes)
             && typeof saved.plan.recipeKey === 'string' && /^(?:\d{1,10}:\d{1,10})?$/.test(saved.plan.recipeKey)) {
@@ -20,9 +23,10 @@
     ui.unavailable = !runtime?.catalog || !runtime?.actionCatalog || !runtime?.skillCatalog
       || !shoppingRecord(runtime.state.user.inventory) || shoppingPending(runtime);
     if (ui.unavailable && ui.snapshot) return ui;
-    const signature = shoppingObservationKey(runtime, ui.plan, shoppingRecipes(runtime));
+    const plan = { ...ui.plan, conversions: ui.conversions };
+    const signature = shoppingObservationKey(runtime, plan, shoppingRecipes(runtime));
     if (signature !== ui.signature || authoritative) {
-      ui.snapshot = { ...JSON.parse(JSON.stringify(shoppingCalculate(runtime, ui.plan))), observedAt: Date.now() };
+      ui.snapshot = { ...JSON.parse(JSON.stringify(shoppingCalculate(runtime, plan))), observedAt: Date.now() };
       const recipes = { ...ui.plan.recipes };
       let changed = false;
       for (const node of ui.snapshot.nodes) {
@@ -32,7 +36,7 @@
         }
       }
       if (changed) { ui.plan.recipes = recipes; shoppingPersist(); }
-      ui.signature = shoppingObservationKey(runtime, ui.plan, shoppingRecipes(runtime));
+      ui.signature = shoppingObservationKey(runtime, { ...ui.plan, conversions: ui.conversions }, shoppingRecipes(runtime));
       ui.revision = (ui.revision || 0) + 1;
     }
     return ui;
@@ -40,7 +44,7 @@
 
   function shoppingPersist() {
     const ui = AppState.ui.shopping;
-    try { localStorage.setItem(SHOPPING_KEY + ui.owner, JSON.stringify({ version: 1, plan: ui.plan })); }
+    try { localStorage.setItem(SHOPPING_KEY + ui.owner, JSON.stringify({ version: 1, plan: ui.plan, conversions: ui.conversions })); }
     catch { ui.message = 'Shopping list could not be saved in this browser.'; }
   }
 
@@ -126,7 +130,7 @@
 
   function shoppingRenderKey() {
     const ui = AppState.ui.shopping;
-    return [ui.owner, ui.revision, ui.plan, ui.editing, ui.draft, ui.filter, ui.selectedStep, ui.refreshing, ui.unavailable, ui.message,
+    return [ui.owner, ui.revision, ui.plan, ui.conversions, ui.editing, ui.draft, ui.filter, ui.selectedStep, ui.refreshing, ui.unavailable, ui.message,
       location.pathname, ui.plan ? Math.floor(Date.now() / 60000) : null];
   }
 
@@ -150,7 +154,7 @@
 
   function shoppingOpenStep(control) {
     const ui = shoppingObserve(), key = control.dataset.shoppingStepLink;
-    if (!ui.snapshot?.nodes.some(node => node.key === key)) return;
+    if (!ui.owner || key !== 'defaults' && !ui.snapshot?.nodes.some(node => node.key === key)) return;
     if (!ui.selectedStep) AppState.ui.preferencesTrigger = control;
     AppState.ui.mastery.open = false;
     AppState.ui.questModalOpen = false;
@@ -177,4 +181,18 @@
       ui.message = error.message;
       render();
     }
+  }
+
+  function shoppingChooseConversion(control) {
+    const owner = control.dataset.shoppingOwner, resource = control.dataset.shoppingResource;
+    const ui = shoppingObserve(), runtime = quickRuntime();
+    if (!ui.owner || ui.owner !== owner || shoppingPending(runtime) || !SHOPPING_CONVERSIONS.includes(resource)) return;
+    if (control.value && !shoppingConversionChoices(runtime, resource).some(choice => choice.id === control.value)) return;
+    ui.conversions = { ...ui.conversions };
+    if (control.value) ui.conversions[resource] = control.value;
+    else delete ui.conversions[resource];
+    ui.signature = '';
+    ui.message = '';
+    shoppingPersist();
+    render();
   }

@@ -553,3 +553,89 @@ test('resource balances and inventory items with the same name remain distinguis
   s.detail('item:103');
   assert.match(s.modal(), /Inventory · Covered by owned stock/);
 });
+
+function conversionFixture(runtime) {
+  runtime.conversionCatalog = { metalParts: { '103': 3 }, potionMix: { '104': 6 } };
+  Object.assign(runtime.catalog, { '103': { id: '103', name: 'Copper Body' }, '104': { id: '104', name: 'Basic Health Potion' } });
+  runtime.state.user.metalParts = 2;
+  runtime.state.user.potionMix = 1;
+  runtime.state.user.inventory = { '103': { amount: 1 }, '102': { amount: 1 } };
+  runtime.actionCatalog['30'].materials = [{ id: '102', amount: 1 }];
+  delete runtime.actionCatalog['30'].charcoal;
+  runtime.actionCatalog['30'].metalParts = 4;
+  runtime.actionCatalog['30'].potionMix = 5;
+  runtime.skillCatalog['4'].actions.push({ id: '40' });
+  runtime.actionCatalog['40'] = { id: '40', name: 'Copper Body', materials: [{ id: '102', amount: 2 }], drops: [{ id: '103', chance: 1000 }] };
+}
+
+test('saved conversion inputs expand recipes, round fixed yields and share source stock with the whole plan', () => {
+  const s = setup(new Map(), conversionFixture);
+  s.save('101', '3');
+  s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
+  s.emit('change', '[data-shopping-conversion]', '104', null, { shoppingResource: 'potionMix' });
+  // 12 parts - 2 owned => 4 bodies; 1 owned => craft 3, costing 6 ore.
+  // Root also needs 3 ore; 1 owned is used once => 8 missing ore.
+  assert.match(s.render(), /8 Iron Ore/);
+  assert.match(s.render(), /3 Basic Health Potion/); // ceil((15 - 1) / 6)
+  assert.match(s.detail('resource:metalParts'), /4 conversions/);
+  assert.match(s.modal(), /Projected surplus 2/);
+  assert.match(s.modal(), /1 Copper Body → 3 Metal Parts/);
+  assert.match(s.detail('resource:potionMix'), /Projected surplus 4/);
+  assert.match(s.render(), /data-shopping-node="item:103"/);
+  const reload = setup(s.storage, conversionFixture);
+  assert.match(reload.render(), /8 Iron Ore/);
+  reload.emit('click', '[data-shopping-clear]');
+  reload.save('101', '3');
+  assert.match(reload.render(), /8 Iron Ore/);
+  reload.user.displayName = 'Other';
+  reload.save('101', '3');
+  assert.doesNotMatch(reload.render(), /data-shopping-node="item:103"/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('conversion defaults can be set before a target, removed, and retained visibly when native inputs disappear', () => {
+  const s = setup(new Map(), conversionFixture);
+  s.detail('defaults');
+  assert.match(s.modal(), /Default inputs/);
+  s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
+  const reload = setup(s.storage, conversionFixture);
+  reload.save('101', '3');
+  assert.match(reload.render(), /8 Iron Ore/);
+  reload.runtime.conversionCatalog = { ...reload.runtime.conversionCatalog, metalParts: {} };
+  assert.match(reload.detail('resource:metalParts'), /Saved conversion input is unavailable/);
+  assert.match(reload.modal(), /Saved input unavailable/);
+  assert.match(reload.render(), /Incomplete plan/);
+  reload.emit('change', '[data-shopping-conversion]', '', null, { shoppingResource: 'metalParts' });
+  assert.match(reload.render(), /10 Metal Parts/);
+  assert.doesNotMatch(reload.render(), /data-shopping-node="item:103"/);
+});
+
+test('conversion cycles remain uncertain and covered balances do not consume conversion sources', () => {
+  const s = setup(new Map(), runtime => {
+    conversionFixture(runtime);
+    runtime.actionCatalog['40'].metalParts = 1;
+  });
+  s.save('101', '3');
+  s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
+  assert.match(s.detail('item:103'), /Recipe cycle to Metal Parts/);
+  assert.match(s.render(), /Incomplete plan/);
+  s.user.metalParts = 12;
+  assert.doesNotMatch(s.render(), /Incomplete plan/);
+  assert.match(s.detail('resource:metalParts'), /0 conversions/);
+  assert.match(s.modal(), /Stock used 12 · Required output 0/);
+});
+
+test('partly unknown conversion demand preserves known source and ingredient subtotals', () => {
+  const s = setup(new Map(), runtime => {
+    conversionFixture(runtime);
+    runtime.catalog['105'] = { id: '105', name: 'Uncertain Intermediate' };
+    runtime.actionCatalog['30'].materials = [{ id: '105', amount: 1 }];
+    runtime.skillCatalog['4'].actions.push({ id: '41' });
+    runtime.actionCatalog['41'] = { id: '41', name: 'Uncertain Intermediate', metalParts: 1, materials: [], drops: [{ id: '105', chance: 1000, amount: 2 }] };
+  });
+  s.save('101', '3');
+  s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
+  assert.match(s.detail('item:103'), /Known required subtotal 4; complete requirement unknown/);
+  assert.match(s.detail('item:102'), /Known required subtotal 6; complete requirement unknown/);
+  assert.match(s.render(), /Incomplete plan/);
+});

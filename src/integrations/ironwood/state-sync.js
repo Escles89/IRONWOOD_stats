@@ -40,6 +40,7 @@
         .find(Type => typeof Type?.prototype?.calcCraftTime === 'function');
       const MasteryPage = routeComponents(router?.config)
         .find(Type => typeof Type?.prototype?.materialsComplete === 'function');
+      const catalog = exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.image === 'items/challenge-scroll.png'));
       runtime = {
         state: service('syncUser'), firebase: service('getUser'), action: service('handleActionSync'),
         automations: service('handleAutomationSync'), expedition: service('handleExpeditionSync'),
@@ -57,7 +58,7 @@
         regionCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Forest' && Array.isArray(item.skills) && item.tributeId != null)),
         skillRegion: exports.find(value => typeof value === 'function' && ['.Defense', '.weaponType', '.equipment['].every(marker => Function.prototype.toString.call(value).includes(marker)) && Function.prototype.toString.call(value).length < 600),
         notificationComponent: exports.find(value => typeof value?.prototype?.createNotifications === 'function'),
-        catalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.image === 'items/challenge-scroll.png'))
+        catalog, conversionCatalog: discoverNativeConversions(exports, catalog)
       };
     }]);
     if (!runtime?.state || !runtime.firebase || !runtime.action || !runtime.automations || !runtime.expedition || !runtime.zone) {
@@ -148,4 +149,22 @@
       }
     })().finally(() => { nativeGameSyncPromise = null; });
     return nativeGameSyncPromise;
+  }
+
+  function discoverNativeConversions(exports, catalog) {
+    // Native v1.6.5 conversion dialogs use item -> fixed resource yield tables.
+    // Match two distinct artwork/yield anchors, never minified export names.
+    const anchors = {
+      metalParts: [['items/sword-copper.png', 2], ['items/armor-iron-body.png', 6]],
+      potionMix: [['items/potion-basic-health.png', 6], ['items/potion-super-combat-efficiency.png', 34]]
+    };
+    const items = Object.values(catalog || {}), result = {};
+    for (const [resource, examples] of Object.entries(anchors)) {
+      const ids = examples.map(([image, yieldAmount]) => [items.find(item => item.image === image)?.id, yieldAmount]);
+      const matches = exports.filter(value => value && typeof value === 'object' && !Array.isArray(value)
+        && ids.every(([id, yieldAmount]) => id && Object.hasOwn(value, id) && value[id] === yieldAmount)
+        && Object.entries(value).every(([id, amount]) => catalog[id]?.id === id && Number.isSafeInteger(amount) && amount > 0));
+      if (matches.length === 1) result[resource] = matches[0];
+    }
+    return result;
   }

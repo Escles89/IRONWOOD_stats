@@ -10,16 +10,17 @@
       const choices = special ? [] : catalog.byItem.get(id) || [];
       const saved = id === plan.itemId ? plan.recipeKey : plan.recipes?.[id];
       const recipeKey = saved || (id !== plan.itemId && choices.length === 1 ? choices[0].key : '');
-      const node = { id, key, special, recipeKey, edges: [] };
+      const sourceId = special ? plan.conversions?.[id] : null;
+      const node = { id, key, special, recipeKey, sourceId, edges: [] };
       nodes.set(key, node);
       active.add(key);
-      if (!special) {
-        const direct = shoppingDirectCalculate(runtime, { itemId: id, quantity: 1, recipeKey });
-        for (const row of direct.rows) {
-          const cycle = active.has(row.key);
-          node.edges.push({ ...row, cycle });
-          if (!cycle) visit(row.id, row.special);
-        }
+      const conversion = special && shoppingConversionChoices(runtime, id).find(choice => choice.id === sourceId);
+      const inputs = special ? conversion ? [{ id: sourceId, key: `item:${sourceId}`, name: conversion.name, perAttempt: 1 }] : []
+        : shoppingDirectCalculate(runtime, { itemId: id, quantity: 1, recipeKey }).rows;
+      for (const row of inputs) {
+        const cycle = active.has(row.key);
+        node.edges.push({ ...row, cycle });
+        if (!cycle) visit(row.id, row.special);
       }
       active.delete(key);
       order.push(node);
@@ -40,17 +41,17 @@
       const owned = shoppingPending(runtime) ? null : node.special ? shoppingNumber(runtime.state.user[node.id]) : shoppingOwned(runtime, node.id);
       const missing = required === 0 ? 0 : owned === null || required === null ? null : Math.max(0, required - owned);
       const used = owned === null || required === null ? null : Math.min(owned, required);
-      const detail = node.special ? { name: SHOPPING_RESOURCES[node.id], rows: [], gaps: [], fixed: true } :
+      const detail = node.special ? shoppingConversionDetail(runtime, node, required === null && owned !== null ? Math.max(0, knownRequired - owned) : missing) :
         shoppingDirectCalculate(runtime, { itemId: node.id, quantity: required ?? knownRequired, recipeKey: node.recipeKey });
       const knownAttempts = detail.attempts;
-      if (!node.special && required === null) {
+      if (required === null) {
         detail.attempts = null;
         detail.output = null;
       }
       // A covered intermediate needs no recipe or production, even if its
       // available recipes are uncertain, missing or cyclic.
       if (missing === 0) { detail.attempts = 0; detail.output = 0; detail.gaps = []; detail.fixed = true; }
-      const row = { ...detail, id: node.id, key: node.key, special: node.special, recipeKey: node.recipeKey,
+      const row = { ...detail, id: node.id, key: node.key, special: node.special, recipeKey: node.recipeKey, sourceId: node.sourceId, production: Boolean(detail.chosen || detail.conversion),
         image: node.special ? SHOPPING_RESOURCE_IMAGES[node.id] : shoppingItem(runtime, node.id)?.image,
         required, knownRequired, owned, used, missing, edges: [], surplus: detail.output === null || missing === null ? null : Math.max(0, (detail.output || 0) - missing) };
       if (owned === null && required !== 0) row.gaps.push('Owned balance unknown.');
@@ -76,18 +77,18 @@
     // Uncertainty travels back to every parent depending on that production.
     for (const row of [...nodes].reverse()) {
       const uncertain = row.edges.some(edge => !edge.cycle && calculated.get(edge.key)?.uncertain);
-      const verifiedLeaf = row.special || !row.recipeKey && !catalog.byItem.has(row.id) && catalog.complete && shoppingItem(runtime, row.id);
-      row.unresolved = !row.chosen && !verifiedLeaf;
+      const verifiedLeaf = row.special && !row.sourceId || !row.recipeKey && !catalog.byItem.has(row.id) && catalog.complete && shoppingItem(runtime, row.id);
+      row.unresolved = !row.production && !verifiedLeaf;
       row.uncertain = row.missing !== 0 && (row.required === null || row.owned === null || uncertain
-        || (row.chosen ? !row.fixed || row.gaps.length > 0 : !verifiedLeaf));
+        || (row.production ? !row.fixed || row.gaps.length > 0 : !verifiedLeaf));
       if (uncertain && row.missing !== 0) row.gaps.push('Uncertain recipe chain: intermediate requirements do not guarantee the target.');
       if (row.uncertain) row.fixed = false;
-      const insufficient = (!row.chosen && !row.unresolved && (row.missing > 0 || row.required === null && row.owned !== null && row.knownRequired > row.owned))
+      const insufficient = (!row.production && !row.unresolved && (row.missing > 0 || row.required === null && row.owned !== null && row.knownRequired > row.owned))
         || row.edges.some(edge => !edge.cycle && edge.required !== 0 && calculated.get(edge.key)?.supply === 'insufficient');
       row.supply = row.missing === 0 ? 'covered' : insufficient ? 'insufficient' : row.uncertain ? 'unknown' : 'covered';
     }
     const root = calculated.get(`item:${plan.itemId}`);
-    const leaves = nodes.filter(row => row.special || !row.chosen);
+    const leaves = nodes.filter(row => !row.production);
     const gaps = nodes.filter(row => row.missing !== 0 && row.uncertain);
     const result = { ...root, shortfall: root.missing, nodes, leaves, cycles, unresolved: gaps, incomplete: gaps.length > 0 || cycles.length > 0 };
     if (result.incomplete && !result.gaps.some(gap => gap.startsWith('Incomplete evidence'))) result.gaps = [...result.gaps, 'Incomplete evidence; known amounts are partial and cannot establish material coverage.'];
