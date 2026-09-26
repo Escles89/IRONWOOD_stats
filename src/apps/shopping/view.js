@@ -1,7 +1,6 @@
   function renderShoppingCard() {
     if (location.pathname !== '/status') return '';
     const ui = AppState.ui.shopping, runtime = quickRuntime(), snapshot = ui.snapshot;
-    const amount = value => value === null ? 'Unknown' : formatNumber(value);
     const draft = ui.draft;
     const index = shoppingRecipes(runtime);
     const items = Object.values(runtime?.catalog || {}).filter(item => shoppingItem(runtime, item?.id) && index.craftableItems.has(item.id) && (item.id === draft.itemId || item.name.toLowerCase().includes(ui.filter.toLowerCase()))).sort((a, b) => a.name.localeCompare(b.name));
@@ -13,8 +12,7 @@
         <label>Target owned quantity<input name="quantity" data-shopping-quantity type="number" min="1" step="1" required value="${escapeHtml(draft.quantity)}"></label>
         ${choices.length > 1 || invalidated ? `<label>Crafting recipe<select name="recipe" data-shopping-recipe><option value="">Choose a recipe</option>${choices.map(entry => `<option value="${entry.key}" ${entry.key === draft.recipeKey ? 'selected' : ''}>${escapeHtml(entry.skillName)} · ${escapeHtml(entry.recipe.name)}</option>`).join('')}</select></label>` : choices.length === 1 ? `<span>Crafted with ${escapeHtml(choices[0].skillName)} · ${escapeHtml(choices[0].recipe.name)}</span>` : ''}<div class="iw-shopping-edit-actions"><button class="iw-small-button" type="submit">Save target</button><button type="button" class="iw-small-button" data-shopping-step-link="defaults" aria-haspopup="dialog">Inputs</button>${ui.plan ? '<button type="button" class="iw-small-button" data-shopping-cancel>Cancel</button><button type="button" class="iw-shopping-clear" data-shopping-clear>Clear target</button>' : ''}</div></form>` : ''}
       ${snapshot ? `${ui.unavailable ? '<p role="status">Showing last observation. Current balances unavailable.</p>' : ''}
-        <p class="iw-shopping-target"><strong>${escapeHtml(snapshot.name)}</strong><span>Target ${amount(ui.plan.quantity)} · Owned ${amount(snapshot.owned)} · ${snapshot.shortfall === 0 ? 'Target satisfied' : `${amount(snapshot.shortfall)} to acquire`}</span></p>
-        <p class="iw-shopping-shortage">${snapshot.leaves.filter(row => !row.unresolved && row.acquire !== 0).map(row => `${amount(row.acquire)} ${escapeHtml(row.name)}`).join(' · ') || (snapshot.incomplete || ui.unavailable ? 'Some requirements are unknown.' : snapshot.shortfall === 0 ? '' : 'Materials covered.')}${snapshot.incomplete ? ' · Incomplete plan — inspect warning icons.' : ''}</p>
+        ${renderShoppingOverview(snapshot, ui)}
         <div class="iw-shopping-tree-scroll" aria-label="Recipe chain">${renderShoppingTree(snapshot)}</div>
         <p class="iw-muted iw-shopping-age">Observed ${Math.max(0, Math.floor((Date.now() - snapshot.observedAt) / 60000))} min ago.</p>` : ''}
       ${ui.message ? `<p role="status">${escapeHtml(ui.message)}</p>` : ''}</div></section>`;
@@ -116,4 +114,21 @@
       <p>${amount(node.woodOutput)} from wood · ${amount(node.acquire)} still to acquire · Projected surplus ${amount(node.surplus)}</p>
       <table><caption>Available wood after other recipe requirements. Higher-yield wood is allocated first.</caption><thead><tr><th>Wood</th><th>Charcoal per log</th><th>Available</th><th>To convert</th><th>Charcoal output</th></tr></thead><tbody>
       ${node.wood.map(row => `<tr><th>${escapeHtml(row.name)}</th><td data-label="Charcoal per log">${amount(row.output)}</td><td data-label="Available">${amount(row.available)}</td><td data-label="To convert">${amount(row.used)}</td><td data-label="Charcoal output">${amount(row.produced)}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  function renderShoppingOverview(snapshot, ui) {
+    const amount = value => value === null ? 'Unknown' : formatNumber(value);
+    const capacity = snapshot.capacity;
+    const canMake = capacity.exact ? amount(capacity.amount) : capacity.amount ? `≥ ${amount(capacity.amount)}` : 'Unknown';
+    const ownedPercent = snapshot.owned === null ? 0 : Math.min(100, snapshot.owned / ui.plan.quantity * 100);
+    const craftPercent = Math.min(100 - ownedPercent, capacity.amount / ui.plan.quantity * 100);
+    const shortages = snapshot.leaves.filter(row => !row.unresolved && row.acquire !== 0);
+    return `<div class="iw-shopping-overview">
+      <div class="iw-shopping-overview-heading"><button class="iw-shopping-target-icon" type="button" data-shopping-step-link="${escapeHtml(snapshot.key)}" aria-haspopup="dialog" aria-label="View ${escapeHtml(snapshot.name)} details">${renderShoppingIcon(snapshot)}</button><div><strong>${escapeHtml(snapshot.name)}</strong><span>${snapshot.shortfall === 0 ? 'Target satisfied' : `${amount(snapshot.shortfall)} to acquire`}</span></div></div>
+      <dl class="iw-shopping-totals"><div><dt>Target</dt><dd>${amount(ui.plan.quantity)}</dd></div><div><dt>Owned</dt><dd>${amount(snapshot.owned)}</dd></div><div class="iw-shopping-capacity" data-exact="${capacity.exact}"><dt>Can make now</dt><dd>${canMake}</dd></div></dl>
+      <div class="iw-shopping-coverage" role="img" aria-label="Target coverage: ${amount(snapshot.owned)} owned; ${canMake} additional from materials"><span style="width:${ownedPercent}%"></span><span style="width:${craftPercent}%"></span></div>
+      <div class="iw-shopping-overview-note"><span>Full recipe chain · material limit · before bonuses</span>${!capacity.exact ? '<span>Exact capacity unknown</span>' : ''}</div>
+    </div>
+    ${shortages.length ? `<div class="iw-shopping-shortages"><span class="iw-shopping-shortages-label">Still needed</span><div>${shortages.map(row => `<button type="button" data-shopping-step-link="${escapeHtml(row.key)}" aria-haspopup="dialog">${renderShoppingIcon({ ...row, supply: 'covered' })}<span>${amount(row.acquire)} ${escapeHtml(row.name)}</span></button>`).join('')}</div></div>` : snapshot.incomplete || ui.unavailable ? '<p>Some requirements are unknown.</p>' : snapshot.shortfall === 0 ? '' : '<p class="iw-shopping-covered">Materials covered.</p>'}
+    ${snapshot.incomplete ? '<p class="iw-shopping-plan-warning">Incomplete plan — inspect warning icons.</p>' : ''}`;
   }

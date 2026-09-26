@@ -1164,9 +1164,32 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
       .iw-shopping-body th:first-child { text-align:left; }
       .iw-shopping-body th small { display:block; color:#a6afbd; font-weight:400; }
       .iw-shopping-body a { color:#a8cdf7; }
-      .iw-shopping-target { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; }
-      .iw-shopping-target > span { color:#b9c8d7; font-size:12px; }
-      .iw-shopping-shortage:empty { display:none; }
+      .iw-shopping-overview { padding:14px; border:1px solid #7896aa26; border-radius:6px; background:linear-gradient(125deg,#203b4b55,#13253522); margin-bottom:12px; }
+      .iw-shopping-overview-heading { display:flex; align-items:center; gap:12px; }
+      .iw-shopping-overview-heading > div { min-width:0; display:flex; flex-direction:column; gap:3px; }
+      .iw-shopping-overview-heading strong { font-size:15px; }
+      .iw-shopping-overview-heading span { color:#a6bdcb; font-size:12px; }
+      .iw-shopping-target-icon { border:0; padding:0; background:none; cursor:pointer; }
+      .iw-shopping-totals { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:16px 0 12px; }
+      .iw-shopping-totals > div { padding-left:12px; border-left:2px solid #7896aa40; }
+      .iw-shopping-totals dt { font-size:11px; color:#a6bdcb; margin-bottom:3px; }
+      .iw-shopping-totals dd { margin:0; font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; }
+      .iw-shopping-totals .iw-shopping-capacity { border-color:#79bf98; }
+      .iw-shopping-capacity dd { color:#a6dfba; }
+      .iw-shopping-capacity[data-exact="false"] dd { color:#dbb96d; }
+      .iw-shopping-coverage { height:5px; display:flex; overflow:hidden; background:#070f1866; border-radius:3px; }
+      .iw-shopping-coverage > span:first-child { background:#79a7bc; }
+      .iw-shopping-coverage > span:last-child { background:#79bf98; }
+      .iw-shopping-overview-note { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 12px; margin-top:7px; color:#8fa7b8; font-size:10px; }
+      .iw-shopping-shortages-label { display:block; color:#a6bdcb; font-size:11px; margin-bottom:6px; }
+      .iw-shopping-shortages > div { display:flex; flex-wrap:wrap; gap:6px; }
+      .iw-shopping-shortages button { display:flex; align-items:center; gap:7px; border:1px solid #cf7b8938; background:#cf7b8908; color:#e1c5ca; padding:5px 8px; border-radius:5px; font:inherit; font-size:12px; cursor:pointer; }
+      .iw-shopping-shortages button:hover { border-color:#cf7b8999; background:#cf7b8915; }
+      .iw-shopping-shortages .iw-shopping-icon { width:22px; height:22px; flex-basis:22px; border:0; background:none; box-shadow:none; }
+      .iw-shopping-shortages .iw-shopping-icon img { width:22px; height:22px; }
+      .iw-shopping-covered { color:#a6dfba; font-size:12px; }
+      .iw-shopping-plan-warning { color:#dbb96d; font-size:12px; margin-top:8px!important; }
+      @media(max-width:420px) { .iw-shopping-totals { gap:6px; } .iw-shopping-totals > div { padding-left:7px; } .iw-shopping-totals dd { font-size:17px; } }
       .iw-shopping-age { font-size:11px; margin-top:8px!important; margin-bottom:0!important; }
       .iw-shopping-tree-scroll { max-width:100%; overflow-x:auto; padding:18px 0 12px; background:radial-gradient(ellipse at 50% 0,#80b6c90b,transparent 65%); }
       .iw-shopping-tree, .iw-shopping-branches { list-style:none; margin:0; padding:0; display:flex; justify-content:center; }

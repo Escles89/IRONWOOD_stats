@@ -1,7 +1,7 @@
   // Discover the selected recipe graph before allocating any stock. Reverse
   // postorder gathers every parent's demand before a shared input is processed.
   function shoppingGraph(runtime, plan, catalog = shoppingRecipes(runtime)) {
-    const planKey = JSON.stringify(plan), cache = AppState.ui.shoppingCatalog;
+    const planKey = JSON.stringify([plan.itemId, plan.recipeKey, plan.recipes, plan.conversions]), cache = AppState.ui.shoppingCatalog;
     if (cache.graph?.catalog === catalog && cache.graph.planKey === planKey) return cache.graph;
     const nodes = new Map(), order = [], active = new Set();
     function visit(id, special = false) {
@@ -135,4 +135,30 @@
     charcoal.acquire = charcoal.woodUncertain ? null : remaining;
     charcoal.surplus = output === null || charcoal.missing === null ? null : Math.max(0, output - charcoal.missing);
     if (charcoal.woodUncertain) charcoal.gaps.push('Some available wood balances are unknown; Charcoal coverage is incomplete.');
+  }
+
+  function shoppingCapacity(runtime, plan) {
+    const owned = shoppingOwned(runtime, plan.itemId);
+    if (owned === null || shoppingPending(runtime)) return { amount: 0, exact: false };
+    const ceiling = Number.MAX_SAFE_INTEGER - Math.ceil(owned);
+    if (ceiling < 1) return { amount: 0, exact: false };
+    const probe = amount => {
+      const result = shoppingCalculate(runtime, { ...plan, quantity: owned + amount });
+      return result.incomplete ? 'unknown' : result.supply === 'covered' ? 'covered' : 'insufficient';
+    };
+    let low = 0, high = 1, upperStatus = probe(high);
+    while (upperStatus === 'covered') {
+      low = high;
+      if (high === ceiling) return { amount: low, exact: false };
+      high = Math.min(ceiling, high * 2);
+      upperStatus = probe(high);
+    }
+    // Search the proven material coverage boundary. Uncertain recipes or
+    // balances give a lower bound, never an invented exact craft count.
+    while (high - low > 1) {
+      const mid = low + Math.floor((high - low) / 2), status = probe(mid);
+      if (status === 'covered') low = mid;
+      else { high = mid; upperStatus = status; }
+    }
+    return { amount: low, exact: upperStatus === 'insufficient' };
   }

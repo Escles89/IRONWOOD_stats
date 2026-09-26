@@ -26,7 +26,7 @@
     const plan = { ...ui.plan, conversions: ui.conversions };
     const signature = shoppingObservationKey(runtime, plan, shoppingRecipes(runtime));
     if (signature !== ui.signature || authoritative) {
-      ui.snapshot = { ...JSON.parse(JSON.stringify(shoppingCalculate(runtime, plan))), observedAt: Date.now() };
+      ui.snapshot = { ...JSON.parse(JSON.stringify(shoppingCalculate(runtime, plan))), capacity: shoppingCapacity(runtime, plan), observedAt: Date.now() };
       const recipes = { ...ui.plan.recipes };
       let changed = false;
       for (const node of ui.snapshot.nodes) {

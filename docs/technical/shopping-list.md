@@ -111,3 +111,13 @@ The card is now branded Recipe Calc with a small trademark symbol. Its header ha
 Production modals present Required, Owned and To produce as three metric cards, followed by attempt count, skill/level and a short native recipe link. Yield, eligibility, stock allocation and projected surplus remain available under Recipe details. Ingredient captions and observation footnotes are shorter. The disclosure state belongs to the selected item and survives live observations; owner switches and opening another item reset it. Workflow coverage verifies Inputs discoverability and disclosure persistence while balances update.
 
 Verification: the live Super Multi Craft Potion modal shows the new metric cards and collapsed notes. At a 390px viewport, modal width and scroll width both measured 364px; the viewport was restored. Build and complete check pass all 348 tests, including 36 shopping workflows. Both review axes have zero unresolved findings.
+
+## Material capacity and visual summary
+
+“Can make now” is additional finished output from current owned materials, independent of the saved target and excluding the already-owned finished balance. It follows the selected full recipe chain, fixed resource conversions and spare-wood Charcoal accounting. Shared ingredients are reserved once. It is a base material limit, not a promise about skill/equipment eligibility, pending loot or bonus output.
+
+Capacity probes the existing planner with `owned finished + additional`, first bracketing the limit by doubling, then binary-searching the whole-item boundary. A required uncertain recipe or balance yields a proven lower bound (≥) or Unknown, never an invented exact count. Reaching the safe numeric ceiling also reports a lower bound. Graph structure is cached independently of target quantity; capacity only recalculates with relevant observed state.
+
+The summary now features the target artwork, three metric counts, a target-coverage bar separating owned and producible output, and clickable shortage chips. More detailed quantity and uncertainty information remains in the step modal. Tests cover additional-versus-owned counts, independence from the target, changing balances, saved conversion choices, competing wood stock, zero capacity, and uncertainty after consuming known intermediate stock.
+
+Final verification: all 351 tests pass, including 39 shopping workflows. Both review axes report zero findings. Live Elite Key 100 showed 26,900 owned and capacity for 65,538 additional items against a target of 100,000, with 7,562 Giant Fang still needed. The new summary was visually inspected; mobile card width and scroll width both measured 370px, and the viewport was restored.

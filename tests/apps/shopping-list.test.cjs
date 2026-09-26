@@ -239,7 +239,7 @@ test('invalid targets and saved records are rejected; pending loot and unfinishe
   assert.doesNotMatch(setup(s.storage).render(), /to acquire/);
   s.runtime.action.actionLoading = true;
   s.emit('click', '[data-shopping-clear]');
-  assert.match(s.save(), /Owned Unknown/);
+  assert.match(s.save(), /Owned<\/dt><dd>Unknown/);
 });
 
 test('read-only refresh rejects another character response and planning stays on Status', async () => {
@@ -518,7 +518,7 @@ test('the compact icon tree opens one step in a modal and Escape returns focus t
   const s = setup(); s.save();
   assert.doesNotMatch(s.page.innerHTML, /<table|<details|Stock used|Shared requirements are combined|Click an item for step details|native balance/);
   assert.match(s.page.innerHTML, /aria-haspopup="dialog"/);
-  assert.match(s.page.innerHTML, /Target 100 · Owned 30/);
+  assert.match(s.page.innerHTML, /Target<\/dt><dd>100<\/dd>.*Owned<\/dt><dd>30/);
   assert.equal(s.modal(), '');
   s.detail('resource:charcoal');
   assert.match(s.modal(), /role="dialog" aria-modal="true"/);
@@ -717,4 +717,47 @@ test('Recipe Calc keeps Inputs in Edit and preserves expanded recipe details dur
   assert.match(s.modal(), /60 base attempts/);
   s.emit('toggle', '[data-shopping-recipe-details]', false, null, { shoppingStep: 'item:101' });
   assert.doesNotMatch(s.modal(), /data-shopping-recipe-details[^>]* open/);
+});
+
+test('Can make now counts additional output independently of target and observes inventory changes', () => {
+  const s = setup();
+  s.save('101', '31');
+  assert.match(s.render(), /Can make now<\/dt><dd>6<\/dd>/);
+  s.save('101', '1000');
+  assert.match(s.render(), /Can make now<\/dt><dd>6<\/dd>/);
+  s.user.charcoal = 100;
+  assert.match(s.render(), /Can make now<\/dt><dd>25<\/dd>/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('capacity includes saved conversions and reserves shared wood for the full chain', () => {
+  const s = setup(new Map(), runtime => {
+    conversionFixture(runtime);
+    runtime.state.user.inventory['102'].amount = 20;
+    runtime.state.user.inventory['104'] = { amount: 2 };
+  });
+  s.save('101', '1');
+  s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
+  s.emit('change', '[data-shopping-conversion]', '104', null, { shoppingResource: 'potionMix' });
+  assert.match(s.render(), /Can make now<\/dt><dd>2<\/dd>/);
+  const wood = setup(new Map(), woodFixture);
+  wood.save('101', '10');
+  assert.match(wood.render(), /Can make now<\/dt><dd>1<\/dd>/);
+  wood.user.inventory['107'].amount = 0;
+  assert.match(wood.render(), /Can make now<\/dt><dd>0<\/dd>/);
+});
+
+test('capacity exposes uncertain limits and preserves a proven lower bound from owned intermediates', () => {
+  const s = setup(new Map(), runtime => {
+    conversionFixture(runtime);
+    runtime.state.user.inventory['102'].amount = 20;
+    runtime.state.user.potionMix = 100;
+    runtime.actionCatalog['40'].drops[0].amount = 2;
+  });
+  s.save('101', '1');
+  s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
+  assert.match(s.render(), /Can make now<\/dt><dd>≥ 1<\/dd>/);
+  assert.match(s.render(), /Exact capacity unknown/);
+  s.runtime.actionCatalog['30'].drops[0].amount = 2;
+  assert.match(s.render(), /Can make now<\/dt><dd>Unknown<\/dd>/);
 });
