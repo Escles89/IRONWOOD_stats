@@ -59,7 +59,7 @@
   }
 
   function shoppingSupplyLabel(node) {
-    return node.supply === 'insufficient' ? 'Materials insufficient' : node.supply === 'unknown' ? 'Incomplete / uncertain' : node.missing === 0 ? 'Covered by owned stock' : 'Base materials covered';
+    return node.supply === 'insufficient' ? 'Materials insufficient' : node.supply === 'unknown' ? 'Incomplete / uncertain' : node.missing === 0 ? 'Covered by owned stock' : 'Craftable from current materials';
   }
 
   function renderShoppingTree(snapshot) {
@@ -70,6 +70,7 @@
       const note = edge?.cycle ? ' · Cycle stopped' : reference ? ' · Shared requirement' : '';
       const label = `${node.name} — ${shoppingSupplyLabel(node)}${note}${node.special ? ' · Resource balance' : ''}`;
       const content = `<button type="button" class="iw-shopping-node" data-shopping-step-link="${escapeHtml(node.key)}" aria-haspopup="dialog" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${renderShoppingIcon(node)}</button>`;
+      const connection = node.supply === 'covered' && node.missing > 0 ? 'craftable' : node.supply;
       const coveredResource = node.special && SHOPPING_CONVERSIONS.includes(node.id) && node.missing === 0;
       const children = reference || coveredResource ? [] : node.edges.filter(input => !input.wood).map(input => {
         const child = nodes.get(input.key);
@@ -78,7 +79,7 @@
       const childWidth = children.reduce((sum, child) => sum + child.width, 0);
       const width = Math.max(edge ? 48 : 56, childWidth) + 24;
       const connections = children.length ? renderShoppingConnections(children, childWidth) : '';
-      return { width, supply: node.supply, markup: `<li style="width:${width}px" data-shopping-node="${escapeHtml(node.key)}" data-supply="${node.supply}">${content}${children.length ? `<ul class="iw-shopping-branches" style="width:${childWidth}px">${connections}${children.map(child => child.markup).join('')}</ul>` : ''}</li>` };
+      return { width, supply: connection, markup: `<li style="width:${width}px" data-shopping-node="${escapeHtml(node.key)}" data-supply="${node.supply}" data-connection="${connection}">${content}${children.length ? `<ul class="iw-shopping-branches" style="width:${childWidth}px">${connections}${children.map(child => child.markup).join('')}</ul>` : ''}</li>` };
     }
     return `<ul class="iw-shopping-tree">${branch(snapshot.nodes[0]).markup}</ul>`;
   }
@@ -95,7 +96,7 @@
     });
     // Shared sections inherit the most severe branch. Paint its continuous
     // path last so a covered sibling cannot make a shortage look covered.
-    const severity = { covered: 0, unknown: 1, insufficient: 2 };
+    const severity = { covered: 0, craftable: 1, unknown: 2, insufficient: 3 };
     paths.sort((a, b) => severity[a.supply] - severity[b.supply]);
     return `<svg class="iw-shopping-connections" viewBox="0 0 ${width} 43" aria-hidden="true" focusable="false">${paths.map(path => `<path data-supply="${path.supply}" d="${path.d}"/>${path.supply === 'covered' ? `<path class="iw-shopping-flow" d="${path.d}"/>` : ''}`).join('')}</svg>`;
   }

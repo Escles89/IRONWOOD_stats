@@ -1195,6 +1195,7 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
       .iw-shopping-tree, .iw-shopping-branches { list-style:none; margin:0; padding:0; display:flex; justify-content:center; }
       .iw-shopping-tree { width:max-content; min-width:100%; }
       .iw-shopping-tree li { --junction-color:#79bf98; position:relative; display:flex; flex-direction:column; align-items:center; padding:0 12px; box-sizing:border-box; flex-shrink:0; }
+      .iw-shopping-tree li[data-connection="craftable"] { --junction-color:#79b8ef; }
       .iw-shopping-tree li[data-supply="insufficient"] { --junction-color:#f27683; }
       .iw-shopping-tree li[data-supply="unknown"] { --junction-color:#dbb96d; }
       .iw-shopping-branches { position:relative; margin-top:20px; padding-top:20px; }
@@ -1210,6 +1211,7 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
       .iw-shopping-connections { position:absolute; top:-20px; left:0; width:100%; height:43px; overflow:visible; pointer-events:none; }
       .iw-shopping-connections path { fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
       .iw-shopping-connections path[data-supply="covered"] { stroke:#79bf98; }
+      .iw-shopping-connections path[data-supply="craftable"] { stroke:#79b8ef; }
       .iw-shopping-connections path[data-supply="unknown"] { stroke:#dbb96d; }
       .iw-shopping-connections path[data-supply="insufficient"] { stroke:#cf7b89; }
       .iw-shopping-connections .iw-shopping-flow { stroke:#d2f5df; stroke-dasharray:4 13; animation:iw-shopping-flow 2.4s linear infinite; }

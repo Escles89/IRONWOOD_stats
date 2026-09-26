@@ -785,3 +785,20 @@ test('covered Metal Parts and Potion Mix hide conversion branches until their ba
   s.runtime.actionCatalog['30'].materials.push({ id: '103', amount: 1 });
   assert.match(s.render(), /data-shopping-node="item:103"/);
 });
+
+test('connections distinguish owned stock from ingredients that still need crafting', () => {
+  const s = setup(new Map(), runtime => {
+    runtime.state.user.inventory['102'].amount = 0;
+    runtime.catalog['103'] = { id: '103', name: 'Ore Fragment' };
+    runtime.state.user.inventory['103'] = { amount: 5 };
+    runtime.skillCatalog['4'].actions.push({ id: '43' });
+    runtime.actionCatalog['43'] = { id: '43', name: 'Iron Ore', materials: [{ id: '103', amount: 1 }], drops: [{ id: '102', chance: 1000 }] };
+  });
+  s.save('101', '31');
+  assert.match(s.render(), /<path data-supply="craftable"/);
+  assert.match(s.render(), /<path data-supply="covered"/);
+  assert.match(s.render(), /Iron Ore — Craftable from current materials/);
+  s.user.inventory['102'].amount = 2;
+  assert.doesNotMatch(s.render(), /<path data-supply="craftable"/);
+  assert.match(s.render(), /Iron Ore — Covered by owned stock/);
+});
