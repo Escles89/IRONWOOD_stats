@@ -3,6 +3,14 @@
   const masteryRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
   const masteryImage = value => typeof value === 'string' && /^\/assets\/(?:items|misc)\/[\w/-]+\.(?:png|webp|svg)$/.test(value) ? value : '';
 
+  function masteryCompletion(skills, id) {
+    if (!masteryRecord(skills)) return null;
+    if (!Object.hasOwn(skills, id)) return false;
+    const progress = skills[id];
+    if (!masteryRecord(progress)) return null;
+    return progress.complete === undefined ? false : typeof progress.complete === 'boolean' ? progress.complete : null;
+  }
+
   function validMasterySnapshot(snapshot, id) {
     const quantity = value => value === null || masteryNumber(value) !== null;
     const stamp = value => Number.isFinite(value) && value > 0 && value <= Date.now();
@@ -27,7 +35,7 @@
   function masteryObserve(runtime = quickRuntime(), authoritative = false) {
     const ui = AppState.ui.mastery, owner = quickOwner(runtime);
     if (ui.owner !== owner) {
-      Object.assign(ui, { owner, selected: '', snapshot: null, snapshots: {}, signature: '', message: '' });
+      Object.assign(ui, { owner, selected: '', snapshot: null, snapshots: {}, signature: '', message: '', choosing: false });
       if (owner) {
         try {
           const saved = JSON.parse(localStorage.getItem(MASTERY_SELECTION_KEY + owner));
@@ -55,7 +63,7 @@
         owned: valid && masteryRecord(user.inventory) ? masteryNumber(Object.hasOwn(user.inventory, id) ? user.inventory[id]?.amount : 0) : null };
     }) : null;
     const snapshot = { skillId: ui.selected, name: native.name, rows,
-      complete: typeof progress?.complete === 'boolean' ? progress.complete : masteryRecord(progress) && progress.complete === undefined ? false : null,
+      complete: masteryCompletion(user.masteries?.skills, ui.selected),
       xp: masteryNumber(user.skills?.[ui.selected]?.exp), xpRequired: masteryNumber(definition.exp),
       coins: masteryNumber(user.coins), coinsRequired: masteryNumber(definition.cost) };
     const signature = JSON.stringify(snapshot);
@@ -79,10 +87,12 @@
     if (!ui.owner || !quickId(id) || runtime?.mastery?.catalog?.[id]?.id !== id) return;
     if (runtime.state.user.masteries?.skills?.[id]?.complete === true) return;
     ui.selected = id;
+    ui.choosing = false;
     ui.snapshot = ui.snapshots[id] || null;
     ui.signature = '';
     persistMastery();
     render();
+    document.querySelector('[data-mastery-settings]')?.focus();
   }
 
   async function refreshMastery() {

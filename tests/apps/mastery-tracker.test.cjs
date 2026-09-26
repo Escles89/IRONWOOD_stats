@@ -7,11 +7,11 @@ function setup(storage = new Map()) {
   const page = { hidden: false, innerHTML: '', style: { setProperty() {} }, contains: () => true,
     querySelector: () => null, querySelectorAll: () => [] };
   const document = { hidden: false, activeElement: null, body: { textContent: '', appendChild(node) { nodes.set(node.id, node); } },
-    querySelector: selector => selector === '#iw-mastery-select' ? selectControl : selector === '.iw-mastery-panel [data-modal-close]' ? closeControl : nodes.get(selector.slice(1)) || null, querySelectorAll: () => [],
+    querySelector: selector => selector === '[data-mastery-settings]' ? settingsControl : selector === '.iw-mastery-panel [data-modal-close]' ? closeControl : nodes.get(selector.slice(1)) || null, querySelectorAll: () => [],
     createElement() { return { innerHTML: '', get content() { return { firstElementChild: { markup: this.innerHTML } }; },
       appendChild(child) { this.innerHTML = child.markup; }, remove() { nodes.delete(this.id); } }; },
     addEventListener(type, handler) { (listeners[type] ||= []).push(handler); } };
-  const selectControl = { get disabled() { return /data-mastery-select disabled/.test(nodes.get('iw-global-dialogs')?.innerHTML || ''); },
+  const settingsControl = { get disabled() { return /data-mastery-settings disabled/.test(nodes.get('iw-global-dialogs')?.innerHTML || ''); },
     focus() { if (!this.disabled) document.activeElement = this; } };
   const closeControl = { focus() { document.activeElement = this; } };
   const user = { displayName: 'Player', isSolo: false, coins: 40, inventory: { '101': { amount: 50 } },
@@ -37,9 +37,15 @@ function setup(storage = new Map()) {
     for (const handler of listeners.keydown || []) handler({ key: 'Escape', target: trigger, preventDefault() {} });
     return render();
   }
+  function settings() {
+    const target = { closest: selector => selector === '[data-mastery-settings]' ? target : null, matches: () => false };
+    for (const handler of listeners.click || []) handler({ target, preventDefault() {} });
+    return render();
+  }
   function change(id) {
-    const target = { value: id, matches: selector => selector === '[data-mastery-select]', closest: () => null };
-    for (const handler of listeners.change || []) handler({ target });
+    if (!render().includes('data-mastery-pick="' + id + '"')) settings();
+    const target = { dataset: { masteryPick: id }, closest: selector => selector === '[data-mastery-pick]' ? target : null, matches: () => false };
+    for (const handler of listeners.click || []) handler({ target, preventDefault() {} });
     return render();
   }
   async function refresh() {
@@ -49,12 +55,13 @@ function setup(storage = new Map()) {
     return render();
   }
   open();
-  return { h, runtime, user, page, storage, calls, render, change, refresh, open, escape, document, trigger, closeControl };
+  return { h, runtime, user, page, storage, calls, render, change, refresh, open, escape, document, trigger, closeControl, settings, settingsControl };
 }
 
 test('selecting a native mastery shows independent material, XP and coin requirements without mutations', () => {
   const s = setup();
-  assert.match(s.render(), /<label[^>]*for="iw-mastery-select"[^>]*>Skill Mastery/);
+  assert.match(s.render(), /aria-label="Choose skill to follow"/);
+  assert.doesNotMatch(s.render(), /<select/);
   const html = s.change('1');
   assert.match(html, /data-label="Required">100/);
   assert.match(html, /data-label="Contributed">20/);
@@ -89,15 +96,15 @@ test('unfinished selections survive reloads; characters and modes are isolated',
   const s = setup();
   s.change('1');
   const reload = setup(s.storage);
-  assert.match(reload.render(), /value="1" selected/);
+  assert.match(reload.render(), /<strong>Woodcutting<\/strong>/);
   assert.match(reload.render(), /Mastery not complete/);
   reload.runtime.state.user.displayName = 'Other';
-  assert.doesNotMatch(reload.render(), /value="1" selected/);
+  assert.doesNotMatch(reload.render(), /<strong>Woodcutting<\/strong>/);
   reload.runtime.state.user.displayName = 'Player';
   reload.runtime.state.isSolo = reload.runtime.state.user.isSolo = true;
-  assert.doesNotMatch(reload.render(), /value="1" selected/);
+  assert.doesNotMatch(reload.render(), /<strong>Woodcutting<\/strong>/);
   reload.runtime.state.isSolo = reload.runtime.state.user.isSolo = false;
-  assert.match(reload.render(), /value="1" selected/);
+  assert.match(reload.render(), /<strong>Woodcutting<\/strong>/);
   reload.runtime.state.swappingCharacter = true;
   assert.match(reload.render(), /Character identity unavailable/);
   assert.doesNotMatch(reload.render(), /Mastery complete/);
@@ -125,11 +132,25 @@ test('Mastery Contracts change contributions independently; covered materials do
   assert.match(html, /data-label="Contributed">90/);
   assert.match(html, /data-label="Owned">50/);
   assert.match(html, /data-label="Missing now">0/);
+  assert.match(html, /<tr class="iw-mastery-covered">/);
   assert.match(html, /Mastery not complete/);
   assert.match(html, /XP.*Insufficient/s);
   s.runtime.state.user.masteries.skills['1'].complete = true;
-  assert.doesNotMatch(s.render(), /value="1" selected/);
+  assert.doesNotMatch(s.render(), /data-mastery-pick="1"/);
   assert.match(s.render(), /All masteries are complete/);
+});
+
+test('only confirmed covered requirements are muted; shortages and unknown balances stay prominent', () => {
+  const s = setup();
+  s.user.skills['1'].exp = 250;
+  let html = s.change('1');
+  assert.match(html, /data-requirement="XP" class="iw-mastery-requirement iw-mastery-covered"/);
+  assert.doesNotMatch(html, /data-requirement="Coins" class="iw-mastery-requirement iw-mastery-covered"/);
+  assert.doesNotMatch(html, /<tr class="iw-mastery-covered">/);
+  s.user.inventory['101'].amount = 80;
+  assert.match(s.render(), /<tr class="iw-mastery-covered">/);
+  s.user.inventory['101'].amount = null;
+  assert.doesNotMatch(s.render(), /<tr class="iw-mastery-covered">/);
 });
 
 test('unknown requirements, contributions, inventory and item identities leave explicit gaps', () => {
@@ -194,7 +215,7 @@ test('the mastery symbol opens a modal without adding a Status panel; Escape ret
   assert.equal(s.h.context.location.pathname, '/status');
   assert.equal(s.escape(), '');
   assert.equal(s.document.activeElement, s.trigger);
-  assert.match(s.open(), /Skill Mastery/);
+  assert.match(s.open(), /Skill mastery tracking/);
 });
 
 test('native sparse completion flags mean not complete, while malformed records remain unknown', () => {
@@ -216,9 +237,9 @@ test('Taming appears first in native skill order and its mixed materials follow 
   s.user.masteries.skills['15'] = { items: { '101': 20, '102': 30 } };
   s.user.skills['15'] = { exp: 250 };
   const initial = s.render();
-  assert.ok(initial.indexOf('>Taming</option>') < initial.indexOf('>Woodcutting</option>'));
+  assert.ok(initial.indexOf('data-mastery-pick="15"') < initial.indexOf('data-mastery-pick="1"'));
   const html = s.change('15');
-  assert.match(html, /<h3>Taming<\/h3>/);
+  assert.match(html, /<strong>Taming<\/strong>/);
   assert.ok(html.indexOf('>Rose</span>') < html.indexOf('>Pine Log</span>'));
   assert.match(html, /data-label="Contributed">30/);
 });
@@ -226,18 +247,46 @@ test('Taming appears first in native skill order and its mixed materials follow 
 
 test('completed masteries are excluded and an old completed selection asks for an unfinished mastery', () => {
   const s = setup();
-  assert.doesNotMatch(s.render(), /<option[^>]*>Mining<\/option>/);
+  assert.doesNotMatch(s.render(), /data-mastery-pick="2"/);
   s.change('2');
-  assert.doesNotMatch(s.render(), /<h3>Mining/);
+  assert.doesNotMatch(s.render(), /<strong>Mining/);
   const key = 'iw-status-mastery-v1:' + JSON.stringify(['Player', false]);
   s.storage.set(key, JSON.stringify({ version: 1, selected: '2' }));
   const reload = setup(s.storage);
   const html = reload.render();
   assert.match(html, /selected mastery is complete/i);
-  assert.doesNotMatch(html, /<option[^>]*>Mining<\/option>|iw-mastery-table/);
+  assert.doesNotMatch(html, /data-mastery-pick="2"|iw-mastery-table/);
   reload.user.masteries.skills['1'].complete = true;
   assert.match(reload.render(), /All masteries are complete/);
   reload.escape();
   reload.open();
   assert.equal(reload.document.activeElement, reload.closeControl);
+});
+
+
+test('the gear selects a followed skill and the header reports obtained masteries without changing gameplay', () => {
+  const s = setup();
+  let html = s.change('1');
+  assert.match(html, /Skill mastery tracking/);
+  assert.match(html, /<strong>Woodcutting<\/strong>/);
+  assert.match(html, /src="\/assets\/misc\/woodcutting.png"/);
+  assert.match(html, /1 \/ 2 masteries obtained/);
+  assert.match(html, /is-obtained[^>]*title="Mining · Obtained"/);
+  assert.match(html, /is-pending[^>]*title="Woodcutting · Not obtained"/);
+  assert.doesNotMatch(html, /data-mastery-pick=/);
+  html = s.settings();
+  assert.match(html, /data-mastery-pick="1"/);
+  assert.doesNotMatch(html, /data-mastery-pick="2"/);
+  delete s.user.masteries.skills['1'];
+  html = s.render();
+  assert.match(html, /1 \/ 2 masteries obtained/);
+  assert.match(html, /Mastery not complete/);
+  assert.doesNotMatch(html, /Mastery completion unknown/);
+  s.user.masteries.skills['1'] = null;
+  assert.match(s.render(), /Mastery count unavailable/);
+  delete s.user.masteries;
+  html = s.render();
+  assert.match(html, /Mastery count unavailable/);
+  assert.doesNotMatch(html, /is-obtained/);
+  assert.deepEqual(s.calls, []);
 });

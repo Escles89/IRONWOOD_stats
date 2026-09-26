@@ -4,19 +4,31 @@
     const snapshot = selectedComplete ? null : ui.snapshot;
     const catalog = runtime?.mastery?.catalog;
     const order = runtime?.skillOrder || QUICK_SKILL_ORDER;
-    const choices = Object.values(catalog || {}).filter(item => quickId(item?.id) && typeof item.name === 'string');
-    const allComplete = !!ui.owner && choices.length > 0 && choices.every(item => runtime?.state.user?.masteries?.skills?.[item.id]?.complete === true);
-    const masteries = choices.filter(item => runtime?.state.user?.masteries?.skills?.[item.id]?.complete !== true)
+    const choices = Object.values(catalog || {}).filter(item => quickId(item?.id) && typeof item.name === 'string')
       .sort((left, right) => (order.includes(left.id) ? order.indexOf(left.id) : Infinity) - (order.includes(right.id) ? order.indexOf(right.id) : Infinity));
+    const completion = item => masteryCompletion(ui.owner ? runtime?.state.user?.masteries?.skills : null, item.id);
+    const obtained = choices.filter(item => completion(item) === true).length;
+    const allComplete = choices.length > 0 && obtained === choices.length;
+    const countKnown = choices.length > 0 && choices.every(item => completion(item) !== null);
+    const masteries = choices.filter(item => completion(item) !== true);
+    const selected = catalog?.[ui.selected];
+    const icon = item => masteryImage(`/assets/${runtime?.skillCatalog?.[item.id]?.image}`) || skillIcon(item.name);
     const amount = value => value === null ? 'Unknown' : formatNumber(value);
     const eligibility = (value, required) => value === null || required === null ? 'Unknown' : value >= required ? 'Covered' : 'Insufficient';
+    const requirement = (label, value, required) => {
+      const status = eligibility(value, required);
+      return `<div data-requirement="${label}" class="iw-mastery-requirement${status === 'Covered' ? ' iw-mastery-covered' : ''}"><span>${label}</span><strong>${amount(value)} <small>/ ${amount(required)}</small></strong><span>${status}</span></div>`;
+    };
     return `<div class="iw-modal" data-modal-backdrop><section class="iw-modal-panel iw-mastery-panel" role="dialog" aria-modal="true" aria-labelledby="iw-mastery-title">
-      <div class="iw-options-heading"><h2 id="iw-mastery-title">Skill Mastery</h2><div class="iw-options-header-actions"><button type="button" class="iw-small-button" data-mastery-refresh ${!ui.owner || ui.refreshing || quickBusy() ? 'disabled' : ''}>${ui.refreshing ? 'Refreshing…' : 'Refresh'}</button><button type="button" class="iw-modal-close" data-modal-close aria-label="Close Skill Mastery"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div></div>
-      <div class="iw-mastery-body"><div class="iw-mastery-selection"><label for="iw-mastery-select">Skill Mastery</label>
-      <select id="iw-mastery-select" data-mastery-select ${!ui.owner || !catalog || !masteries.length ? 'disabled' : ''}><option value="">Choose a mastery</option>${masteries.map(item => `<option value="${item.id}" ${ui.selected === item.id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></div>
+      <div class="iw-options-heading"><div class="iw-mastery-heading"><h2 id="iw-mastery-title"><img src="${escapeHtml(selected ? icon(selected) : '/assets/misc/mastery.png')}" alt=""><span><small>Skill mastery tracking</small><strong>${selected ? escapeHtml(selected.name) : 'Choose a skill'}</strong></span></h2>
+      <div class="iw-mastery-achievements"><svg class="iw-mastery-filter" aria-hidden="true"><defs><filter id="iw-mastery-empty" x="-20%" y="-20%" width="140%" height="140%"><feMorphology in="SourceAlpha" operator="dilate" radius=".6" result="outer"></feMorphology><feMorphology in="SourceAlpha" operator="erode" radius=".6" result="inner"></feMorphology><feComposite in="outer" in2="inner" operator="out" result="outline"></feComposite><feFlood flood-color="#91a8b8"></feFlood><feComposite in2="outline" operator="in"></feComposite></filter></defs></svg><span class="iw-mastery-symbols" role="img" aria-label="${countKnown ? `${obtained} of ${choices.length} masteries obtained` : 'Mastery count unavailable'}">${choices.map(item => {
+        const complete = completion(item), label = `${item.name} · ${complete === true ? 'Obtained' : complete === false ? 'Not obtained' : 'Unknown'}`;
+        return `<img class="${complete === true ? 'is-obtained' : complete === false ? 'is-pending' : 'is-unknown'}" title="${escapeHtml(label)}" src="/assets/misc/mastery.png" alt="">`;
+      }).join('')}</span><small>${countKnown ? `${obtained} / ${choices.length} masteries obtained` : 'Mastery count unavailable'}</small></div></div>
+      <div class="iw-options-header-actions"><button type="button" class="iw-small-button" data-mastery-refresh ${!ui.owner || ui.refreshing || quickBusy() ? 'disabled' : ''}>${ui.refreshing ? 'Refreshing…' : 'Refresh'}</button><button type="button" class="iw-modal-close iw-mastery-settings" data-mastery-settings ${!ui.owner || !catalog || !masteries.length ? 'disabled' : ''} aria-label="Choose skill to follow" title="Choose skill to follow" aria-expanded="${Boolean(ui.choosing)}" aria-controls="iw-mastery-picker"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-.6 2.5-2.2 1.3-2.5-.7-2 3.5 1.9 1.8v2.6l-1.9 1.8 2 3.5 2.5-.7 2.2 1.3L9 22h4l.6-2.5 2.2-1.3 2.5.7 2-3.5-1.9-1.8V11l1.9-1.8-2-3.5-2.5.7-2.2-1.3L13 3Z"></path><circle cx="11" cy="12.5" r="3"></circle></svg></button><button type="button" class="iw-modal-close" data-modal-close aria-label="Close Skill Mastery"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div></div>
+      <div class="iw-mastery-body"><div id="iw-mastery-picker" class="iw-mastery-picker" ${ui.choosing && ui.owner && masteries.length ? '' : 'hidden'}>${ui.choosing && ui.owner ? `<p>Choose a skill to follow</p><div>${masteries.map(item => `<button type="button" class="iw-mastery-choice" data-mastery-pick="${item.id}" aria-pressed="${ui.selected === item.id}"><img src="${escapeHtml(icon(item))}" alt=""><span>${escapeHtml(item.name)}</span>${ui.selected === item.id ? '<span aria-hidden="true">✓</span>' : ''}</button>`).join('')}</div>` : ''}</div>
       ${!ui.owner ? '<p>Character identity unavailable.</p>' : !catalog ? '<p>Native mastery data unavailable in this game build.</p>' : ui.selected && !catalog[ui.selected] ? '<p>Selected mastery unavailable. Choose another mastery.</p>' : ''}
-      ${snapshot ? `<div class="iw-mastery-summary"><h3>${escapeHtml(snapshot.name)}</h3><p>${snapshot.complete === true ? 'Mastery complete' : snapshot.complete === false ? 'Mastery not complete' : 'Mastery completion unknown'}</p></div>
-      <p>XP: ${amount(snapshot.xp)} / ${amount(snapshot.xpRequired)} · ${eligibility(snapshot.xp, snapshot.xpRequired)}<br>Coins: ${amount(snapshot.coins)} / ${amount(snapshot.coinsRequired)} · ${eligibility(snapshot.coins, snapshot.coinsRequired)}</p>
+      ${snapshot ? `<div class="iw-mastery-requirements">${requirement('XP', snapshot.xp, snapshot.xpRequired)}${requirement('Coins', snapshot.coins, snapshot.coinsRequired)}</div><p class="iw-mastery-completion">${snapshot.complete === false ? 'Mastery not complete' : 'Mastery completion unknown'}</p>
       ${snapshot.needsReconcile ? '<p role="status">Contributions changed; inventory reconciliation is incomplete. Refresh to check both balances together.</p>' : ''}${renderMasteryMaterials(snapshot, amount)}
       <p class="iw-mastery-age">Contributions observed ${Math.max(0, Math.floor((Date.now() - snapshot.contributionsAt) / 60000))} min ago; inventory observed ${Math.max(0, Math.floor((Date.now() - snapshot.inventoryAt) / 60000))} min ago. ${snapshot.rows?.some(row => [row.required, row.contributed, row.owned].includes(null)) ? 'Incomplete evidence; refresh to check.' : ''}</p>` : `<p>${allComplete ? 'All masteries are complete.' : selectedComplete ? 'Your selected mastery is complete. Choose an unfinished mastery.' : 'Choose one mastery to track its outstanding requirements.'}</p>`}
       <p class="iw-mastery-note">Pending loot: unavailable in this version. Missing after collection: unavailable.<br>Owned materials still need to be contributed. Materials alone do not complete mastery.</p>
@@ -24,13 +36,23 @@
   }
 
   function openMastery(trigger) {
+    const ui = masteryObserve();
     AppState.ui.preferencesTrigger = trigger;
     AppState.ui.questModalOpen = false;
     AppState.ui.guideOpen = false;
-    AppState.ui.mastery.open = true;
+    ui.open = true;
+    ui.choosing = !ui.selected;
     render();
-    const selector = document.querySelector('#iw-mastery-select');
-    (selector && !selector.disabled ? selector : document.querySelector('.iw-mastery-panel [data-modal-close]'))?.focus();
+    const settings = document.querySelector('[data-mastery-settings]');
+    (settings && !settings.disabled ? settings : document.querySelector('.iw-mastery-panel [data-modal-close]'))?.focus();
+  }
+
+  function toggleMasteryPicker() {
+    const ui = AppState.ui.mastery;
+    if (!ui.open || !ui.owner) return;
+    ui.choosing = !ui.choosing;
+    render();
+    document.querySelector(ui.choosing ? '[data-mastery-pick]' : '[data-mastery-settings]')?.focus();
   }
 
   function renderMasteryMaterials(snapshot, amount) {
@@ -40,6 +62,6 @@
       <tbody>${snapshot.rows.map(row => {
         const missing = snapshot.needsReconcile || [row.required, row.contributed, row.owned].includes(null)
           ? null : Math.max(0, row.required - row.contributed - row.owned);
-        return `<tr><th scope="row"><span class="iw-mastery-resource">${row.image ? `<img src="${escapeHtml(row.image)}" alt="">` : ''}<span>${escapeHtml(row.name)}</span></span></th><td data-label="Required">${amount(row.required)}</td><td data-label="Contributed">${amount(row.contributed)}</td><td data-label="Owned">${amount(snapshot.needsReconcile ? null : row.owned)}</td><td data-label="Missing now">${amount(missing)}</td></tr>`;
+        return `<tr class="${missing === 0 ? 'iw-mastery-covered' : ''}"><th scope="row"><span class="iw-mastery-resource">${row.image ? `<img src="${escapeHtml(row.image)}" alt="">` : ''}<span>${escapeHtml(row.name)}</span></span></th><td data-label="Required">${amount(row.required)}</td><td data-label="Contributed">${amount(row.contributed)}</td><td data-label="Owned">${amount(snapshot.needsReconcile ? null : row.owned)}</td><td data-label="Missing now">${amount(missing)}</td></tr>`;
       }).join('')}</tbody></table>`;
   }
