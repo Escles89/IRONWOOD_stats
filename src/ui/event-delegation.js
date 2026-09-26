@@ -16,11 +16,16 @@
       if (form) quickUpdateQuantity(form);
     }, true);
     document.addEventListener('toggle', event => {
+      if (event.target.matches?.('[data-shopping-step]')) (AppState.ui.shopping.openSteps ||= {})[event.target.dataset.shoppingStep] = event.target.open;
       if (event.target.matches?.('[data-shopping-details]')) AppState.ui.shopping.expanded = event.target.open;
       if (event.target.matches?.('[data-quest-options]')) AppState.ui.questOptionsExpanded = event.target.open;
       if (event.target.matches?.('[data-debug-section]')) { AppState.ui.debugUpdatedAt = 0; scheduleStatusRender(); }
     }, true);
     document.addEventListener('click', event => {
+      const shoppingRecipeLink = event.target.closest?.('[data-shopping-native-recipe]');
+      if (shoppingRecipeLink) { event.preventDefault(); shoppingOpenRecipe(shoppingRecipeLink); return; }
+      const shoppingStepLink = event.target.closest?.('[data-shopping-step-link]');
+      if (shoppingStepLink) { event.preventDefault(); shoppingOpenStep(shoppingStepLink); return; }
       if (event.target.closest?.('[data-shopping-refresh]')) { shoppingRefresh(); return; }
       if (event.target.closest?.('[data-shopping-edit]')) { shoppingEdit(); return; }
       if (event.target.closest?.('[data-shopping-clear]')) { shoppingClear(); return; }
@@ -65,6 +70,7 @@
       if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
     }, true);
     document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-shopping-chain-recipe]')) { shoppingChooseRecipe(event.target); return; }
       if (event.target.matches?.('[data-shopping-item]') || event.target.matches?.('[data-shopping-recipe]')) { shoppingDraft(event.target); return; }
       if (event.target.matches?.('[data-debug-toggle]')) {
         localStorage.setItem(DEBUG_KEY, event.target.checked ? 'true' : 'false');

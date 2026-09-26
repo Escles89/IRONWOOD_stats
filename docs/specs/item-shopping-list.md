@@ -1,6 +1,6 @@
 # Finished-item shopping list
 
-Status: Direct-recipe slice (#4) implemented on 2026-09-26. Recursive expansion (#5) remains pending. See `../technical/shopping-list.md` for implementation and validation evidence.
+Status: Direct-recipe slice (#4) and recursive expansion (#5) implemented on 2026-09-26. See `../technical/shopping-list.md` for implementation and validation evidence.
 
 ## Implementation tickets
 

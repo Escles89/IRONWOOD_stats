@@ -3,11 +3,12 @@
   function shoppingObserve(authoritative = false) {
     const ui = AppState.ui.shopping, runtime = quickRuntime(), owner = quickOwner(runtime);
     if (ui.owner !== owner) {
-      Object.assign(ui, { owner, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', expanded: false, refreshing: false, unavailable: false, revision: 0 });
+      Object.assign(ui, { owner, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', expanded: true, openSteps: {}, refreshing: false, unavailable: false, revision: 0 });
       if (owner) {
         try {
           const saved = JSON.parse(localStorage.getItem(SHOPPING_KEY + owner));
           if (saved?.version === 1 && quickId(saved.plan?.itemId) && shoppingQuantity(saved.plan.quantity)
+            && shoppingValidRecipeChoices(saved.plan.recipes)
             && typeof saved.plan.recipeKey === 'string' && /^(?:\d{1,10}:\d{1,10})?$/.test(saved.plan.recipeKey)) {
             ui.plan = saved.plan;
             ui.editing = false;
@@ -22,7 +23,16 @@
     const signature = shoppingObservationKey(runtime, ui.plan, shoppingRecipes(runtime));
     if (signature !== ui.signature || authoritative) {
       ui.snapshot = { ...JSON.parse(JSON.stringify(shoppingCalculate(runtime, ui.plan))), observedAt: Date.now() };
-      ui.signature = signature;
+      const recipes = { ...ui.plan.recipes };
+      let changed = false;
+      for (const node of ui.snapshot.nodes) {
+        if (node.id !== ui.plan.itemId && !node.special && node.chosen && !recipes[node.id]) {
+          recipes[node.id] = node.chosen.key;
+          changed = true;
+        }
+      }
+      if (changed) { ui.plan.recipes = recipes; shoppingPersist(); }
+      ui.signature = shoppingObservationKey(runtime, ui.plan, shoppingRecipes(runtime));
       ui.revision = (ui.revision || 0) + 1;
     }
     return ui;
@@ -45,7 +55,7 @@
       const invalidated = ui.plan?.itemId === itemId && ui.plan.recipeKey && !choices.some(entry => entry.key === ui.plan.recipeKey);
       if ((recipeKey && !choices.some(entry => entry.key === recipeKey)) || (invalidated && !recipeKey)) ui.message = 'Choose a current recipe.';
       else {
-        ui.plan = { itemId, quantity, recipeKey: recipeKey || (choices.length === 1 ? choices[0].key : '') };
+        ui.plan = { itemId, quantity, recipeKey: recipeKey || (choices.length === 1 ? choices[0].key : ''), recipes: ui.plan?.itemId === itemId ? { ...ui.plan.recipes } : {} };
         ui.editing = false;
         ui.signature = '';
         ui.snapshot = null;
@@ -114,6 +124,53 @@
 
   function shoppingRenderKey() {
     const ui = AppState.ui.shopping;
-    return [ui.owner, ui.revision, ui.plan, ui.editing, ui.draft, ui.filter, ui.expanded, ui.refreshing, ui.unavailable, ui.message,
+    return [ui.owner, ui.revision, ui.plan, ui.editing, ui.draft, ui.filter, ui.expanded, ui.openSteps, ui.refreshing, ui.unavailable, ui.message,
       location.pathname, ui.plan ? Math.floor(Date.now() / 60000) : null];
+  }
+
+  function shoppingValidRecipeChoices(recipes) {
+    return recipes === undefined || shoppingRecord(recipes) && Object.entries(recipes).every(([id, key]) => quickId(id) && typeof key === 'string' && /^\d{1,10}:\d{1,10}$/.test(key));
+  }
+
+  function shoppingChooseRecipe(control) {
+    const owner = control.dataset.shoppingOwner, itemId = control.dataset.shoppingRecipeItem;
+    const ui = shoppingObserve(), runtime = quickRuntime();
+    if (!ui.plan || ui.owner !== owner || ui.unavailable || !quickId(itemId)) return;
+    if (!ui.snapshot?.nodes.some(node => !node.special && node.id === itemId)) return;
+    if (!(shoppingRecipes(runtime).byItem.get(itemId) || []).some(entry => entry.key === control.value)) return;
+    if (itemId === ui.plan.itemId) ui.plan.recipeKey = control.value;
+    else ui.plan.recipes = { ...ui.plan.recipes, [itemId]: control.value };
+    ui.signature = '';
+    ui.message = '';
+    shoppingPersist();
+    render();
+  }
+
+  function shoppingOpenStep(control) {
+    const ui = shoppingObserve(), key = control.dataset.shoppingStepLink;
+    if (!ui.snapshot?.nodes.some(node => node.key === key)) return;
+    ui.expanded = true;
+    (ui.openSteps ||= {})[key] = true;
+    render();
+    const step = document.getElementById(`iw-shopping-${key.replace(':', '-')}`);
+    step?.querySelector('summary')?.focus();
+    step?.scrollIntoView?.({ block: 'nearest' });
+  }
+
+  async function shoppingOpenRecipe(control) {
+    const ui = shoppingObserve(), runtime = quickRuntime();
+    if (!ui.owner || ui.owner !== control.dataset.shoppingOwner || quickBusy() || shoppingPending(runtime)) return;
+    const chosen = shoppingRecipes(runtime).recipes.find(entry => entry.key === control.dataset.shoppingNativeRecipe);
+    if (!chosen) return;
+    try {
+      if (!runtime.router?.navigateByUrl) throw new Error('Open the recipe from its native skill page.');
+      const route = `/skill/${chosen.skillId}/action/${chosen.recipe.id}`;
+      if (runtime.router.url === route) { leaveStats(); return; }
+      const navigated = await runtime.zone.run(() => runtime.router.navigateByUrl(route));
+      if (navigated === false) throw new Error('The native recipe page did not open.');
+      leaveStats();
+    } catch (error) {
+      ui.message = error.message;
+      render();
+    }
   }

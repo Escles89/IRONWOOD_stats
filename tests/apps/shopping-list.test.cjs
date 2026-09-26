@@ -5,7 +5,7 @@ const harness = require('../harness.cjs');
 function setup(storage = new Map(), configure = () => {}) {
   const listeners = {}, calls = [], errors = [];
   const page = { hidden: false, innerHTML: '', style: { setProperty() {} }, contains: () => true, querySelector: () => null, querySelectorAll: () => [] };
-  const document = { hidden: false, body: { textContent: '' }, querySelector: () => null, querySelectorAll: () => [],
+  const document = { getElementById: () => null, hidden: false, body: { textContent: '' }, querySelector: () => null, querySelectorAll: () => [],
     addEventListener(type, callback) { (listeners[type] ||= []).push(callback); } };
   const user = { displayName: 'Player', isSolo: false, inventory: { '101': { amount: 30 }, '102': { amount: 50 } }, charcoal: 12, skills: { '3': { exp: 0 } } };
   const runtime = { state: { user, isSolo: false, loadingApp: false, syncingData: false, syncUser(value) { this.user = value; } },
@@ -31,9 +31,9 @@ function setup(storage = new Map(), configure = () => {}) {
     }
   }
   function render() { currentCatalog(); h.context.render(); assert.deepEqual(errors, []); return page.innerHTML; }
-  function emit(type, attr, value, fields) {
+  function emit(type, attr, value, fields, dataset = {}) {
     currentCatalog();
-    const target = { value, dataset: { shoppingOwner: JSON.stringify([user.displayName, runtime.state.isSolo]) }, disabled: false,
+    const target = { value, dataset: { shoppingOwner: JSON.stringify([user.displayName, runtime.state.isSolo]), ...dataset }, open: value === true, disabled: false,
       matches: selector => selector === attr, closest: selector => selector === attr ? target : null,
       querySelector: selector => ({ value: fields?.[selector] ?? '' }) };
     for (const callback of listeners[type] || []) callback({ target, preventDefault() {}, stopPropagation() {} });
@@ -55,7 +55,7 @@ test('a saved target subtracts owned finished items and shows direct base costs 
   assert.match(html, /90 Iron Ore/);
   assert.match(html, /128 Charcoal/);
   assert.match(html, /Requires Smelting level 10.*current 1/);
-  assert.match(html, /Direct recipe detail/);
+  assert.match(html, /Full recipe chain/);
   assert.match(html, /href="\/skill\/3\/action\/30"/);
   assert.deepEqual(s.calls, []);
 });
@@ -270,4 +270,210 @@ test('the item picker contains only current craftable outputs and hides a single
   s.runtime.skillCatalog['3'].actions.push({ id: '31' });
   s.emit('click', '[data-shopping-edit]');
   assert.match(s.render(), /<select name="recipe"/);
+});
+
+function addRecipe(s, id, name, actionId, materials, extras = {}) {
+  s.runtime.catalog[id] = { id, name };
+  s.runtime.actionCatalog[actionId] = { id: actionId, name, level: 1, materials, drops: [{ id, chance: 1000 }], ...extras };
+  s.runtime.skillCatalog['3'].actions.push({ id: actionId });
+}
+
+test('the editable target expands a multilevel chain, reuses owned intermediates and observes deep balances', () => {
+  const s = setup();
+  addRecipe(s, '102', 'Iron Ore', '31', [{ id: '103', amount: 3 }], { charcoal: 1 });
+  s.runtime.catalog['103'] = { id: '103', name: 'Ore Fragments' };
+  s.user.inventory['103'] = { amount: 20 };
+  let html = s.save();
+  assert.match(html, /250 Ore Fragments/);
+  assert.match(html, /218 Charcoal \(native balance\)/);
+  assert.match(html, /Full recipe chain/);
+  assert.match(html, /Stock used 50.*Required output 90/);
+  assert.match(html, /href="\/skill\/3\/action\/31"/);
+  s.user.inventory['103'].amount = 100;
+  assert.match(s.render(), /170 Ore Fragments/);
+  s.emit('click', '[data-shopping-edit]');
+  html = s.save('101', '50');
+  assert.match(html, /Required output 0/);
+  assert.doesNotMatch(html, /170 Ore Fragments/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('a diamond combines shared intermediate demand before allocating stock and rounding verified unit batches', () => {
+  const s = setup();
+  s.user.inventory = { '104': { amount: 1 }, '105': { amount: 2 } };
+  s.user.charcoal = 0;
+  s.runtime.actionCatalog['30'].materials = [{ id: '102', amount: 1 }, { id: '103', amount: 1 }];
+  addRecipe(s, '102', 'Left Part', '31', [{ id: '104', amount: 1 }]);
+  addRecipe(s, '103', 'Right Part', '32', [{ id: '104', amount: 1 }]);
+  addRecipe(s, '104', 'Shared Part', '33', [{ id: '105', amount: 3 }]);
+  s.runtime.catalog['105'] = { id: '105', name: 'Dust' };
+  // Each arm needs one. The shared 1.5 stock leaves 0.5 to produce:
+  // rounding after aggregation needs one verified unit attempt, not two.
+  s.user.inventory['104'].amount = 1.5;
+  const html = s.save('101', '1');
+  assert.match(html, /1 Dust/);
+  assert.match(html, /Shared Part<\/strong><span>Required 2 · 0.5 to produce/);
+  assert.match(html, /Stock used 1.5 · Required output 0.5 · 1 base attempts · Projected surplus 0.5 \(not owned inventory\)/);
+  assert.equal((html.match(/data-shopping-step="item:104"/g) || []).length, 1);
+  assert.match(html, /Shared requirement — inspect combined step/);
+  for (const id of ['101', '102', '103', '104']) assert.ok(html.includes(`data-shopping-node="item:${id}" data-supply="insufficient"`));
+  s.emit('click', '[data-shopping-step-link]', '', null, { shoppingStepLink: 'item:104' });
+  assert.match(s.render(), /data-shopping-step="item:104" open/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('intermediate recipe choices persist, survive target edits and require explicit replacement when invalidated', () => {
+  const configure = runtime => {
+    runtime.catalog['103'] = { id: '103', name: 'Fragments' };
+    for (const [id, amount] of [['31', 3], ['32', 5]]) {
+      runtime.actionCatalog[id] = { id, name: `Ore route ${id}`, level: 1, materials: [{ id: '103', amount }], drops: [{ id: '102', chance: 1000 }] };
+      runtime.skillCatalog['3'].actions.push({ id });
+    }
+  };
+  const s = setup(new Map(), configure);
+  assert.match(s.save(), /Recipe for Iron Ore/);
+  assert.match(s.render(), /Choose a current recipe/);
+  s.emit('change', '[data-shopping-chain-recipe]', '3:32', null, { shoppingRecipeItem: '102' });
+  assert.match(s.render(), /450 Fragments/);
+  const reload = setup(s.storage, configure);
+  assert.match(reload.render(), /450 Fragments/);
+  reload.emit('click', '[data-shopping-edit]');
+  assert.match(reload.save('101', '110'), /550 Fragments/);
+  reload.runtime.skillCatalog['3'].actions = [{ id: '30' }, { id: '31' }];
+  assert.match(reload.render(), /Saved recipe is no longer available/);
+  assert.doesNotMatch(reload.render(), /330 Fragments/);
+  reload.emit('change', '[data-shopping-chain-recipe]', '3:31', null, { shoppingRecipeItem: '102' });
+  assert.match(reload.render(), /330 Fragments/);
+  reload.runtime.skillCatalog['3'].actions = [{ id: '30' }];
+  assert.match(reload.render(), /Saved recipe is no longer available/);
+  assert.deepEqual(reload.calls, []);
+});
+
+test('uncertain or unresolved intermediate production makes deterministic parent totals nominal', () => {
+  const s = setup();
+  addRecipe(s, '102', 'Iron Ore', '31', [{ id: '103', amount: 3 }], { failDrops: [{ id: '104', chance: 1000 }] });
+  s.runtime.catalog['103'] = { id: '103', name: 'Fragments' };
+  let html = s.save();
+  assert.match(html, /70 nominal attempts/);
+  assert.match(html, /Uncertain recipe chain/);
+  assert.match(html, /270 Fragments/);
+  s.runtime.actionCatalog['31'].drops[0].amount = 5;
+  html = s.render();
+  assert.match(html, /Unknown Fragments/);
+  assert.match(html, /70 nominal attempts/);
+  assert.doesNotMatch(html, /Base materials covered/);
+  s.user.inventory['102'].amount = 200;
+  assert.match(s.render(), /70 base attempts/);
+  s.user.inventory['102'].amount = 50;
+  addRecipe(s, '102', 'Iron Ore', '32', [{ id: '103', amount: 4 }]);
+  delete s.runtime.actionCatalog['31'];
+  s.runtime.skillCatalog['3'].actions = [{ id: '30' }, { id: '32' }];
+  html = s.render();
+  assert.match(html, /Saved recipe is no longer available/);
+  assert.match(html, /70 nominal attempts/);
+});
+
+test('cycles stop only the affected branch and incomplete identities remain separate from verified acquisition leaves', () => {
+  const s = setup();
+  addRecipe(s, '102', 'Iron Ore', '31', [{ id: '101', amount: 1 }, { id: '103', amount: 2 }]);
+  s.runtime.catalog['103'] = { id: '103', name: 'Flux' };
+  let html = s.save();
+  assert.match(html, /Recipe cycle to Iron Bar/);
+  assert.match(html, /180 Flux/);
+  assert.match(html, /70 nominal attempts/);
+  assert.match(html, /Unresolved branches/);
+  assert.deepEqual(s.calls, []);
+  s.runtime.actionCatalog['31'].materials = [{ id: '999', amount: 1 }, { id: '103', amount: 2 }];
+  html = s.render();
+  assert.match(html, /Unknown item \(999\)/);
+  assert.match(html, /180 Flux/);
+  assert.match(html, /Recipe data unresolved/);
+  assert.doesNotMatch(html, /Base materials covered/);
+  s.user.inventory['101'].amount = 100;
+  assert.match(s.render(), /Target satisfied/);
+  assert.doesNotMatch(s.render(), /Recipe cycle to/);
+  s.user.inventory['101'].amount = 0;
+  assert.match(s.render(), /100 to acquire/);
+});
+
+test('known shared costs remain visible when another branch has unknown output', () => {
+  const s = setup();
+  s.user.inventory = {};
+  s.runtime.actionCatalog['30'].materials = [{ id: '102', amount: 1 }, { id: '103', amount: 1 }];
+  addRecipe(s, '102', 'Certain Part', '31', [{ id: '104', amount: 3 }]);
+  addRecipe(s, '103', 'Variable Part', '32', [{ id: '104', amount: 4 }], { drops: [{ id: '103', chance: 1000, amount: 5 }] });
+  s.runtime.catalog['104'] = { id: '104', name: 'Shared Dust' };
+  const html = s.save('101', '10');
+  assert.match(html, /Unknown Shared Dust/);
+  assert.match(html, /Known required subtotal 30; complete requirement unknown/);
+  assert.match(html, /10 nominal attempts/);
+  assert.doesNotMatch(html, /Base materials covered/);
+});
+
+
+test('expanded recipe steps survive new observations, and invalid stored recipe maps are rejected', () => {
+  const s = setup(); s.save();
+  s.emit('toggle', '[data-shopping-details]', true);
+  s.emit('toggle', '[data-shopping-step]', true, null, { shoppingStep: 'item:101' });
+  s.user.inventory['101'].amount = 40;
+  let html = s.render();
+  assert.match(html, /data-shopping-details open/);
+  assert.match(html, /data-shopping-step="item:101" open/);
+  assert.match(html, /60 to acquire/);
+  const key = 'iw-status-shopping-v1:' + JSON.stringify(['Player', false]);
+  for (const recipes of [[], { bad: '3:30' }, { '102': 30 }, { '102': '3:broken' }]) {
+    s.storage.set(key, JSON.stringify({ version: 1, plan: { itemId: '101', quantity: 100, recipeKey: '3:30', recipes } }));
+    assert.doesNotMatch(setup(s.storage).render(), /to acquire/);
+  }
+});
+
+test('the icon tree shows dependencies and propagates an insufficient leaf to its parent icons', () => {
+  const s = setup();
+  s.runtime.catalog['101'].image = 'items/iron-bar.png';
+  addRecipe(s, '102', 'Iron Ore', '31', [{ id: '103', amount: 3 }]);
+  s.runtime.catalog['103'] = { id: '103', name: 'Fragments', image: 'items/fragments.png' };
+  s.user.charcoal = 1000;
+  let html = s.save();
+  assert.match(html, /class="iw-shopping-tree"/);
+  assert.match(html, /<ul class="iw-shopping-branches">/);
+  assert.match(html, /data-shopping-node="item:101" data-supply="insufficient"/);
+  assert.match(html, /data-shopping-node="item:102" data-supply="insufficient"/);
+  assert.match(html, /data-shopping-node="item:103" data-supply="insufficient"/);
+  assert.match(html, /src="\/assets\/items\/iron-bar.png"/);
+  assert.match(html, /Materials insufficient/);
+  s.user.inventory['103'] = { amount: 1000 };
+  html = s.render();
+  assert.match(html, /data-shopping-node="item:101" data-supply="covered"/);
+  assert.match(html, /data-shopping-node="item:102" data-supply="covered"/);
+  s.user.inventory['103'].amount = null;
+  assert.match(s.render(), /data-shopping-node="item:101" data-supply="unknown"/);
+});
+
+
+test('the shopping list is the last card on Status', () => {
+  const s = setup();
+  const html = s.save();
+  const cards = [...html.matchAll(/<section class="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(cards.at(-1), 'iw-card iw-shopping-card');
+  assert.ok(html.indexOf('iw-shopping-card') > html.indexOf('iw-potion-card'));
+});
+
+test('native recipe links navigate through the game router without starting production', async () => {
+  const s = setup(); s.save();
+  const routes = [];
+  s.runtime.router = { async navigateByUrl(route) { routes.push(route); return true; } };
+  s.emit('click', '[data-shopping-native-recipe]', '', null, { shoppingNativeRecipe: '3:30' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(routes, ['/skill/3/action/30']);
+  assert.deepEqual(s.calls, []);
+  assert.equal(s.page.hidden, true);
+});
+
+test('opening the native recipe already behind Status reveals it without another navigation', async () => {
+  const s = setup(); s.save();
+  s.runtime.router = { url: '/skill/3/action/30', async navigateByUrl() { throw Error('Already on this route'); } };
+  s.emit('click', '[data-shopping-native-recipe]', '', null, { shoppingNativeRecipe: '3:30' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(s.page.hidden, true);
+  assert.deepEqual(s.calls, []);
 });

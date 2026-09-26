@@ -64,7 +64,7 @@
       ? shoppingNumber(Object.hasOwn(inventory, id) ? inventory[id]?.amount : 0) : null;
   }
 
-  function shoppingCalculate(runtime, plan) {
+  function shoppingDirectCalculate(runtime, plan) {
     const catalog = shoppingRecipes(runtime), item = shoppingItem(runtime, plan.itemId);
     const balancesAvailable = !shoppingPending(runtime);
     const owned = balancesAvailable ? shoppingOwned(runtime, plan.itemId) : null;
@@ -92,9 +92,10 @@
     const requirements = new Map();
     if (!Array.isArray(recipe.materials)) result.gaps.push('Recipe ingredients unavailable.');
     else for (const material of recipe.materials) {
-      if (!quickId(material?.id) || !shoppingQuantity(material.amount)) { result.gaps.push('Unresolved ingredient or amount.'); continue; }
+      if (!quickId(material?.id)) { result.gaps.push('Unresolved ingredient or amount.'); continue; }
       const key = `item:${material.id}`, previous = requirements.get(key);
-      requirements.set(key, { id: material.id, key, perAttempt: shoppingNumber((previous?.perAttempt || 0) + material.amount) });
+      if (!shoppingQuantity(material.amount)) result.gaps.push('Unresolved ingredient or amount.');
+      requirements.set(key, { id: material.id, key, perAttempt: !shoppingQuantity(material.amount) || previous?.perAttempt === null ? null : shoppingNumber((previous?.perAttempt || 0) + material.amount) });
     }
     for (const [id, name] of Object.entries(SHOPPING_RESOURCES)) {
       if (!Object.hasOwn(recipe, id)) continue;
@@ -124,11 +125,8 @@
   }
 
   function shoppingObservationKey(runtime, plan, index) {
-    const user = runtime.state.user;
-    const chosen = (index.byItem.get(plan.itemId) || []).find(entry => entry.key === plan.recipeKey);
-    const inputs = Array.isArray(chosen?.recipe.materials) ? chosen.recipe.materials.map(row => row?.id).filter(quickId) : [];
-    return JSON.stringify([index.revision, plan.itemId, plan.quantity, plan.recipeKey,
-      [plan.itemId, ...new Set(inputs)].map(id => shoppingOwned(runtime, id)),
-      Object.keys(SHOPPING_RESOURCES).filter(id => chosen?.recipe[id] !== undefined).map(id => shoppingNumber(user[id])),
-      user.skills?.[chosen?.skillId]?.exp, shoppingPending(runtime)]);
+    const graph = shoppingGraph(runtime, plan, index), user = runtime.state.user;
+    return JSON.stringify([index.revision, plan,
+      graph.order.map(node => node.special ? shoppingNumber(user[node.id]) : shoppingOwned(runtime, node.id)),
+      SHOPPING_SKILLS.map(id => user.skills?.[id]?.exp), shoppingPending(runtime)]);
   }

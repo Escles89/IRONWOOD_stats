@@ -35,6 +35,7 @@
   "apps/mastery/native.js",
   "apps/mastery/view.js",
   "apps/shopping/native.js",
+  "apps/shopping/planner.js",
   "apps/shopping/service.js",
   "apps/shopping/view.js",
   "apps/status/selectors.js",
