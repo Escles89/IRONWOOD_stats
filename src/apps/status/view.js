@@ -299,6 +299,7 @@
               ${item.name === 'Coins' ? '<div class="iw-table-number iw-coin-inventory" aria-label="Not applicable"></div>' : `<div class="iw-table-number ${inventoryCounts.get(item.image.split('/').pop()?.split('?')[0])?.amount ? '' : 'iw-zero'}">${formatQuantityMarkup(inventoryCounts.get(item.image.split('/').pop()?.split('?')[0]))}</div>`}
             </div>`).join('')}</div>` : '<div class="iw-empty-loot">No loot waiting to be collected.</div>'}
         </section>`}
+        ${renderShoppingCard()}
         <section class="iw-card iw-activity-card">
           <div class="iw-card-header"><span>Status</span>${renderCacheRefreshButton()}</div>
           <div class="iw-status-list">

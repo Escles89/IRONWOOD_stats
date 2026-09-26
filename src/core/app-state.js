@@ -45,6 +45,8 @@
         preferencesTrigger: null,
         collectingLoot: false,
         quickSkills: { owner: null, data: null, open: false, busy: false, prompt: null, trigger: null, message: '', signature: '' },
+        shoppingCatalog: { cache: new WeakMap(), revision: 0 },
+        shopping: { owner: null, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', expanded: false },
         mastery: { owner: null, selected: '', snapshot: null, snapshots: {}, signature: '', message: '', refreshing: false, open: false, choosing: false },
         pendingLootClaim: null,
         lastAdventureCapture: 0,

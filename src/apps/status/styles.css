@@ -1132,3 +1132,26 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
   .iw-mastery-panel .iw-options-header-actions { gap: 6px; }
   .iw-mastery-requirements { grid-template-columns: 1fr; gap: 16px; }
 }
+      .iw-shopping-card { grid-column:1 / -1; align-self:start; min-width:0; }
+      .iw-shopping-body { padding:12px; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+      .iw-shopping-body p { margin:0 0 10px; }
+      .iw-shopping-actions { display:flex; flex-wrap:wrap; gap:6px; }
+      .iw-shopping-body form { display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin-bottom:12px; }
+      .iw-shopping-body label { display:flex; flex:1 1 180px; flex-direction:column; gap:4px; min-width:0; }
+      .iw-shopping-body input, .iw-shopping-body select { box-sizing:border-box; width:100%; min-width:0; min-height:36px; padding:6px; background:#171e28; color:#eee; border:1px solid #485263; border-radius:5px; font:inherit; }
+      .iw-shopping-body summary { cursor:pointer; padding:8px 0; font-weight:600; }
+      .iw-shopping-body table { width:100%; border-collapse:collapse; margin:8px 0; }
+      .iw-shopping-body th, .iw-shopping-body td { padding:7px; border-bottom:1px solid #394150; text-align:right; }
+      .iw-shopping-body th:first-child { text-align:left; }
+      .iw-shopping-body th small { display:block; color:#a6afbd; font-weight:400; }
+      .iw-shopping-body a { color:#a8cdf7; }
+      .iw-shopping-card :focus-visible { outline:2px solid #a8cdf7; outline-offset:3px; }
+      @media(max-width:600px) {
+        .iw-shopping-card .iw-card-header { flex-wrap:wrap; gap:8px; }
+        .iw-shopping-card button { min-height:36px; }
+        .iw-shopping-body thead { display:none; }
+        .iw-shopping-body tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:8px 0; border-bottom:1px solid #394150; }
+        .iw-shopping-body th { grid-column:1 / -1; }
+        .iw-shopping-body td, .iw-shopping-body th { border:0; text-align:left; }
+        .iw-shopping-body td::before { content:attr(data-label); display:block; color:#a6afbd; font-size:11px; }
+      }

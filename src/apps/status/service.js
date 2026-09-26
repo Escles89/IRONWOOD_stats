@@ -9,6 +9,7 @@
     renderGlobalDialog();
     if (document.hidden || !AppState.ui.page || AppState.ui.page.hidden) return;
     try {
+    shoppingObserve();
     const { action, loot, consumables, materials, masteryProgress, finiteQueue } = SourceAdapter.capture(document);
     if (action?.isCombat) action.weapon = readEquippedCombatWeapon();
     if (action?.nativeRebuilding) recoverStatusActionView();
@@ -102,6 +103,7 @@
       countdowns: { revive: action?.reviveRemainingMs || 0, queue: queueRemainingMs },
       panels: { adventureActive, adventureActionActive, guildTrialActionActive, guildEventActionActive, masteryAchieved } });
     const signature = JSON.stringify({
+      shopping: shoppingRenderKey(),
       currentRegion: currentActionRegion(action),
       weapon: action?.weapon,
       pendingAttunementShards: (cache.attunement?.selected || []).map(slot => readPendingAttunementShards(slot.skill)),

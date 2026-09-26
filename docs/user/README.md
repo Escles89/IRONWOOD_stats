@@ -14,3 +14,5 @@ Open **Status** above Inventory to follow your action, rewards, supplies and dai
 | [Troubleshooting](troubleshooting.md) | Resolve unknown values, disabled claims and pending automation. |
 
 Automation and fallback lookups are separate switches and both start off. You can use the dashboard and fill its snapshots by browsing Ironwood normally without enabling either one.
+
+- [Shopping list](shopping-list.md): save a finished-item target and inspect its direct ingredient shortages.

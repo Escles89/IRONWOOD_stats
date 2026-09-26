@@ -1,6 +1,6 @@
 # Finished-item shopping list
 
-Status: Design confirmed by the player on 2026-09-26. Ready for implementation; implementation has not started as part of this specification work.
+Status: Direct-recipe slice (#4) implemented on 2026-09-26. Recursive expansion (#5) remains pending. See `../technical/shopping-list.md` for implementation and validation evidence.
 
 ## Implementation tickets
 

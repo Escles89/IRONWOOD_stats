@@ -5,19 +5,26 @@
         event.stopImmediatePropagation();
         return;
       }
+      if (event.target.matches?.('[data-shopping-form]')) { event.preventDefault(); shoppingSave(event.target); return; }
       if (!event.target.matches?.('[data-quick-amount-form]')) return;
       event.preventDefault();
       quickSubmitAmount(event.target);
     }, true);
     document.addEventListener('input', event => {
+      if (event.target.matches?.('[data-shopping-quantity]') || event.target.matches?.('[data-shopping-filter]')) { shoppingDraft(event.target); return; }
       const form = event.target.closest?.('[data-quick-amount-form]');
       if (form) quickUpdateQuantity(form);
     }, true);
     document.addEventListener('toggle', event => {
+      if (event.target.matches?.('[data-shopping-details]')) AppState.ui.shopping.expanded = event.target.open;
       if (event.target.matches?.('[data-quest-options]')) AppState.ui.questOptionsExpanded = event.target.open;
       if (event.target.matches?.('[data-debug-section]')) { AppState.ui.debugUpdatedAt = 0; scheduleStatusRender(); }
     }, true);
     document.addEventListener('click', event => {
+      if (event.target.closest?.('[data-shopping-refresh]')) { shoppingRefresh(); return; }
+      if (event.target.closest?.('[data-shopping-edit]')) { shoppingEdit(); return; }
+      if (event.target.closest?.('[data-shopping-clear]')) { shoppingClear(); return; }
+      if (event.target.closest?.('[data-shopping-cancel]')) { AppState.ui.shopping.editing = false; render(); return; }
       if (event.target.matches?.('[data-quick-backdrop]')) { quickClose(); return; }
       if (AppState.ui.quickSkills.busy && event.target.closest?.('skill-page button.action-start, skill-page button.action-stop, skill-page modal-component button[type="submit"]')) {
         event.preventDefault();
@@ -58,6 +65,7 @@
       if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
     }, true);
     document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-shopping-item]') || event.target.matches?.('[data-shopping-recipe]')) { shoppingDraft(event.target); return; }
       if (event.target.matches?.('[data-debug-toggle]')) {
         localStorage.setItem(DEBUG_KEY, event.target.checked ? 'true' : 'false');
         AppState.ui.debugUpdatedAt = 0;
