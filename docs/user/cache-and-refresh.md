@@ -11,7 +11,7 @@ Status prefers information already available in the game, then reliable local ca
 | Local calculations | Known countdowns, House production, confirmed loot additions | Advances from observed data without opening another page. |
 | Requested claim | Challenges, Attunement, Taming, House | Opens or uses the native controls required for that action and confirms the result. |
 | Fallback read | Missing or incompatible snapshots | Allowed only when fallback lookups are enabled. |
-| Explicit refresh | User-requested cache synchronization | Requires fallback lookups and can reload otherwise usable snapshots. |
+| Explicit refresh | The Status panel's refresh icon | Reads all cache sources even with fallback lookups off, without changing that preference or running daily chores. |
 
 **Age alone does not schedule a lookup.** Usable old snapshots remain visible. There is no routine hourly Inventory or four-hourly Attunement refresh. A known timer can expire locally, but expiration alone does not prove a new game state; open the corresponding page to confirm it.
 

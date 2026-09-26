@@ -5,7 +5,9 @@ Open **Status** above Inventory to follow your action, rewards, supplies and dai
 | Start with | What you’ll find |
 | --- | --- |
 | [Installation](installation.md) | Install one script, understand Greasy Fork updates, set up your first visit. |
+| [How Ironwood works](../reference/ironwood-game.md) | Understand skills, resources and activities in the game itself. |
 | [Status dashboard](status-dashboard.md) | Read each panel, resource group, activity indicator and warning. |
+| [Quick Loot and Skills](quick-skills.md) | Collect and continue, start remembered actions, and configure recipe amounts. |
 | [Automations and preferences](automations.md) | Enable daily tasks, configure challenge buying/cancellation, understand claim recaps. |
 | [Cache and refresh](cache-and-refresh.md) | Know what is observed, calculated or read in the background. |
 | [Combat](combat.md) | Health, attacks, healing, death and revival. |
