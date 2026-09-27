@@ -41,18 +41,70 @@
     } catch { ui.message = 'The plan could not be saved in this browser.'; return false; }
   }
 
-  function plannedIdleReason(runtime = quickRuntime()) {
-    if (!quickOwner(runtime)) return 'Character identity unavailable.';
-    if (runtime.action?.actionLoading !== false || runtime.state.loadingApp !== false || runtime.state.syncingData !== false || runtime.state.appActive === false)
-      return 'Current action state is unknown or synchronizing. Refresh to check.';
+  function plannedCurrentState(runtime = quickRuntime(), collecting = false) {
+    const unknown = reason => ({ kind: 'unknown', reason });
+    if (!quickOwner(runtime)) return unknown('Character identity unavailable.');
+    if ((!collecting && runtime.action?.actionLoading !== false) || runtime.state.loadingApp !== false || runtime.state.syncingData !== false || runtime.state.appActive === false)
+      return unknown('Current action state is unknown or synchronizing. Refresh to check.');
     const action = runtime.state.user.action;
-    // Only the native explicit null represents idle. Missing state and elapsed
-    // projections cannot establish that the player stopped their action.
-    if (action === null) return runtime.action.actionLoot && !Object.keys(runtime.action.actionLoot).length ? '' : 'Current action state is inconsistent. Refresh to check.';
-    if (!quickId(action?.skillId) || !quickId(action?.actionId)) return 'Current action state is unknown. Refresh to check.';
-    return quickFiniteAction(action.skillId, runtime.actionCatalog?.[action.actionId], runtime)
-      ? 'A finite batch is still present. Stop and collect it manually before starting.'
-      : 'Stop continuous work manually before starting the plan.';
+    if (action === null) return runtime.action.actionLoot && !Object.keys(runtime.action.actionLoot).length
+      ? { kind: 'idle', reason: '' } : unknown('Current action state is inconsistent. Refresh to check.');
+    const metadata = runtime.actionCatalog?.[action?.actionId];
+    const members = runtime.skillCatalog?.[action?.skillId]?.actions;
+    if (!quickId(action?.skillId) || !metadata || !Array.isArray(members) || !members.some(member => member?.id === action.actionId))
+      return unknown('Current action state is unknown. Refresh to check.');
+    if (!quickFiniteAction(action.skillId, metadata, runtime))
+      return { kind: 'continuous', reason: 'Stop continuous work manually before starting the plan.' };
+    const output = metadata.drops?.[0]?.id, loot = runtime.action.actionLoot;
+    if (!output || !loot || typeof loot !== 'object' || Array.isArray(loot))
+      return unknown('Finite batch progress is unknown. Refresh to check.');
+    const completed = loot[output]?.amount;
+    if (completed !== undefined && (!Number.isSafeInteger(completed) || completed < 0))
+      return unknown('Finite batch progress is inconsistent. Refresh to check.');
+    // The native engine caps finite work using primary-output loot, not loops
+    // or elapsed estimates. Missing output is not evidence of completion.
+    if (!quickAmount(action.amount) || typeof action.startDate !== 'string' || !Number.isFinite(Date.parse(action.startDate)))
+      return unknown('Finite batch identity or quantity is unknown. Refresh to check.');
+    if (Number.isSafeInteger(completed) && completed >= action.amount)
+      return { kind: 'completed', reason: '' };
+    return { kind: 'unfinished', reason: 'Finite batch completion is unconfirmed. Unfinished work cannot be interrupted. Refresh to check.' };
+  }
+
+  function plannedCurrentBlockReason(runtime = quickRuntime()) {
+    return plannedCurrentState(runtime).reason;
+  }
+
+  function plannedReadyMessage(runtime = quickRuntime()) {
+    return plannedCurrentState(runtime).kind === 'completed'
+      ? 'Batch complete. Start when ready; the native start will collect its pending loot.' : 'Idle confirmed. Start when ready.';
+  }
+
+  function plannedActionIdentity(action) {
+    return action === null ? 'idle' : JSON.stringify([action?.skillId, action?.actionId, action?.startDate, action?.seed, action?.amount, action?.coinCraft, action?.useContracts]);
+  }
+
+  async function plannedReadCurrent(owner, expected, target = null, amount = null) {
+    const runtime = quickRuntime();
+    quickAssertOwner(owner, runtime);
+    // Do not run handleActionSync: native replay can automatically collect a
+    // finished batch. Reading getUser supplies evidence without that mutation.
+    const response = await runtime.zone.run(() => requestNativeUser(runtime.firebase));
+    quickAssertOwner(owner, runtime);
+    const remote = { ...runtime, state: { user: response?.user, isSolo: runtime.state.isSolo,
+      swappingCharacter: runtime.state.swappingCharacter, newVersion: runtime.state.newVersion } };
+    if (quickOwner(remote) !== owner)
+      throw new Error('Character changed. Refresh before starting.');
+    if (!response?.user?.inventory || response.user.action === undefined)
+      throw new Error('Current action evidence is unavailable. Refresh to check.');
+    if (plannedActionIdentity(response.user.action) !== expected)
+      throw new Error('The current action changed. Refresh to check; no further action was requested.');
+    if (target) {
+      const reason = plannedKnownReason(remote, target);
+      if (reason) throw new Error(reason);
+      if (target.finite && (!quickAmount(amount) || amount > remote.craftLimit?.(remote.state.user, remote.actionCatalog[target.actionId])))
+        throw new Error('Available supply changed. Start again to choose a new quantity.');
+    }
+    return response;
   }
 
   function plannedSave(form) {
@@ -92,25 +144,36 @@
     render();
   }
 
-  function plannedRequirementsKey(runtime) {
+  function plannedRequirementsKey(runtime, afterCollection = false) {
     const user = runtime.state.user;
-    return JSON.stringify([user.equipment, user.skills, user.inventory, user.coins, user.traits, user.masteries,
+    return JSON.stringify([user.equipment, user.skills, afterCollection ? null : user.inventory, afterCollection ? null : user.coins, user.traits, user.masteries,
       user.marks, user.adventure, user.guild, user.charcoal, user.compost, user.metalParts, user.sigilPieces, user.potionMix, user.arcanePowder]);
   }
 
-  function plannedAssertStart(owner, plan, native, amount) {
+  function plannedAssertStart(owner, plan, native, amount, transition, collecting = false) {
     quickAssertOwner(owner, native.runtime);
     const main = quickRuntime(), ui = AppState.ui;
     if (ui.quickSkills.request?.cancelled) throw new Error('Start cancelled. Plan kept.');
     if (ui.collectingLoot || ui.syncing || ui.nativeSync?.running || ui.runningChallenge || ui.collectingAttunementLoot
       || ui.collectingTaming || ui.collectingAutomation || ui.nativeCollectionPending || ui.pendingLootClaim || ui.recoveringActionView)
       throw new Error('Another action is in progress. The plan was kept.');
-    const reason = plannedIdleReason(main) || plannedIdleReason(native.runtime);
+    const reason = plannedCurrentState(main, collecting).reason || plannedCurrentState(native.runtime, collecting).reason;
     if (reason) throw new Error(reason);
+    if (transition) {
+      if (plannedActionIdentity(main.state.user.action) !== (transition.collected() ? 'idle' : transition.source)
+        || plannedActionIdentity(native.runtime.state.user.action) !== (transition.collected() ? 'idle' : transition.source))
+        throw new Error('The current action changed. No further action was requested. Plan kept.');
+    }
     if (AppState.ui.plannedAction.plan !== plan) throw new Error('The plan changed. No start was requested.');
     const target = plannedTargets(main, true).find(target => quickSameAction(target, plan));
     if (!target || !plannedTargets(native.runtime, true).some(entry => quickSameAction(entry, plan))) throw new Error('The planned action is no longer in the native skill catalog.');
-    if (plannedRequirementsKey(main) !== plannedRequirementsKey(native.runtime)) throw new Error('Native requirements changed while preparing. Refresh the plan before starting again.');
+    if (location.pathname !== STATS_PATH || main.router?.url !== `/skill/${target.skillId}/action/${target.actionId}`)
+      throw new Error('The native page changed. Plan kept.');
+    if (!transition?.collected() && plannedRequirementsKey(main) !== transition.requirements) throw new Error('Native requirements changed while preparing. Refresh the plan before starting again.');
+    if (transition?.collected() && plannedRequirementsKey(main, true) !== transition.stableRequirements)
+      throw new Error('Native requirements changed during collection. Plan kept.');
+    const requirementsReason = plannedKnownReason(main, target) || plannedKnownReason(native.runtime, target);
+    if (requirementsReason) throw new Error(requirementsReason);
     if (target.finite && (typeof main.craftLimit !== 'function' || !Number.isFinite(main.craftLimit(main.state.user, main.actionCatalog[target.actionId])) || !quickAmount(amount) || amount > native.limit() || amount > main.craftLimit?.(main.state.user, main.actionCatalog[target.actionId])))
       throw new Error('Available supply changed. Start again to choose a new quantity.');
   }
@@ -118,7 +181,7 @@
   function plannedStart() {
     const ui = plannedObserve(), target = plannedTargets().find(target => quickSameAction(target, ui.plan));
     if (!target || quickBusy()) return;
-    const reason = plannedIdleReason() || plannedKnownReason(quickRuntime(), target) || ui.observation?.reason;
+    const reason = plannedCurrentBlockReason() || plannedKnownReason(quickRuntime(), target) || ui.observation?.reason;
     if (reason) { ui.message = reason; render(); return; }
     return quickResume(target.skillId, { planned: { plan: ui.plan, target } });
   }
@@ -155,16 +218,19 @@
     ui.message = 'Refreshing current state and requirements…';
     render();
     try {
-      await synchronizeNativeGame({ quickAction: true });
+      await plannedReadCurrent(owner, plannedActionIdentity(quickRuntime().state.user.action));
       quickAssertOwner(owner, quickRuntime());
       const target = plannedTargets().find(target => quickSameAction(target, plan));
-      if (target) await withPage(`/skill/${target.skillId}/action/${target.actionId}`, 'skill-page', async (doc, frameWindow) => {
-        const native = await quickNativeReady(doc, frameWindow, target);
+      if (target) await withPlannedPage(`/skill/${target.skillId}/action/${target.actionId}`, 'skill-page', async (doc, frameWindow) => {
+        const native = await quickNativeReady(doc, frameWindow, target, true);
         quickAssertOwner(owner, native.runtime);
         if (ui.plan === plan) ui.observation = { reason: native.eligibilityReason(), observedAt: Date.now() };
       });
-      if (ui.owner === owner) ui.message = plannedIdleReason() || 'Idle confirmed.';
-    } catch (error) { if (ui.owner === owner) ui.message = `Refresh unavailable: ${error.message}`; }
+      if (ui.owner === owner) ui.message = plannedCurrentBlockReason() || plannedReadyMessage();
+    } catch (error) { if (ui.owner === owner) {
+      ui.message = `Refresh unavailable: ${error.message}`;
+      ui.observation = { reason: ui.message, observedAt: Date.now() };
+    } }
     finally { AppState.ui.quickSkills.busy = false; render(); }
   }
 
@@ -172,7 +238,7 @@
     const ui = plannedObserve(), runtime = quickRuntime();
     plannedTargets(runtime);
     return [ui.owner, ui.plan, ui.editing, ui.draft, ui.filter, ui.message, ui.observation,
-      AppState.ui.plannedCatalog.revision, quickBusy(), plannedIdleReason(runtime),
+      AppState.ui.plannedCatalog.revision, quickBusy(), plannedCurrentBlockReason(runtime),
       plannedKnownReason(runtime, plannedTargets(runtime).find(target => quickSameAction(target, ui.plan))),
       plannedKnownReason(runtime, plannedTargets(runtime).find(target => quickSameAction(target, ui.draft))), location.pathname,
       ui.observation ? Math.floor(Date.now() / 60000) : null];

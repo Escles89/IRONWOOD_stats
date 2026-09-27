@@ -1,6 +1,6 @@
   function installEventDelegation() {
     document.addEventListener('submit', event => {
-      if (AppState.ui.quickSkills.busy && event.target.closest?.('skill-page')) {
+      if (AppState.ui.quickSkills.busy && !AppState.ui.quickSkills.request?.nativeDispatch && event.target.closest?.('skill-page')) {
         event.preventDefault();
         event.stopImmediatePropagation();
         return;
@@ -36,7 +36,7 @@
       if (event.target.closest?.('[data-shopping-clear]')) { shoppingClear(); return; }
       if (event.target.closest?.('[data-shopping-cancel]')) { AppState.ui.shopping.editing = false; render(); return; }
       if (event.target.matches?.('[data-quick-backdrop]')) { quickClose(); return; }
-      if (AppState.ui.quickSkills.busy && event.target.closest?.('skill-page button.action-start, skill-page button.action-stop, skill-page modal-component button[type="submit"]')) {
+      if (AppState.ui.quickSkills.busy && !AppState.ui.quickSkills.request?.nativeDispatch && event.target.closest?.('skill-page button.action-start, skill-page button.action-stop, skill-page modal-component button[type="submit"]')) {
         event.preventDefault();
         event.stopImmediatePropagation();
         return;

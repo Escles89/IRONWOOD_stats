@@ -2,6 +2,203 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const setup = require('../fixtures/quick-skills.cjs');
 
+test('a completed finite batch uses native target-start collection and confirms its rewards separately', async () => {
+  const f = setup({ completedLoot: { sword: { amount: 10 } } });
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  assert.match(f.planCard(), /Batch complete/);
+  assert.doesNotMatch(f.planCard(), /data-planned-start[^>]*disabled/);
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.deepEqual(f.calls.filter(call => ['start', 'stop'].includes(call[0])).map(call => call[0]), ['stop', 'start']);
+  assert.doesNotMatch(f.planCard(), /data-planned-start/);
+  assert.match(f.lastToast().title, /Started Oak Tree/);
+  assert.equal(f.lastToast().metrics[0].value, '10');
+});
+
+test('a completed batch can start the same recipe with a new native quantity', async () => {
+  const f = setup({ completedLoot: { sword: { amount: 10 } } });
+  f.current('4', '103', 10); f.savePlan('4', '103', 5);
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.deepEqual(f.calls.filter(call => call[0] === 'start').map(call => call.slice(1, 4)), [['4', '103', 5]]);
+  assert.equal(f.calls.filter(call => call[0] === 'stop').length, 1);
+  assert.doesNotMatch(f.planCard(), /data-planned-start/);
+  assert.equal(f.calls.some(call => call[0] === 'frame'), false);
+});
+
+test('native eligibility still blocks same-recipe restarts of completed work', async () => {
+  for (const options of [{ unavailable: true }, { uniqueOwned: true }]) {
+    const f = setup({ ...options, completedLoot: { sword: { amount: 10 } } });
+    f.current('4', '103', 10); f.savePlan('4', '103', 5);
+    f.click('data-planned-start'); await f.until(() => !f.busy());
+    assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+    assert.match(f.planCard(), /Native requirements are not met/);
+  }
+});
+
+test('planned refresh reads current evidence without replaying native work or collecting a completed batch', async () => {
+  let replayed = 0;
+  const f = setup({ completedLoot: { sword: { amount: 10 } }, onActionSync() { replayed++; } });
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  f.click('data-planned-refresh'); await f.until(() => !f.busy());
+  assert.equal(replayed, 0);
+  assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+  assert.equal(f.calls.some(call => call[0] === 'frame'), false);
+  assert.match(f.planCard(), /Batch complete/);
+  assert.match(f.planCard(), /checked 0 min ago/);
+});
+
+test('read-only evidence preserves identity when native state uses prototype getters', async () => {
+  const f = setup(); f.current(null); f.savePlan('1', '102');
+  delete f.main.state.isSolo;
+  Object.setPrototypeOf(f.main.state, { get isSolo() { return false; } });
+  f.click('data-planned-refresh'); await f.until(() => !f.busy());
+  assert.match(f.planCard(), /Native start control available/);
+  assert.doesNotMatch(f.planCard(), /Character changed/);
+});
+
+test('completed batch collection survives a rejected or unconfirmed target start', async () => {
+  for (const failure of [{ startFailure: true }, { timeout: true }, { wrongTarget: true }]) {
+    const f = setup({ ...failure, completedLoot: { sword: { amount: 10 } } });
+    f.current('4', '103', 10); f.savePlan('1', '102');
+    f.click('data-planned-start'); f.click('data-planned-start'); f.click('data-quick-loot');
+    await f.until(() => !f.busy());
+    assert.match(f.planCard(), /data-planned-start/);
+    assert.match(f.lastToast().title, /Loot collected.*did not start/);
+    assert.equal(f.lastToast().metrics[0].value, '10');
+    assert.equal(f.calls.filter(call => call[0] === 'stop').length, 1);
+    assert.equal(f.calls.filter(call => call[0] === 'start').length, 1);
+  }
+});
+
+test('completed batches with missing or inconsistent evidence remain blocked even after their estimated finish', () => {
+  for (const evidence of ['loading', 'missing-loot', 'missing-identity', 'negative', 'fractional', 'unfinished', 'continuous']) {
+    const f = setup({ completedLoot: { sword: { amount: 10 } } });
+    f.current('4', '103', 10); f.savePlan('1', '102');
+    if (evidence === 'loading') f.main.action.actionLoading = true;
+    if (evidence === 'missing-loot') delete f.main.action.actionLoot;
+    if (evidence === 'missing-identity') delete f.main.state.user.action.startDate;
+    if (evidence === 'negative') f.main.action.actionLoot.sword.amount = -1;
+    if (evidence === 'fractional') f.main.action.actionLoot.sword.amount = 10.5;
+    if (evidence === 'unfinished') f.main.action.actionLoot.sword.amount = 9;
+    if (evidence === 'continuous') f.current('2', '101');
+    f.h.time(999999999);
+    assert.match(f.planCard(), /data-planned-start[^>]*disabled/, evidence);
+    f.click('data-planned-start');
+    assert.equal(f.calls.length, 0, evidence);
+  }
+});
+
+test('a replacement batch at native dispatch is never collected even if it too is complete', async () => {
+  const f = setup({ completedLoot: { sword: { amount: 10 } }, beforeNativeStart(runtime) {
+    runtime.state.user.action.startDate = '2026-09-27T07:00:00Z';
+  } });
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.equal(f.calls.some(call => ['stop', 'start'].includes(call[0])), false);
+  assert.equal(f.main.action.actionLoading, false);
+  assert.match(f.planCard(), /data-planned-start/);
+});
+
+test('new work, identity changes and concurrent claims after collection prevent the target start', async () => {
+  for (const change of ['action', 'identity', 'claim']) {
+    let f;
+    f = setup({ completedLoot: { sword: { amount: 10 } }, afterCollection(runtime) {
+      if (change === 'action') f.current('2', '101');
+      if (change === 'identity') runtime.state.user.displayName = 'Other';
+      if (change === 'claim') f.h.run('AppState.ui.collectingTaming = true');
+    } });
+    f.current('4', '103', 10); f.savePlan('1', '102');
+    f.click('data-planned-start'); await f.until(() => !f.busy());
+    assert.equal(f.calls.filter(call => call[0] === 'stop').length, 1, change);
+    assert.equal(f.calls.some(call => call[0] === 'start'), false, change);
+    assert.match(f.lastToast().title, /Loot collected.*did not start/, change);
+    if (change === 'identity') f.main.state.user.displayName = 'Player';
+    assert.match(f.planCard(), /data-planned-start/, change);
+  }
+});
+
+test('completed-batch success stays successful after a later synchronization error', async () => {
+  const f = setup({ completedLoot: { sword: { amount: 10 } }, postStartSyncFailure: true });
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.doesNotMatch(f.planCard(), /data-planned-start/);
+  assert.match(f.lastToast().title, /Started Oak Tree/);
+  assert.match(f.lastToast().warning, /synchronization failed/);
+  assert.equal(f.lastToast().metrics[0].value, '10');
+});
+
+test('a batch already collected by the native game starts from confirmed idle without another collection', async () => {
+  const f = setup({ completedLoot: { sword: { amount: 10 } } });
+  f.current('4', '103', 10); f.savePlan('1', '102'); f.current(null);
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.equal(f.calls.some(call => call[0] === 'stop'), false);
+  assert.doesNotMatch(f.planCard(), /data-planned-start/);
+});
+
+test('an exact native start response clears the plan even when native rendering fails immediately afterward', async () => {
+  const f = setup({ nativePostStartFailure: true, completedLoot: { sword: { amount: 10 } } });
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.doesNotMatch(f.planCard(), /data-planned-start/);
+  assert.match(f.lastToast().title, /Started Oak Tree/);
+});
+
+test('a collection response arriving after timeout cannot trigger a late target start', async () => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const f = setup({ completedLoot: { sword: { amount: 10 } }, beforeCollectionResponse: () => gate });
+  const originalStart = f.main.firebase.startAction, originalStop = f.main.firebase.stopAction;
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.match(f.planCard(), /data-planned-start/);
+  assert.match(f.lastToast().title, /Action not confirmed/);
+  release();
+  await f.drainNative();
+  assert.equal(f.calls.some(call => call[0] === 'start'), false);
+  assert.equal(f.main.firebase.startAction, originalStart);
+  assert.equal(f.main.firebase.stopAction, originalStop);
+  assert.match(f.planCard(), /data-planned-start/);
+});
+
+test('failed native collection never starts the target or reports unconfirmed rewards', async () => {
+  const f = setup({ stopFailure: true, completedLoot: { sword: { amount: 10 } } });
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.equal(f.calls.some(call => call[0] === 'start'), false);
+  assert.equal(f.calls.filter(call => call[0] === 'stop').length, 1);
+  assert.equal(f.lastToast().metrics.length, 0);
+  assert.match(f.planCard(), /data-planned-start/);
+});
+
+test('a race rejected at the native collection request releases the live loading state', async () => {
+  let reads = 0;
+  const f = setup({ completedLoot: { sword: { amount: 10 } }, remoteUser: user => ++reads === 2
+    ? { ...user, action: { ...user.action, startDate: '2026-09-27T09:00:00Z' } } : user });
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.equal(f.calls.some(call => ['stop', 'start'].includes(call[0])), false);
+  assert.equal(f.main.action.actionLoading, false);
+});
+
+test('a fresh remote replacement blocks collection even if both mounted runtimes still show the completed batch', async () => {
+  const f = setup({ completedLoot: { sword: { amount: 10 } }, remoteUser: server => ({ ...server, action: { ...server.action, startDate: '2026-09-27T09:00:00Z' } }) });
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+  assert.match(f.planCard(), /current action changed/i);
+  f.click('data-planned-refresh'); await f.until(() => !f.busy());
+  assert.match(f.planCard(), /data-planned-start[^>]*disabled/);
+});
+
+test('equipment changes during completed-batch collection reject the pending target', async () => {
+  const f = setup({ completedLoot: { sword: { amount: 10 } }, afterCollection(runtime) {
+    runtime.state.user.equipment = { weapon: { id: 'changed' } };
+  } });
+  f.current('4', '103', 10); f.savePlan('1', '102');
+  f.click('data-planned-start'); await f.until(() => !f.busy());
+  assert.equal(f.calls.some(call => call[0] === 'start'), false);
+  assert.match(f.lastToast().title, /Loot collected.*did not start/);
+});
+
 test('plan a never-run action without starting it or overwriting Last action', () => {
   const f = setup();
   assert.match(f.planCard(), /Planned next action/);

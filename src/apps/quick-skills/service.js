@@ -130,11 +130,12 @@
     const runtime = quickObserve(), ui = AppState.ui.quickSkills, owner = ui.owner;
     const target = planned?.target || (loot ? quickRunningTarget(runtime) : ui.data?.last[skillId]);
     if (!target || !owner || target.skillId === '15') return;
-    if (planned && plannedIdleReason(runtime)) return;
+    if (planned && plannedCurrentBlockReason(runtime)) return;
     if (edit && !target.finite) return;
-    if (!loot && quickSameAction(runtime.state.user.action, target) && !edit) return;
+    if (!planned && !loot && quickSameAction(runtime.state.user.action, target) && !edit) return;
     ui.busy = true;
     const request = { cancelled: false, attempted: false };
+    const transition = planned ? { source: plannedActionIdentity(runtime.state.user.action), requirements: plannedRequirementsKey(runtime), stableRequirements: plannedRequirementsKey(runtime, true), collected: () => false } : null;
     ui.request = request;
     ui.message = loot ? 'Collecting and continuing…' : edit ? 'Checking amount…' : `Preparing ${target.name}…`;
     if (loot) AppState.ui.collectingLoot = true;
@@ -142,9 +143,9 @@
     if (planned) render();
     let attempted = false, started = false, collected = false, detailsKnown = false, rewards = [], error = '', syncError = '';
     try {
-      await withPage(`/skill/${target.skillId}/action/${target.actionId}`, 'skill-page', async (doc, frameWindow) => {
+      await (planned ? withPlannedPage : withPage)(`/skill/${target.skillId}/action/${target.actionId}`, 'skill-page', async (doc, frameWindow) => {
         if (request.cancelled) return;
-        const native = await quickNativeReady(doc, frameWindow, target);
+        const native = await quickNativeReady(doc, frameWindow, target, !!planned);
         if (request.cancelled) return;
         quickAssertOwner(owner, native.runtime);
         if (planned) {
@@ -154,7 +155,7 @@
         }
         const same = quickSameAction(native.runtime.state.user.action, target);
         if (loot && !same) throw new Error('The current action changed before collection. Open Quick Loot again.');
-        if (same && !loot && !edit) { ui.message = `${target.name} is already Current.`; return; }
+        if (same && !planned && !loot && !edit) { ui.message = `${target.name} is already Current.`; return; }
         const preference = planned ? { amount: planned.plan.amount, reuse: true } : ui.data.amounts[quickActionKey(target)];
         let amount = loot && target.finite ? quickRemainingAmount(native.runtime, target) : preference?.amount;
         let choice = null;
@@ -185,11 +186,26 @@
           }
         }
         quickAssertOwner(owner, native.runtime);
-        const observation = quickObserveRequests(native.runtime, target, () => quickAssertOwner(owner, native.runtime), planned ? args => {
-          plannedAssertStart(owner, planned.plan, native, amount);
+        const observation = quickObserveRequests(native.runtime, target, () => quickAssertOwner(owner, native.runtime), planned ? async args => {
+          await plannedReadCurrent(owner, transition.collected() ? 'idle' : transition.source, target, amount);
+          plannedAssertStart(owner, planned.plan, native, amount, transition);
+          if (plannedNativeValue(plannedNativePage(native.runtime)?.canStart$) !== true
+            || plannedNativeValue(plannedNativePage(native.runtime)?.uniqueCraftable$) !== true) throw new Error('Native requirements changed. Plan kept.');
           if (target.finite && args[2] !== amount) throw new Error('The native quantity changed.');
+        } : null, planned ? async () => {
+          await plannedReadCurrent(owner, transition.source, target, amount);
+          plannedAssertStart(owner, planned.plan, native, amount, transition, true);
+          if (plannedCurrentState(native.runtime, true).kind !== 'completed') throw new Error('Only a confirmed completed batch can be collected by this start.');
         } : null);
-        const receipt = observeCollectionRewards(frameWindow, ['stopAction']);
+        const receipt = observeCollectionRewards(frameWindow, ['stopAction'], native.runtime);
+        if (transition) transition.collected = () => receipt.confirmed();
+        if (planned) native.guardCollection(() => {
+          try {
+            plannedAssertStart(owner, planned.plan, native, amount, transition);
+            if (plannedCurrentState(native.runtime).kind !== 'completed') throw new Error('Only a completed batch may be collected.');
+            return true;
+          } catch (failure) { observation.refuse(failure); return false; }
+        });
         const hadAction = !!native.runtime.state.user.action;
         try {
           if (loot) {
@@ -215,16 +231,16 @@
             if (request.cancelled) return;
           }
           if (planned) {
-            plannedAssertStart(owner, planned.plan, native, amount);
-            await synchronizeNativeGame({ quickAction: true });
-            plannedAssertStart(owner, planned.plan, native, amount);
+            plannedAssertStart(owner, planned.plan, native, amount, transition);
+            await plannedReadCurrent(owner, transition.source, target, amount);
+            plannedAssertStart(owner, planned.plan, native, amount, transition);
           }
           quickAssertOwner(owner, native.runtime);
           if (!control || control.disabled) throw new Error('This action is unavailable. Open its native page to check the requirements.');
           attempted = true;
           request.attempted = true;
-          control.click();
-          await quickWaitUntil(() => observation.started() && quickSameAction(native.runtime.state.user.action, target), observation, 12000);
+          native.click(control);
+          await quickWaitUntil(() => observation.started() && (planned || quickSameAction(native.runtime.state.user.action, target)), observation, 12000);
           quickAssertOwner(owner, native.runtime);
           started = true;
           if (planned) plannedStarted(owner, planned.plan);
@@ -246,7 +262,8 @@
     finally {
       if (attempted && quickOwner(quickRuntime()) === owner) {
         try {
-          await synchronizeNativeGame({ quickAction: true });
+          if (planned) await plannedReadCurrent(owner, plannedActionIdentity(quickRuntime().state.user.action));
+          else await synchronizeNativeGame({ quickAction: true });
           try { await refreshStatusActionSource(); }
           catch (failure) { syncError = `Live action view refresh failed: ${failure.message}`; }
         }

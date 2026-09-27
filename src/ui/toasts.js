@@ -120,7 +120,7 @@
 
   // Observe the existing request subscription; never issue or subscribe to a
   // second collection request. Only reward notifications are intercepted.
-  function observeCollectionRewards(targetWindow = globalThis, methods = []) {
+  function observeCollectionRewards(targetWindow = globalThis, methods = [], nativeRuntime = null) {
     const rewards = new Map();
     const restores = [];
     let confirmed = false;
@@ -132,7 +132,7 @@
       rewards.set(key, { ...reward, amount: (previous?.amount || 0) + reward.amount });
     };
     try {
-      const runtime = findNativeSyncRuntime(targetWindow);
+      const runtime = nativeRuntime || findNativeSyncRuntime(targetWindow);
       const itemReward = (id, amount) => {
         const item = runtime.catalog?.[id];
         return { name: item?.name || 'Item reward', image: item?.image ? `/assets/${item.image}` : '', amount };

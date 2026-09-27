@@ -5,17 +5,19 @@ const harness = require('../harness.cjs');
 // delegated user events. Native controls execute the inspected stop/start flow.
 function setup(options = {}) {
   const listeners = {}, nodes = new Map(), calls = [], subscriptions = [], tasks = [];
-  let h, now = 100000, amountModal = false, quantity = null, frameRuntime, frameWindow;
+  let h, now = 100000, amountModal = false, quantity = null, frameRuntime, frameWindow, nativeDoc, nativePage;
   const document = {
     activeElement: null, hidden: false,
     addEventListener(type, handler) { (listeners[type] ||= []).push(handler); },
     createElement() { return element(); },
     querySelector(selector) {
+      if (selector === 'skill-page') return nativeDoc;
+      if (selector.startsWith('skill-page ')) return nativeDoc?.querySelector(selector);
       if (selector === 'nav-component .nav') return wrapper;
       if (selector.startsWith('#')) return nodes.get(selector.split(' ')[0].slice(1)) || null;
       return null;
     },
-    querySelectorAll(selector) { return selector === 'nav-component .scroll > button' ? nav : []; },
+    querySelectorAll(selector) { if (selector === 'skill-page button.action-start, skill-page button.action-invalid') return []; return selector.startsWith('skill-page ') ? nativeDoc?.querySelectorAll(selector) || [] : selector === 'nav-component .scroll > button' ? nav : []; },
     body: { appendChild(node) { nodes.set(node.id, node); node.isConnected = true; } }
   };
   function element() {
@@ -45,7 +47,7 @@ function setup(options = {}) {
   function runtime() {
     const rt = {
       state: { loadingApp: false, syncingData: false, appActive: true, user: structuredClone(server), isSolo: server.isSolo, syncUser(user) { this.user = user; } },
-      action: { actionLoading: false, actionLoot: server.action ? { ore: { amount: 12 } } : {}, handleActionSync() {} },
+      action: { actionLoading: false, actionLoot: server.action ? structuredClone(options.completedLoot || { ore: { amount: 12 } }) : {}, handleActionSync() { options.onActionSync?.(); } },
       automations: { handleAutomationSync() {} }, expedition: { handleExpeditionSync() {} }, zone: { run: task => task() },
       actionCatalog: metadata, skillCatalog: Object.fromEntries(ids.map((id, i) => [id, { id, name: names[i] }])), skillOrder: ids,
       catalog: { ore: { name: 'Copper Ore', image: 'items/ore.png' }, sword: { name: 'Copper Sword', image: 'items/sword.png' } },
@@ -54,6 +56,7 @@ function setup(options = {}) {
       firebase: {
         async stopAction() {
           calls.push(['stop']);
+          await options.beforeCollectionResponse?.();
           return new Observable(observer => {
             subscriptions.push('stop');
             if (options.stopFailure) observer.error(Error('Collection rejected'));
@@ -80,7 +83,7 @@ function setup(options = {}) {
           await options.beforeSync?.();
           return new Observable(observer => {
             if (options.syncFailure || options.postStartSyncFailure && calls.some(call => call[0] === 'start')) observer.error(Error('Offline'));
-            else { observer.next({ user: structuredClone(server), time: 100000 }); observer.complete(); }
+            else { observer.next({ user: structuredClone(options.remoteUser?.(server) || server), time: 100000 }); observer.complete(); }
             return { unsubscribe() {} };
           });
         }
@@ -91,35 +94,53 @@ function setup(options = {}) {
   const main = runtime();
   const members = { '1': ['102'], '2': ['101'], '4': ['103'], '6': ['104'], '7': ['104'], '8': ['104'], '14': ['104'], '13': ['105'] };
   for (const [id, skill] of Object.entries(main.skillCatalog)) skill.actions = (members[id] || []).map(id => ({ id }));
-  h = harness({ document, setTimeout: (task, ms) => ms <= 200 ? Promise.resolve().then(() => { now += ms; h.time(now); task(); }) : setTimeout(task, ms), clearTimeout, window: {}, history: { replaceState() {} }, location: { pathname: options.route || '/status', search: '', hash: '' } });
+  h = harness({ document, setTimeout: (task, ms) => ms <= 200 ? Promise.resolve().then(() => { now += ms; h.time(now); task(); }) : setTimeout(task, ms), clearTimeout, HTMLInputElement: class {}, Event: class {}, window: {}, history: { replaceState() {} }, location: { pathname: options.route || '/status', search: '', hash: '' } });
   h.context.findNativeSyncRuntime = target => frameWindow && target === frameWindow ? frameRuntime : main;
   // Only toast DOM is omitted; the real recap data remains in AppState.
   h.context.renderActionToasts = () => null;
-  h.context.withPage = async (route, selector, task) => {
-    calls.push(['frame', route]);
-    frameRuntime = runtime();
-    frameRuntime.skillCatalog = main.skillCatalog;
-    if (options.frameOwner) frameRuntime.state.user.displayName = options.frameOwner;
+  function buildNativePage(route, rt) {
+    frameRuntime = rt;
     frameWindow = { location: { pathname: route }, HTMLInputElement: class {}, Event: class {} };
     const [, skillId, actionId] = route.match(/skill\/(\d+)\/action\/(\d+)/);
     const crafting = ['3', '4', '11', '12', '10', '16'].includes(skillId);
-    const current = () => frameRuntime.state.user.action?.skillId === skillId && frameRuntime.state.user.action?.actionId === actionId;
+    const current = () => rt.state.user.action?.skillId === skillId && rt.state.user.action?.actionId === actionId;
     const consume = async response => new Promise((resolve, reject) => response.subscribe({ next: resolve, error: reject, complete() {} }));
-    const stop = async () => {
-      const value = await consume(await frameRuntime.firebase.stopAction());
-      frameRuntime.state.user = value;
-      frameRuntime.action.actionLoot = {};
+    rt.action.firebaseSvc = rt.firebase;
+    rt.action.handleStopAction = async function() {
+      this.actionLoading = true;
+      const response = await this.firebaseSvc.stopAction();
+      let value;
+      try { value = await consume(response); }
+      catch { this.actionLoading = false; return false; }
+      rt.state.user = value;
+      this.actionLoot = {};
+      this.actionLoading = false;
+      await options.afterCollection?.(rt);
+      return true;
     };
-    const start = async () => {
-      options.beforeNativeStart?.(frameRuntime);
-      if (frameRuntime.state.user.action) await stop();
-      const value = await consume(await frameRuntime.firebase.startAction(skillId, actionId, crafting ? quantity : undefined, true, false));
-      frameRuntime.state.user = { ...frameRuntime.state.user, action: value.action };
+    const page = {
+      skillId, actionId, actionSvc: rt.action, firebaseSvc: rt.firebase,
+      canStart$: { subscribe(next) { next(!options.unavailable); return {unsubscribe() {}}; } },
+      uniqueCraftable$: { subscribe(next) { next(!options.uniqueOwned); return {unsubscribe() {}}; } },
+      openAmountModal() { calls.push(['amount-dialog']); amountModal = true; },
+      async handleStartAction() {
+        this.loading = true;
+        options.beforeNativeStart?.(rt);
+        if (rt.state.user.action && !await this.actionSvc.handleStopAction()) { this.loading = false; return; }
+        const response = await this.firebaseSvc.startAction(skillId, actionId, crafting ? quantity : undefined, true, false);
+        let value;
+        try { value = await consume(response); }
+        catch { this.loading = false; return; }
+        if (options.nativePostStartFailure) throw new Error('Native view failed after confirmed response');
+        rt.state.user = { ...rt.state.user, action: value.action };
+        this.loading = false;
+      }
     };
-    const actionButton = { textContent: 'Gather', disabled: !!options.unavailable, click() { tasks.push(start().catch(() => {})); } };
-    const stopButton = { textContent: 'Stop & Loot', disabled: false, click() { tasks.push(stop().catch(() => {})); } };
-    const amountButton = { textContent: 'Amount', disabled: !!options.unavailable, click() { calls.push(['amount-dialog']); amountModal = true; } };
-    const submit = { textContent: 'Craft', disabled: false, matches: () => false, click() { calls.push(['quantity-submit', quantity]); tasks.push(start().catch(() => {})); } };
+    const actionButton = { textContent: 'Gather', disabled: !!options.unavailable, click() { tasks.push(page.handleStartAction().catch(() => {})); } };
+    const stopButton = { textContent: 'Stop & Loot', disabled: false, click() { tasks.push(rt.action.handleStopAction().catch(() => {})); } };
+    const amountButton = { textContent: 'Amount', disabled: !!options.unavailable, click() { page.openAmountModal(); } };
+    const submit = { textContent: 'Craft', disabled: false, matches: () => false, click() { calls.push(['quantity-submit', quantity]); tasks.push(page.handleStartAction().catch(() => {})); } };
+    for (const control of [actionButton, stopButton, amountButton, submit]) control.closest = () => null;
     const input = { set value(value) { quantity = Number(value); }, dispatchEvent() {} };
     const doc = {
       querySelector(selector) {
@@ -137,9 +158,22 @@ function setup(options = {}) {
     if (options.noReceiptDetails) delete frameRuntime.action.actionLoot;
     if (options.zeroRewards) frameRuntime.action.actionLoot = {};
     if (options.finiteLoot) frameRuntime.action.actionLoot = { sword: { amount: 4 } };
+    return { doc, page };
+  }
+  h.context.withPage = async (route, selector, task) => {
+    calls.push(['frame', route]);
+    const rt = runtime(); rt.skillCatalog = main.skillCatalog;
+    if (options.frameOwner) rt.state.user.displayName = options.frameOwner;
+    const { doc } = buildNativePage(route, rt);
     try { return await task(doc, frameWindow); }
     finally { calls.push(['frame-removed']); }
   };
+  main.router = { url: '/skill/2/action/101', async navigateByUrl(route) {
+    calls.push(['route', route]); this.url = route;
+    const result = buildNativePage(route, main); nativeDoc = result.doc; nativePage = result.page;
+    return true;
+  } };
+  main.outletContexts = { getContext: () => ({ outlet: { get component() { return nativePage; } } }) };
   h.context.installEventDelegation();
   function render() { h.run('StatusRenderer.render(AppState)'); }
   function panel() { return nodes.get('iw-quick-skills-panel')?.innerHTML || ''; }
@@ -166,10 +200,11 @@ function setup(options = {}) {
     }
   }
   function learn(skillId, actionId, amount) { main.state.user.action = { skillId, actionId, amount }; render(); }
-  function current(skillId, actionId, amount) { server = { ...server, action: skillId ? { skillId, actionId, amount } : null }; main.state.user = structuredClone(server); if (!skillId) main.action.actionLoot = {}; render(); }
+  function current(skillId, actionId, amount) { server = { ...server, action: skillId ? { skillId, actionId, amount, startDate: '2026-09-27T06:00:00Z' } : null }; main.state.user = structuredClone(server); if (!skillId) main.action.actionLoot = {}; render(); }
   render();
   return { h, main, calls, subscriptions, render, panel, controls, click, until, busy, lastToast, submit, learn, current, nodes, document, listeners,
     frame: () => frameRuntime,
+    drainNative: () => Promise.all(tasks),
     planCard: () => h.run('renderPlannedActionCard()'),
     savePlan(skillId, actionId, amount = '') {
       const form = { dataset: { plannedOwner: JSON.stringify([main.state.user.displayName, main.state.isSolo]) }, elements: { skill: {value: skillId}, action: {value: actionId}, amount: {value: String(amount)} }, matches: selector => selector === '[data-planned-form]' };

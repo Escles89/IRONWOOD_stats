@@ -45,6 +45,7 @@
         state: service('syncUser'), firebase: service('getUser'), action: service('handleActionSync'),
         automations: service('handleAutomationSync'), expedition: service('handleExpeditionSync'),
         zone: Zone && injector.get(Zone, null), router,
+        outletContexts: router?.navigationTransitions?.rootContexts || service('onChildOutletCreated'),
         mastery: discoverNativeMastery(MasteryPage, modules),
         attunementCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Woodcutting' && item.skillId != null) && Object.values(value).every(item => item?.skillId != null)),
         skillCatalog: exports.find(value => value && typeof value === 'object' && value['8']?.name === 'Defense' && value['1']?.name === 'Woodcutting' && Array.isArray(value['1'].actions)),

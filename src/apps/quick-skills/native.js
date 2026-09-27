@@ -12,7 +12,7 @@
     return runtime.state.user.action?.amount - completed;
   }
 
-  async function quickNativeReady(doc, frameWindow, target) {
+  async function quickNativeReady(doc, frameWindow, target, planned = false) {
     let runtime;
     const started = Date.now();
     while (Date.now() - started < 10000) {
@@ -22,7 +22,7 @@
       await wait(100);
     }
     if (!quickOwner(runtime) || !runtime.actionCatalog?.[target.actionId]) throw new Error('Native action metadata is unavailable. Open the skill page.');
-    if (frameWindow.location.pathname !== `/skill/${target.skillId}/action/${target.actionId}`) throw new Error('Ironwood redirected this action. Open the skill page to check access.');
+    if ((planned ? runtime.router?.url : frameWindow.location.pathname) !== `/skill/${target.skillId}/action/${target.actionId}`) throw new Error('Ironwood redirected this action. Open the skill page to check access.');
     const metadata = runtime.actionCatalog[target.actionId];
     if (quickFiniteAction(target.skillId, metadata, runtime) !== target.finite) throw new Error('This action changed. Run it from its native page first.');
     const buttons = () => [...doc.querySelectorAll('skill-page button.action-start')];
@@ -33,8 +33,17 @@
       if (!Number.isFinite(available) || available < 0) throw new Error('Native material limit is unavailable.');
       return Math.min(Math.floor(available), metadata.uniqueCraft ? 1 : 1000000);
     };
-    return { runtime, limit,
+    const page = planned ? plannedNativePage(runtime) : null;
+    const invocation = planned ? plannedNativeInvocation(runtime, page) : null;
+    return { runtime: invocation?.runtime || runtime, limit, click: control => invocation ? invocation.click(control) : control.click(),
+      guardCollection: guard => invocation?.guardCollection(guard),
       eligibilityReason() {
+        if (planned) {
+          if (page.skillId !== target.skillId || page.actionId !== target.actionId) return 'Native action selection changed. Refresh to check.';
+          if (plannedNativeValue(page.canStart$) !== true || plannedNativeValue(page.uniqueCraftable$) !== true)
+            return 'Native requirements are not met. Check level, materials, equipment and access on the native page.';
+          if (quickSameAction(runtime.state.user.action, target) && plannedCurrentState(runtime).kind === 'completed') return '';
+        }
         const invalid = [...doc.querySelectorAll('skill-page button.action-invalid')].map(button => clean(button.textContent)).filter(Boolean);
         if (invalid.length) return invalid.join('. ');
         const controls = buttons();
@@ -56,6 +65,10 @@
       },
       stopButton: () => [...doc.querySelectorAll('skill-page button.action-stop')].find(button => /Stop\s*&\s*Loot/i.test(clean(button.textContent))),
       async startControl(amount) {
+        if (planned && quickSameAction(runtime.state.user.action, target) && target.finite) {
+          if (this.eligibilityReason()) return null;
+          runtime.zone.run(() => page.openAmountModal(metadata));
+        }
         const start = Date.now();
         while (Date.now() - start < 5000) {
           const controls = buttons();
@@ -64,7 +77,7 @@
             if (!input) {
               const amountButton = controls.find(button => clean(button.textContent) === 'Amount');
               if (amountButton?.disabled) return null;
-              if (amountButton) amountButton.click();
+              if (amountButton) invocation ? invocation.click(amountButton) : amountButton.click();
               await wait(50);
               input = doc.querySelector('skill-page modal-component input[name="quantity"]');
             }
@@ -91,16 +104,21 @@
   // Wrap the game's existing call and subscription, without sending a request.
   // A revoked start guard remains only in the disposable frame: a late stop
   // response must not start anything after a timeout or character change.
-  function quickObserveRequests(runtime, target, assertOwner, beforeStart = null) {
+  function quickObserveRequests(runtime, target, assertOwner, beforeStart = null, beforeStop = null) {
     const original = runtime.firebase.startAction;
     if (typeof original !== 'function') throw new Error('Native start confirmation is unavailable.');
     let active = true, started = false, settled = false, error = '', invoked = false;
+    // Native handlers catch observable errors, but not rejected Firebase
+    // promises. Deliver guard refusals through their normal error channel so
+    // they release loading state without requesting a mutation.
+    const rejected = failure => ({ subscribe(observer) { observer.error(failure); return { unsubscribe() {} }; } });
     async function observed(...args) {
       try {
         if (!active || invoked) throw new Error('This action request has expired.');
         assertOwner();
         if (args[0] !== target.skillId || args[1] !== target.actionId) throw new Error('The native start target changed.');
-        beforeStart?.(args);
+        if (beforeStart) await beforeStart(args);
+        if (!active || invoked) throw new Error('This action request has expired.');
         invoked = true;
         const response = await original.apply(this, args);
         const Observable = response?.constructor;
@@ -120,19 +138,26 @@
           error(failure) { settled = true; error = failure?.message || 'Ironwood rejected the action.'; subscriber.error(failure); },
           complete() { settled = true; if (!started && !error) error = 'Ironwood returned no action confirmation.'; subscriber.complete(); }
         }));
-      } catch (failure) { settled = true; error = failure.message; throw failure; }
+      } catch (failure) { settled = true; error = failure.message; if (beforeStart) return rejected(failure); throw failure; }
     }
     const originalStop = runtime.firebase.stopAction;
-    const refuseStop = async () => {
-      error = 'Current work appeared. The planned action will not stop or collect it.';
-      throw new Error(error);
+    let stopInvoked = false;
+    const guardedStop = async function(...args) {
+      try {
+        if (!active || stopInvoked || !beforeStop) throw new Error('Current work appeared. The planned action will not stop or collect it.');
+        stopInvoked = true;
+        await beforeStop(args);
+        if (!active) throw new Error('This action request has expired.');
+        return await originalStop.apply(this, args);
+      } catch (failure) { error = failure.message; return rejected(failure); }
     };
-    if (beforeStart) runtime.firebase.stopAction = refuseStop;
+    if (beforeStart) runtime.firebase.stopAction = guardedStop;
     runtime.firebase.startAction = observed;
-    return { started: () => started, error: () => error, restore() {
+    return { started: () => started, error: () => error, refuse(failure) { error = failure.message; }, restore() {
       active = false;
-      if (beforeStart && settled && runtime.firebase.stopAction === refuseStop) runtime.firebase.stopAction = originalStop;
-      if (settled && runtime.firebase.startAction === observed) runtime.firebase.startAction = original;
+      // Planned guards stay revoked in this disposable frame, including for
+      // handlers resuming after a collection timeout.
+      if (!beforeStart && settled && runtime.firebase.startAction === observed) runtime.firebase.startAction = original;
     } };
   }
 

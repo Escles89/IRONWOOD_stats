@@ -1,6 +1,6 @@
 # Planned next action
 
-Status: Idle-only slice (#6) implemented on 2026-09-27. Direct transitions from completed finite batches (#7) remain pending. See the technical integration document for validation limits.
+Status: Idle-only slice (#6) and completed finite batch handling (#7) implemented on 2026-09-27. Live read-only checks cover an unfinished finite batch; a completed-batch live start has not been exercised. See the technical integration document for validation limits.
 
 ## Implementation tickets
 
