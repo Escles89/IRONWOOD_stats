@@ -103,6 +103,7 @@
       countdowns: { revive: action?.reviveRemainingMs || 0, queue: queueRemainingMs },
       panels: { adventureActive, adventureActionActive, guildTrialActionActive, guildEventActionActive, masteryAchieved } });
     const signature = JSON.stringify({
+      plannedAction: plannedRenderKey(),
       shopping: shoppingRenderKey(),
       currentRegion: currentActionRegion(action),
       weapon: action?.weapon,

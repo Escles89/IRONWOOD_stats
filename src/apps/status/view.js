@@ -313,6 +313,7 @@
         </section>
         ${renderPotionPanel(displayedPotions, potionTypes)}
         ${renderAutomationsPanel(automationRows, cache, automationOn)}
+        ${renderPlannedActionCard()}
         ${renderShoppingCard()}
       </div>`;
   }

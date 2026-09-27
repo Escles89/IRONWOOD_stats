@@ -1247,3 +1247,15 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
         .iw-shopping-body td, .iw-shopping-body th { border:0; text-align:left; }
         .iw-shopping-body td::before { content:attr(data-label); display:block; color:#a6afbd; font-size:11px; }
       }
+
+/* The plan is a persistent, manual-only Status card. */
+#iw-stats-page .iw-planned-card { min-width: 0; }
+#iw-stats-page .iw-planned-body { padding: 16px; overflow-wrap: anywhere; }
+#iw-stats-page .iw-planned-body p { margin: 8px 0; }
+#iw-stats-page .iw-planned-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+#iw-stats-page [data-planned-form] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+#iw-stats-page [data-planned-form] label { display: grid; gap: 6px; min-width: 0; }
+#iw-stats-page [data-planned-form] input, #iw-stats-page [data-planned-form] select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 40px; padding: 8px; color: inherit; background: #252b33; border: 1px solid #4d5868; border-radius: 5px; }
+#iw-stats-page .iw-planned-card button { min-height: 40px; }
+#iw-stats-page .iw-planned-card :focus-visible { outline: 2px solid #a5cdf7; outline-offset: 2px; }
+@media (max-width: 600px) { #iw-stats-page [data-planned-form] { grid-template-columns: 1fr; } }

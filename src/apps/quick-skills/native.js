@@ -34,6 +34,13 @@
       return Math.min(Math.floor(available), metadata.uniqueCraft ? 1 : 1000000);
     };
     return { runtime, limit,
+      eligibilityReason() {
+        const invalid = [...doc.querySelectorAll('skill-page button.action-invalid')].map(button => clean(button.textContent)).filter(Boolean);
+        if (invalid.length) return invalid.join('. ');
+        const controls = buttons();
+        if (controls.some(button => !button.disabled)) return '';
+        return controls.length ? 'Native requirements are not met. Check level, materials, equipment and access on the native page.' : 'Native eligibility is unavailable. Refresh to check.';
+      },
       quantityInfo(amount) {
         const user = runtime.state.user, output = metadata.drops?.[0]?.id;
         const owned = output && user.inventory ? user.inventory[output]?.amount || 0 : null;
@@ -84,7 +91,7 @@
   // Wrap the game's existing call and subscription, without sending a request.
   // A revoked start guard remains only in the disposable frame: a late stop
   // response must not start anything after a timeout or character change.
-  function quickObserveRequests(runtime, target, assertOwner) {
+  function quickObserveRequests(runtime, target, assertOwner, beforeStart = null) {
     const original = runtime.firebase.startAction;
     if (typeof original !== 'function') throw new Error('Native start confirmation is unavailable.');
     let active = true, started = false, settled = false, error = '', invoked = false;
@@ -93,6 +100,7 @@
         if (!active || invoked) throw new Error('This action request has expired.');
         assertOwner();
         if (args[0] !== target.skillId || args[1] !== target.actionId) throw new Error('The native start target changed.');
+        beforeStart?.(args);
         invoked = true;
         const response = await original.apply(this, args);
         const Observable = response?.constructor;
@@ -114,9 +122,16 @@
         }));
       } catch (failure) { settled = true; error = failure.message; throw failure; }
     }
+    const originalStop = runtime.firebase.stopAction;
+    const refuseStop = async () => {
+      error = 'Current work appeared. The planned action will not stop or collect it.';
+      throw new Error(error);
+    };
+    if (beforeStart) runtime.firebase.stopAction = refuseStop;
     runtime.firebase.startAction = observed;
     return { started: () => started, error: () => error, restore() {
       active = false;
+      if (beforeStart && settled && runtime.firebase.stopAction === refuseStop) runtime.firebase.stopAction = originalStop;
       if (settled && runtime.firebase.startAction === observed) runtime.firebase.startAction = original;
     } };
   }

@@ -13,3 +13,5 @@ New to the project? Start with the [project walkthrough](../project-overview.md)
 - [Event effects](event-effects.md)
 - [Testing](testing.md)
 - [Release process and local loader](release-process.md)
+
+- [Planned next action](planned-next-action.md): scoped plans and guarded idle starts through Quick Skills.

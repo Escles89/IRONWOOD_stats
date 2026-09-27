@@ -53,6 +53,7 @@
         craftTime: SkillPage?.prototype.calcCraftTime,
         skillEstimates: SkillPage?.prototype.calcEstimates,
         skillLevel: exports.find(value => typeof value === 'function' && ['3500', '3.5', 'Math.log'].every(marker => Function.prototype.toString.call(value).includes(marker)) && Function.prototype.toString.call(value).length < 300),
+        actionSkillLevel: discoverPlannedSkillLevel(SkillPage, modules),
         skillLevelXp: exports.find(value => typeof value === 'function' && ['3500', '3.5', 'Math.floor'].every(marker => Function.prototype.toString.call(value).includes(marker)) && !Function.prototype.toString.call(value).includes('Math.log') && Function.prototype.toString.call(value).length < 250),
         craftLimit: exports.find(value => typeof value === 'function' && ['.materials', '.charcoal', '.compost', '.metalParts', '.sigilPieces', '.potionMix', '.arcanePowder', 'Math.floor'].every(marker => Function.prototype.toString.call(value).includes(marker)) && Function.prototype.toString.call(value).length < 1600),
         regionCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Forest' && Array.isArray(item.skills) && item.tributeId != null)),

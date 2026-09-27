@@ -1,6 +1,6 @@
 # Planned next action
 
-Status: Design confirmed by the player on 2026-09-26. Ready for implementation; implementation has not started as part of this specification work.
+Status: Idle-only slice (#6) implemented on 2026-09-27. Direct transitions from completed finite batches (#7) remain pending. See the technical integration document for validation limits.
 
 ## Implementation tickets
 

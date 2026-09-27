@@ -125,11 +125,12 @@
     skill.button.click();
   }
 
-  async function quickResume(skillId, { edit = false, loot = false } = {}) {
+  async function quickResume(skillId, { edit = false, loot = false, planned = null } = {}) {
     if (quickBusy() || (loot && !automationEnabled())) return;
     const runtime = quickObserve(), ui = AppState.ui.quickSkills, owner = ui.owner;
-    const target = loot ? quickRunningTarget(runtime) : ui.data?.last[skillId];
+    const target = planned?.target || (loot ? quickRunningTarget(runtime) : ui.data?.last[skillId]);
     if (!target || !owner || target.skillId === '15') return;
+    if (planned && plannedIdleReason(runtime)) return;
     if (edit && !target.finite) return;
     if (!loot && quickSameAction(runtime.state.user.action, target) && !edit) return;
     ui.busy = true;
@@ -138,6 +139,7 @@
     ui.message = loot ? 'Collecting and continuing…' : edit ? 'Checking amount…' : `Preparing ${target.name}…`;
     if (loot) AppState.ui.collectingLoot = true;
     syncQuickSkills();
+    if (planned) render();
     let attempted = false, started = false, collected = false, detailsKnown = false, rewards = [], error = '', syncError = '';
     try {
       await withPage(`/skill/${target.skillId}/action/${target.actionId}`, 'skill-page', async (doc, frameWindow) => {
@@ -145,20 +147,25 @@
         const native = await quickNativeReady(doc, frameWindow, target);
         if (request.cancelled) return;
         quickAssertOwner(owner, native.runtime);
+        if (planned) {
+          const reason = native.eligibilityReason();
+          AppState.ui.plannedAction.observation = { reason, observedAt: Date.now() };
+          if (reason) throw new Error(reason);
+        }
         const same = quickSameAction(native.runtime.state.user.action, target);
         if (loot && !same) throw new Error('The current action changed before collection. Open Quick Loot again.');
         if (same && !loot && !edit) { ui.message = `${target.name} is already Current.`; return; }
-        const preference = ui.data.amounts[quickActionKey(target)];
+        const preference = planned ? { amount: planned.plan.amount, reuse: true } : ui.data.amounts[quickActionKey(target)];
         let amount = loot && target.finite ? quickRemainingAmount(native.runtime, target) : preference?.amount;
         let choice = null;
         if (target.finite) {
           const limit = native.limit();
           if (edit || (!loot && !preference?.reuse) || !quickAmount(amount) || amount > limit) {
-            choice = await quickPromptAmount(target, preference, limit, { edit, shortage: quickAmount(amount) && amount > limit, quantityInfo: native.quantityInfo });
+            choice = await quickPromptAmount(target, preference, limit, { edit, planned: !!planned, shortage: quickAmount(amount) && amount > limit, quantityInfo: native.quantityInfo });
             if (!choice) { ui.message = ''; return; }
             quickAssertOwner(owner, native.runtime);
             amount = choice.amount;
-            if (choice.save) {
+            if (choice.save && !planned) {
               ui.data.amounts[quickActionKey(target)] = { amount, reuse: choice.reuse };
               quickPersist(owner, ui.data);
             }
@@ -168,17 +175,20 @@
         if (edit) return;
         // A prompt can remain open while materials change. Reopen, never clamp.
         while (target.finite && amount > native.limit()) {
-          choice = await quickPromptAmount(target, ui.data.amounts[quickActionKey(target)], native.limit(), { shortage: true, quantityInfo: native.quantityInfo });
+          choice = await quickPromptAmount(target, planned ? preference : ui.data.amounts[quickActionKey(target)], native.limit(), { planned: !!planned, shortage: true, quantityInfo: native.quantityInfo });
           if (!choice) { ui.message = ''; return; }
           quickAssertOwner(owner, native.runtime);
           amount = choice.amount;
-          if (choice.save) {
+          if (choice.save && !planned) {
             ui.data.amounts[quickActionKey(target)] = { amount, reuse: choice.reuse };
             quickPersist(owner, ui.data);
           }
         }
         quickAssertOwner(owner, native.runtime);
-        const observation = quickObserveRequests(native.runtime, target, () => quickAssertOwner(owner, native.runtime));
+        const observation = quickObserveRequests(native.runtime, target, () => quickAssertOwner(owner, native.runtime), planned ? args => {
+          plannedAssertStart(owner, planned.plan, native, amount);
+          if (target.finite && args[2] !== amount) throw new Error('The native quantity changed.');
+        } : null);
         const receipt = observeCollectionRewards(frameWindow, ['stopAction']);
         const hadAction = !!native.runtime.state.user.action;
         try {
@@ -193,16 +203,21 @@
           let control = await native.startControl(amount);
           if (request.cancelled) return;
           while (target.finite && amount > native.limit()) {
-            choice = await quickPromptAmount(target, ui.data.amounts[quickActionKey(target)], native.limit(), { shortage: true, quantityInfo: native.quantityInfo });
+            choice = await quickPromptAmount(target, planned ? preference : ui.data.amounts[quickActionKey(target)], native.limit(), { planned: !!planned, shortage: true, quantityInfo: native.quantityInfo });
             if (!choice) { ui.message = ''; return; }
             quickAssertOwner(owner, native.runtime);
             amount = choice.amount;
-            if (choice.save) {
+            if (choice.save && !planned) {
               ui.data.amounts[quickActionKey(target)] = { amount, reuse: choice.reuse };
               quickPersist(owner, ui.data);
             }
             control = await native.startControl(amount);
             if (request.cancelled) return;
+          }
+          if (planned) {
+            plannedAssertStart(owner, planned.plan, native, amount);
+            await synchronizeNativeGame({ quickAction: true });
+            plannedAssertStart(owner, planned.plan, native, amount);
           }
           quickAssertOwner(owner, native.runtime);
           if (!control || control.disabled) throw new Error('This action is unavailable. Open its native page to check the requirements.');
@@ -212,6 +227,7 @@
           await quickWaitUntil(() => observation.started() && quickSameAction(native.runtime.state.user.action, target), observation, 12000);
           quickAssertOwner(owner, native.runtime);
           started = true;
+          if (planned) plannedStarted(owner, planned.plan);
           await wait(100);
           if (quickOwner(quickRuntime()) === owner) {
             ui.data.last[target.skillId] = target;
@@ -236,6 +252,7 @@
         }
         catch (failure) { syncError = `Game synchronization failed: ${failure.message}`; }
       }
+      if (planned && AppState.ui.plannedAction.owner === owner && !started) AppState.ui.plannedAction.message = error || (request.cancelled ? 'Start cancelled. Plan kept.' : ui.message);
       ui.busy = false;
       ui.request = null;
       if (loot) AppState.ui.collectingLoot = false;

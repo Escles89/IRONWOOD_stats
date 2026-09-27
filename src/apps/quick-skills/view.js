@@ -64,13 +64,13 @@
         <div><span>Estimated Time</span><b data-quick-time>${escapeHtml(info.time)}</b></div>
       </div>
       ${prompt.shortage ? '<p class="iw-quick-shortage">Your configured amount exceeds the available supply. Choose an amount for this run.</p>' : ''}
-      <form data-quick-amount-form><input id="iw-quick-amount" name="amount" type="number" min="1" step="1" inputmode="numeric" aria-label="Quantity" placeholder="Quantity" required value="${escapeHtml(prompt.value)}">
+      <form data-quick-amount-form><input id="iw-quick-amount" name="amount" type="number" min="1" step="1" inputmode="numeric" aria-label="${prompt.planned ? 'Native quantity (not guaranteed output)' : 'Quantity'}" placeholder="Quantity" required value="${escapeHtml(prompt.value)}">
         <div class="iw-quick-craft-buttons"><button type="submit" class="iw-small-button" data-quick-craft ${valid ? '' : 'disabled'}>${prompt.edit ? 'Save amount' : 'Craft'}</button><button type="button" class="iw-small-button iw-quick-craft-all" data-quick-amount-choice="all" ${prompt.limit < 1 ? 'disabled' : ''}>${prompt.edit ? 'Use max' : 'Craft All'}</button><button type="button" class="iw-small-button" data-quick-amount-choice="target" title="${prompt.edit ? 'Save the quantity needed' : 'Craft enough'} to reach the entered inventory total" ${targetValid ? '' : 'disabled'}>Target</button></div>
         <p data-quick-amount-error role="alert"></p>
         <div class="iw-quick-quantity-options">
-          <label class="iw-quick-check"><input type="checkbox" name="reuse" ${prompt.reuse ? 'checked' : ''}><span>Reuse this configured amount</span></label>
+          ${prompt.planned ? '<p>Native quantity, not guaranteed output. This choice applies to this start; the saved plan stays unchanged unless the start succeeds.</p><input type="checkbox" name="reuse" hidden>' : `<label class="iw-quick-check"><input type="checkbox" name="reuse" ${prompt.reuse ? 'checked' : ''}><span>Reuse this configured amount</span></label>
           ${prompt.shortage ? `<label class="iw-quick-check"><input type="checkbox" name="save" ${prompt.save ? 'checked' : ''}><span>Replace my configured amount</span></label>` : ''}
-          <small>${prompt.edit ? 'Saving does not start the action.' : 'Reuse skips this prompt next time you start this recipe.'}</small>
+          <small>${prompt.edit ? 'Saving does not start the action.' : 'Reuse skips this prompt next time you start this recipe.'}</small>`}
         </div>
       </form></div>`);
     }
@@ -181,11 +181,11 @@
     (ui.trigger?.isConnected ? ui.trigger : document.querySelector('[data-quick-skills]'))?.focus();
   }
 
-  function quickPromptAmount(target, preference, limit, { edit = false, shortage = false, quantityInfo } = {}) {
+  function quickPromptAmount(target, preference, limit, { edit = false, shortage = false, quantityInfo, planned = false } = {}) {
     return new Promise(resolve => {
       const ui = AppState.ui.quickSkills;
       ui.open = true;
-      ui.prompt = { resolve, target, limit, edit, shortage, quantityInfo, value: preference?.amount || '', reuse: preference?.reuse !== false };
+      ui.prompt = { resolve, target, limit, edit, shortage, quantityInfo, planned, value: preference?.amount || '', reuse: preference?.reuse !== false };
       syncQuickSkills();
       document.querySelector('#iw-quick-amount')?.focus();
     });
