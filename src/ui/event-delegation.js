@@ -23,6 +23,17 @@
       if (event.target.matches?.('[data-debug-section]')) { AppState.ui.debugUpdatedAt = 0; scheduleStatusRender(); }
     }, true);
     document.addEventListener('click', event => {
+      const recipeOpen = event.target.closest?.('[data-recipe-open]');
+      if (recipeOpen) { recipeOpenPlanner(recipeOpen); return; }
+      const recipeCollectControl = event.target.closest?.('[data-recipe-collect]');
+      if (recipeCollectControl) { recipeCollect(recipeCollectControl); return; }
+      const recipeStartControl = event.target.closest?.('[data-recipe-start]');
+      if (recipeStartControl) { recipeStart(recipeStartControl); return; }
+      const recipeSelect = event.target.closest?.('[data-recipe-select]');
+      if (recipeSelect) { recipeChange(recipeSelect, 'selected'); return; }
+      const recipeUse = event.target.closest?.('[data-recipe-use]');
+      if (recipeUse) { recipeActivate(recipeUse); return; }
+      if (event.target.closest?.('[data-recipe-refresh]')) { recipeRefresh(); return; }
       if (event.target.closest?.('[data-planned-refresh]')) { plannedRefresh(); return; }
       if (event.target.closest?.('[data-planned-start]')) { plannedStart(); return; }
       if (event.target.closest?.('[data-planned-edit]')) { plannedEdit(); return; }
@@ -75,6 +86,8 @@
       if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
     }, true);
     document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-recipe-source]')) { recipeChange(event.target, 'source'); return; }
+      if (event.target.matches?.('[data-recipe-quantity]')) { recipeChange(event.target, 'quantity'); return; }
       if (event.target.matches?.('select[data-planned-field]')) { plannedDraft(event.target); return; }
       if (event.target.matches?.('[data-shopping-conversion]')) { shoppingChooseConversion(event.target); return; }
       if (event.target.matches?.('[data-shopping-chain-recipe]')) { shoppingChooseRecipe(event.target); return; }

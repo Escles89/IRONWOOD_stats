@@ -74,9 +74,10 @@
         </div>
       </form></div>`);
     }
+    if (AppState.ui.recipePlan.open) return shell(`${quickModalHeading('Recipe Calc & planner', 'Preview, choose, then start each action manually.', '/assets/icon.png', 'Close planner')}<div class="iw-quick-body iw-recipe-planner">${renderRecipePlanner()}</div>`);
     return shell(`${quickModalHeading('Skills', 'Your last actions, ready when you are.', '/assets/icon.png', 'Close Skills')}
       <div class="iw-quick-body"><p class="iw-quick-message${ui.message ? ' has-message' : ''}" role="status">${escapeHtml(ui.message || 'Start a remembered action, or open a skill to choose something new.')}</p>
-      <ul class="iw-quick-grid">${quickSkills(runtime).map(skill => {
+      ${renderRecipeSummary()}<ul class="iw-quick-grid">${quickSkills(runtime).map(skill => {
         const target = ui.data?.last[skill.id];
         const current = quickSameAction(runtime?.state.user?.action, target);
         const region = currentActionRegion({ skillName: skill.name }, runtime);
@@ -149,12 +150,20 @@
     if (ui.signature !== markup) {
       const focused = host.contains(document.activeElement) ? document.activeElement : null;
       const focusLabel = focused?.getAttribute('aria-label');
+      const focusAttributes = ['data-shopping-filter', 'data-shopping-item', 'data-shopping-recipe', 'data-shopping-quantity', 'data-planned-field'];
+      const focusAttribute = focusAttributes.find(name => focused?.hasAttribute?.(name));
+      const focusValue = focusAttribute && focused.getAttribute(focusAttribute);
+      const selection = focused && Number.isInteger(focused.selectionStart) ? [focused.selectionStart, focused.selectionEnd] : null;
       const scrollTop = host.querySelector('.iw-quick-body')?.scrollTop || 0;
       host.innerHTML = markup;
       const body = host.querySelector('.iw-quick-body');
       if (body) body.scrollTop = scrollTop;
       ui.signature = markup;
-      if (focusLabel) {
+      if (focusAttribute) {
+        const input = [...host.querySelectorAll(`[${focusAttribute}]`)].find(input => input.getAttribute(focusAttribute) === focusValue);
+        input?.focus();
+        if (selection) input?.setSelectionRange?.(...selection);
+      } else if (focusLabel) {
         const button = [...host.querySelectorAll('[aria-label]')].find(button => button.getAttribute('aria-label') === focusLabel && !button.disabled);
         (button || host.querySelector('[data-quick-close]'))?.focus();
       }
@@ -176,6 +185,7 @@
     ui.prompt?.resolve(null);
     ui.prompt = null;
     ui.open = false;
+    AppState.ui.recipePlan.open = false;
     syncQuickSkills();
     // The toolbar may have been refreshed while the request was running.
     (ui.trigger?.isConnected ? ui.trigger : document.querySelector('[data-quick-skills]'))?.focus();
@@ -224,10 +234,10 @@
   }
 
   function handleQuickSkillKey(event) {
-    if (!AppState.ui.quickSkills.open) return false;
+    if (!AppState.ui.quickSkills.open || AppState.ui.shopping.selectedStep) return false;
     if (event.key === 'Escape') { event.preventDefault(); quickClose(); return true; }
     if (event.key !== 'Tab') return false;
-    const controls = [...(document.querySelector('#iw-quick-skills-panel')?.querySelectorAll('button:not(:disabled), input:not(:disabled), a[href]:not([tabindex="-1"]), summary') || [])]
+    const controls = [...(document.querySelector('#iw-quick-skills-panel')?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href]:not([tabindex="-1"]), summary') || [])]
       .filter(control => control.tagName === 'SUMMARY' || !control.closest('details:not([open])'));
     const index = controls.indexOf(document.activeElement);
     if (index < 0 || (event.shiftKey ? index === 0 : index === controls.length - 1)) {

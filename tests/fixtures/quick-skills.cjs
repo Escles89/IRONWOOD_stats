@@ -60,7 +60,7 @@ function setup(options = {}) {
           return new Observable(observer => {
             subscriptions.push('stop');
             if (options.stopFailure) observer.error(Error('Collection rejected'));
-            else { server = { ...server, action: null }; observer.next(structuredClone(server)); observer.complete(); }
+            else { server = options.collectionUser ? options.collectionUser(server) : { ...server, action: null }; observer.next(structuredClone(server)); observer.complete(); }
             return { unsubscribe() {} };
           });
         },
@@ -95,6 +95,7 @@ function setup(options = {}) {
   const members = { '1': ['102'], '2': ['101'], '4': ['103'], '6': ['104'], '7': ['104'], '8': ['104'], '14': ['104'], '13': ['105'] };
   for (const [id, skill] of Object.entries(main.skillCatalog)) skill.actions = (members[id] || []).map(id => ({ id }));
   h = harness({ document, setTimeout: (task, ms) => ms <= 200 ? Promise.resolve().then(() => { now += ms; h.time(now); task(); }) : setTimeout(task, ms), clearTimeout, HTMLInputElement: class {}, Event: class {}, window: {}, history: { replaceState() {} }, location: { pathname: options.route || '/status', search: '', hash: '' } });
+  if (options.storage) for (const [key, value] of options.storage) h.storage.set(key, value);
   h.context.findNativeSyncRuntime = target => frameWindow && target === frameWindow ? frameRuntime : main;
   // Only toast DOM is omitted; the real recap data remains in AppState.
   h.context.renderActionToasts = () => null;
@@ -183,8 +184,8 @@ function setup(options = {}) {
     const tag = [...source.matchAll(/<(?:button|li)\b([^>]*)>/g)].find(match => match[1].includes(`${attribute}${value ? `="${value}"` : ''}`));
     assert.ok(tag, `Rendered control ${attribute}=${value}`);
     if (/(?:^|\s)disabled(?:\s|$)/.test(tag[1])) return;
-    const key = attribute.slice(5).replace(/-([a-z])/g, (_, char) => char.toUpperCase());
-    const target = { dataset: { [key]: value }, disabled: false, closest: selector => selector.includes(`[${attribute}]`) ? target : null };
+    const dataset = Object.fromEntries([...tag[1].matchAll(/data-([\w-]+)(?:="([^"]*)")?/g)].map(([, key, value]) => [key.replace(/-([a-z])/g, (_, char) => char.toUpperCase()), (value || '').replaceAll('&quot;', '"').replaceAll('&amp;', '&').replaceAll('&#39;', "'")]));
+    const target = { dataset, disabled: false, closest: selector => selector.includes(`[${attribute}]`) ? target : null };
     for (const handler of listeners.click) handler({ target, preventDefault() {}, stopImmediatePropagation() {}, stopPropagation() {} });
   }
   async function until(predicate) { for (let i = 0; i < 500; i++) { if (predicate()) return; await Promise.resolve(); } assert.fail('Workflow did not reach expected state: ' + JSON.stringify({calls, subscriptions, now, message:h.run('AppState.ui.quickSkills.message'), sync:h.run('AppState.ui.nativeSync')})); }

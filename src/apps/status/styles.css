@@ -1259,3 +1259,17 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
 #iw-stats-page .iw-planned-card button { min-height: 40px; }
 #iw-stats-page .iw-planned-card :focus-visible { outline: 2px solid #a5cdf7; outline-offset: 2px; }
 @media (max-width: 600px) { #iw-stats-page [data-planned-form] { grid-template-columns: 1fr; } }
+
+  .iw-recipe-summary, .iw-recipe-steps { padding: 14px; margin: 10px 0; border: 1px solid #46556b; border-radius: 12px; background: #192330; overflow-wrap: anywhere; }
+  .iw-recipe-summary p, .iw-recipe-steps p { margin: 8px 0; line-height: 1.5; }
+  .iw-recipe-summary .iw-small-button { margin: 4px 6px 4px 0; }
+  .iw-recipe-planner { display: block; min-width: 0; }
+  .iw-recipe-planner .iw-card { margin-bottom: 16px; min-width: 0; }
+  .iw-recipe-steps h3 { margin: 0 0 10px; font-size: 16px; }
+  .iw-recipe-steps ol { padding-left: 22px; }
+  .iw-recipe-steps li { padding: 12px 0; border-bottom: 1px solid #364558; }
+  .iw-recipe-steps label { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+  .iw-recipe-steps input, .iw-recipe-steps select { box-sizing: border-box; max-width: 100%; min-width: 0; padding: 8px; color: inherit; background: #101821; border: 1px solid #61718a; border-radius: 6px; }
+  .iw-recipe-steps a { color: #a8d3ff; }
+  @media (max-width: 600px) { .iw-recipe-summary, .iw-recipe-steps { padding: 10px; } .iw-recipe-planner .iw-shopping-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .iw-quick-panel svg.iw-shopping-connections { width: 100%; height: 43px; }

@@ -66,8 +66,8 @@
       ? shoppingNumber(Object.hasOwn(inventory, id) ? inventory[id]?.amount : 0) : null;
   }
 
-  function shoppingDirectCalculate(runtime, plan) {
-    const catalog = shoppingRecipes(runtime), item = shoppingItem(runtime, plan.itemId);
+  function shoppingDirectCalculate(runtime, plan, catalog = shoppingRecipes(runtime)) {
+    const item = shoppingItem(runtime, plan.itemId);
     const balancesAvailable = !shoppingPending(runtime);
     const owned = balancesAvailable ? shoppingOwned(runtime, plan.itemId) : null;
     const shortfall = owned === null ? null : Math.max(0, plan.quantity - owned);
@@ -92,8 +92,8 @@
     if (!result.fixed) result.gaps.push('Uncertain output: per-attempt base costs; nominal totals do not guarantee the target.');
     if (owned === null) result.gaps.push('Owned finished quantity unknown.');
     const requirements = new Map();
-    if (!Array.isArray(recipe.materials)) result.gaps.push('Recipe ingredients unavailable.');
-    else for (const material of recipe.materials) {
+    if (!Array.isArray(recipe.materials) && !chosen.gathering) result.gaps.push('Recipe ingredients unavailable.');
+    else for (const material of recipe.materials || []) {
       if (!quickId(material?.id)) { result.gaps.push('Unresolved ingredient or amount.'); continue; }
       const key = `item:${material.id}`, previous = requirements.get(key);
       if (!shoppingQuantity(material.amount)) result.gaps.push('Unresolved ingredient or amount.');

@@ -14,6 +14,8 @@
             && shoppingValidRecipeChoices(saved.plan.recipes)
             && typeof saved.plan.recipeKey === 'string' && /^(?:\d{1,10}:\d{1,10})?$/.test(saved.plan.recipeKey)) {
             ui.plan = saved.plan;
+            if (!shoppingValidRecipeChoices(ui.plan.sources)) delete ui.plan.sources;
+            if (!recipeValidQuantities(ui.plan.quantities || {})) delete ui.plan.quantities;
             ui.editing = false;
           }
         } catch {}
@@ -59,7 +61,7 @@
       const invalidated = ui.plan?.itemId === itemId && ui.plan.recipeKey && !choices.some(entry => entry.key === ui.plan.recipeKey);
       if ((recipeKey && !choices.some(entry => entry.key === recipeKey)) || (invalidated && !recipeKey)) ui.message = 'Choose a current recipe.';
       else {
-        ui.plan = { itemId, quantity, recipeKey: recipeKey || (choices.length === 1 ? choices[0].key : ''), recipes: ui.plan?.itemId === itemId ? { ...ui.plan.recipes } : {} };
+        ui.plan = { itemId, quantity, recipeKey: recipeKey || (choices.length === 1 ? choices[0].key : ''), recipes: ui.plan?.itemId === itemId ? { ...ui.plan.recipes } : {}, sources: ui.plan?.itemId === itemId ? { ...ui.plan.sources } : {}, quantities: {} };
         ui.editing = false;
         ui.selectedStep = null;
         ui.signature = '';
@@ -105,12 +107,14 @@
   }
 
   function shoppingPending(runtime) {
+    if (runtime?.recipePlanning) return false;
     return Boolean(runtime?.action?.actionLoading || runtime?.state?.loadingApp || runtime?.state?.syncingData
       || AppState.ui.pendingLootClaim || AppState.ui.collectingLoot || AppState.ui.nativeCollectionPending
       || AppState.ui.quickSkills.busy || AppState.ui.nativeSync?.running);
   }
 
   async function shoppingRefresh() {
+    if (AppState.ui.recipePlan.open) return recipeRefresh();
     const ui = shoppingObserve(), owner = ui.owner;
     if (!owner || ui.refreshing || quickBusy() || shoppingPending(quickRuntime())) return;
     ui.refreshing = true;

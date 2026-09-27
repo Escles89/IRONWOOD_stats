@@ -22,6 +22,7 @@
       if (owner) try {
         const saved = JSON.parse(localStorage.getItem(PLANNED_ACTION_KEY + owner));
         const plan = saved?.plan;
+        if (saved?.version === 2 && recipeValidPlan(plan)) ui.plan = plan;
         if (saved?.version === 1 && quickId(plan?.skillId) && plan.skillId !== '15' && quickId(plan.actionId)
           && (plan.amount === null || quickAmount(plan.amount))) ui.plan = { skillId: plan.skillId, actionId: plan.actionId, amount: plan.amount };
       } catch {}
@@ -33,7 +34,7 @@
     const ui = AppState.ui.plannedAction;
     if (!ui.owner || quickOwner(quickRuntime()) !== ui.owner) return false;
     try {
-      localStorage.setItem(PLANNED_ACTION_KEY + ui.owner, JSON.stringify({ version: 1, plan }));
+      localStorage.setItem(PLANNED_ACTION_KEY + ui.owner, JSON.stringify({ version: plan?.kind === 'recipe' ? 2 : 1, plan }));
       ui.plan = plan;
       ui.message = '';
       ui.observation = null;
@@ -99,6 +100,7 @@
     if (plannedActionIdentity(response.user.action) !== expected)
       throw new Error('The current action changed. Refresh to check; no further action was requested.');
     if (target) {
+      if (target.recipePlan) recipeValidateSnapshot({ ...runtime, state: { ...runtime.state, isSolo: runtime.state.isSolo, user: response.user } }, target.recipePlan, target.recipeToken);
       const reason = plannedKnownReason(remote, target);
       if (reason) throw new Error(reason);
       if (target.finite && (!quickAmount(amount) || amount > remote.craftLimit?.(remote.state.user, remote.actionCatalog[target.actionId])))
@@ -164,10 +166,14 @@
         || plannedActionIdentity(native.runtime.state.user.action) !== (transition.collected() ? 'idle' : transition.source))
         throw new Error('The current action changed. No further action was requested. Plan kept.');
     }
-    if (AppState.ui.plannedAction.plan !== plan) throw new Error('The plan changed. No start was requested.');
+    if (plan.recipe) {
+      if (plannedCurrentState(main, collecting).kind !== 'idle') throw new Error('Collect current work separately before starting next.');
+      recipeValidateSnapshot(main, plan.recipe, plan.token);
+    }
+    if (AppState.ui.plannedAction.plan !== (plan.recipe || plan)) throw new Error('The plan changed. No start was requested.');
     const target = plannedTargets(main, true).find(target => quickSameAction(target, plan));
     if (!target || !plannedTargets(native.runtime, true).some(entry => quickSameAction(entry, plan))) throw new Error('The planned action is no longer in the native skill catalog.');
-    if (location.pathname !== STATS_PATH || main.router?.url !== `/skill/${target.skillId}/action/${target.actionId}`)
+    if (location.pathname !== (transition?.visiblePath || STATS_PATH) || main.router?.url !== `/skill/${target.skillId}/action/${target.actionId}`)
       throw new Error('The native page changed. Plan kept.');
     if (!transition?.collected() && plannedRequirementsKey(main) !== transition.requirements) throw new Error('Native requirements changed while preparing. Refresh the plan before starting again.');
     if (transition?.collected() && plannedRequirementsKey(main, true) !== transition.stableRequirements)
@@ -188,6 +194,7 @@
 
   function plannedStarted(owner, plan) {
     const ui = AppState.ui.plannedAction;
+    if (plan.recipe) return;
     if (ui.owner !== owner || ui.plan !== plan || quickOwner(quickRuntime()) !== owner) return;
     if (plannedPersist(null)) ui.editing = false;
     else {
@@ -238,6 +245,7 @@
     const ui = plannedObserve(), runtime = quickRuntime();
     plannedTargets(runtime);
     return [ui.owner, ui.plan, ui.editing, ui.draft, ui.filter, ui.message, ui.observation,
+      ui.plan?.kind === 'recipe' ? (recipeObservation(ui.plan), AppState.ui.recipePlan.active?.signature) : null,
       AppState.ui.plannedCatalog.revision, quickBusy(), plannedCurrentBlockReason(runtime),
       plannedKnownReason(runtime, plannedTargets(runtime).find(target => quickSameAction(target, ui.plan))),
       plannedKnownReason(runtime, plannedTargets(runtime).find(target => quickSameAction(target, ui.draft))), location.pathname,

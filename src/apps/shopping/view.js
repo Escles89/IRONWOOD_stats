@@ -1,5 +1,5 @@
-  function renderShoppingCard() {
-    if (location.pathname !== '/status') return '';
+  function renderShoppingCard(inPlanner = false) {
+    if (!inPlanner && location.pathname !== '/status') return '';
     const ui = AppState.ui.shopping, runtime = quickRuntime(), snapshot = ui.snapshot;
     const draft = ui.draft;
     const index = shoppingRecipes(runtime);
@@ -15,15 +15,16 @@
         ${renderShoppingOverview(snapshot, ui)}
         <div class="iw-shopping-tree-scroll" aria-label="Recipe chain">${renderShoppingTree(snapshot)}</div>
         <p class="iw-muted iw-shopping-age">Observed ${Math.max(0, Math.floor((Date.now() - snapshot.observedAt) / 60000))} min ago.</p>` : ''}
+      ${!inPlanner ? '<button type="button" class="iw-small-button" data-recipe-open>Open planner</button>' : ''}
       ${ui.message ? `<p role="status">${escapeHtml(ui.message)}</p>` : ''}</div></section>`;
   }
 
   function renderShoppingModal() {
-    if (location.pathname !== '/status' || AppState.ui.page?.hidden) { AppState.ui.shopping.selectedStep = null; return ''; }
+    if (!AppState.ui.recipePlan.open && (location.pathname !== '/status' || AppState.ui.page?.hidden)) { AppState.ui.shopping.selectedStep = null; return ''; }
     const ui = shoppingObserve(), snapshot = ui.snapshot;
     const defaults = ui.selectedStep === 'defaults';
     const node = defaults ? { name: 'Default inputs' } : snapshot?.nodes.find(row => row.key === ui.selectedStep);
-    if (location.pathname !== '/status' || !node) { ui.selectedStep = null; return ''; }
+    if (!node) { ui.selectedStep = null; return ''; }
     return `<div class="iw-modal" data-modal-backdrop><section class="iw-modal-panel iw-shopping-modal" role="dialog" aria-modal="true" aria-labelledby="iw-shopping-step-title">
       <div class="iw-options-heading">${defaults ? '' : renderShoppingIcon(node)}<div><h2 id="iw-shopping-step-title">${escapeHtml(node.name)}</h2><small>${defaults ? 'Saved for this character and game mode' : `${node.special ? 'Resource balance' : 'Inventory'} · ${shoppingSupplyLabel(node)}`}</small></div><button type="button" class="iw-modal-close" data-modal-close aria-label="Close item details">×</button></div>
       <div class="iw-shopping-body">${ui.unavailable ? '<p role="status">Showing last observation. Current balances unavailable.</p>' : ''}${defaults ? SHOPPING_CONVERSIONS.map(id => renderShoppingConversion(id, ui)).join('') : renderShoppingStep(node, snapshot, ui)}

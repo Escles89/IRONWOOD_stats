@@ -17,3 +17,5 @@ Start is a manual action and works with background automation disabled. Ironwood
 The recap separates the action result from collected rewards. A failed start can leave you idle after successful collection. Missing reward details or a later synchronization error do not imply that the start failed. Check the current action before retrying an unconfirmed request; Status never automatically retries or rolls back a switch.
 
 Quick Loot retains its automation preference and collects before continuing the same action, including a finite queue's remaining quantity. Its button stays visible when disabled and explains why. Use Tab to move through the panel and Escape to dismiss it; focus returns to Skills.
+
+**Recipe Calc & planner** opens the combined calculator and recipe plan over the current page. The single plan summary shows **Next**, **Start next**, progress and blocking information for the whole plan. See [Recipe plans](recipe-plan.md) for source choices, explicit collection and manual requirements.

@@ -135,7 +135,7 @@
     if (!planned && !loot && quickSameAction(runtime.state.user.action, target) && !edit) return;
     ui.busy = true;
     const request = { cancelled: false, attempted: false };
-    const transition = planned ? { source: plannedActionIdentity(runtime.state.user.action), requirements: plannedRequirementsKey(runtime), stableRequirements: plannedRequirementsKey(runtime, true), collected: () => false } : null;
+    const transition = planned ? { visiblePath: location.pathname, source: plannedActionIdentity(runtime.state.user.action), requirements: plannedRequirementsKey(runtime), stableRequirements: plannedRequirementsKey(runtime, true), collected: () => false } : null;
     ui.request = request;
     ui.message = loot ? 'Collecting and continuing…' : edit ? 'Checking amount…' : `Preparing ${target.name}…`;
     if (loot) AppState.ui.collectingLoot = true;
@@ -161,6 +161,7 @@
         let choice = null;
         if (target.finite) {
           const limit = native.limit();
+          if (planned?.plan.recipe && (!quickAmount(amount) || amount > limit)) throw new Error('Native quantity or supplies changed. Adjust the quantity in the planner before starting.');
           if (edit || (!loot && !preference?.reuse) || !quickAmount(amount) || amount > limit) {
             choice = await quickPromptAmount(target, preference, limit, { edit, planned: !!planned, shortage: quickAmount(amount) && amount > limit, quantityInfo: native.quantityInfo });
             if (!choice) { ui.message = ''; return; }

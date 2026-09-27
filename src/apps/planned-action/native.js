@@ -28,22 +28,22 @@
   }
 
   async function withPlannedPage(path, selector, task) {
-    const runtime = quickRuntime(), owner = quickOwner(runtime), previous = runtime?.router?.url;
-    if (location.pathname !== STATS_PATH || !runtime?.router?.navigateByUrl) throw new Error('Open Status before starting the plan.');
+    const runtime = quickRuntime(), owner = quickOwner(runtime), previous = runtime?.router?.url, visiblePath = location.pathname;
+    if (!runtime?.router?.navigateByUrl) throw new Error('Open Status before starting the plan.');
     try {
       const opened = await runtime.zone.run(() => runtime.router.navigateByUrl(path, { skipLocationChange: true }));
       quickAssertOwner(owner, runtime);
-      if (opened === false || location.pathname !== STATS_PATH) throw new Error('The native page changed. Plan kept.');
-      hideStatusRouteElements();
+      if (opened === false || location.pathname !== visiblePath) throw new Error('The native page changed. Plan kept.');
+      if (visiblePath === STATS_PATH) hideStatusRouteElements();
       await waitFor(document, selector);
       if (runtime.router.url !== path) throw new Error('Ironwood redirected this action. Open its native page to check access.');
       return await task(document, globalThis);
     } finally {
       // The existing native app is reused: no new ActionService can bootstrap
       // and collect work while we are only inspecting requirements.
-      if (location.pathname === STATS_PATH && quickOwner(runtime) === owner && previous && runtime.router.url === path) {
+      if (location.pathname === visiblePath && quickOwner(runtime) === owner && previous && runtime.router.url === path) {
         await runtime.zone.run(() => runtime.router.navigateByUrl(previous, { skipLocationChange: true }));
-        hideStatusRouteElements();
+        if (visiblePath === STATS_PATH) hideStatusRouteElements();
       }
     }
   }
@@ -72,7 +72,7 @@
       get(target, key, receiver) { return key === 'firebaseSvc' ? firebase : key === 'actionSvc' ? action : Reflect.get(target, key, receiver); },
       set(target, key, value) { return Reflect.set(target, key, value); }
     });
-    return { runtime: { ...runtime, firebase }, guardCollection(guard) { beforeCollection = guard; }, click(control) {
+    return { runtime: { ...runtime, firebase }, collect: () => runtime.zone.run(() => action.handleStopAction()), guardCollection(guard) { beforeCollection = guard; }, click(control) {
       const original = page.handleStartAction;
       page.handleStartAction = function(...args) { return original.apply(context, args); };
       const request = AppState.ui.quickSkills.request;

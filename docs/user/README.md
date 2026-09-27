@@ -18,3 +18,5 @@ Automation and fallback lookups are separate switches and both start off. You ca
 - [Shopping list](shopping-list.md): save a finished-item target and inspect its direct ingredient shortages.
 
 - [Planned next action](planned-next-action.md): save a main action and start it manually from confirmed idle.
+
+- [Recipe plans](recipe-plan.md): activate a recipe chain, choose sources, and start each action manually from Quick Skills.

@@ -37,6 +37,7 @@
     const invocation = planned ? plannedNativeInvocation(runtime, page) : null;
     return { runtime: invocation?.runtime || runtime, limit, click: control => invocation ? invocation.click(control) : control.click(),
       guardCollection: guard => invocation?.guardCollection(guard),
+      collect: () => invocation?.collect(),
       eligibilityReason() {
         if (planned) {
           if (page.skillId !== target.skillId || page.actionId !== target.actionId) return 'Native action selection changed. Refresh to check.';

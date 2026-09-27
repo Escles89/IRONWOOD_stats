@@ -16,7 +16,7 @@
       active.add(key);
       const conversion = special && shoppingConversionChoices(runtime, id).find(choice => choice.id === sourceId);
       const inputs = special ? conversion ? [{ id: sourceId, key: `item:${sourceId}`, name: conversion.name, perAttempt: 1 }] : []
-        : shoppingDirectCalculate(runtime, { itemId: id, quantity: 1, recipeKey }).rows;
+        : shoppingDirectCalculate(runtime, { itemId: id, quantity: 1, recipeKey }, catalog).rows;
       for (const row of inputs) {
         const cycle = active.has(row.key);
         node.edges.push({ ...row, cycle });
@@ -31,8 +31,8 @@
     return cache.graph;
   }
 
-  function shoppingCalculate(runtime, plan) {
-    const catalog = shoppingRecipes(runtime), graph = shoppingGraph(runtime, plan, catalog);
+  function shoppingCalculate(runtime, plan, catalog = shoppingRecipes(runtime)) {
+    const graph = shoppingGraph(runtime, plan, catalog);
     const demand = new Map([[`item:${plan.itemId}`, plan.quantity]]), calculated = new Map();
     const cycles = [], knownDemand = new Map([[`item:${plan.itemId}`, plan.quantity]]);
     for (const node of graph.order) {
@@ -42,7 +42,7 @@
       const missing = required === 0 ? 0 : owned === null || required === null ? null : Math.max(0, required - owned);
       const used = owned === null || required === null ? null : Math.min(owned, required);
       const detail = node.special ? shoppingConversionDetail(runtime, node, required === null && owned !== null ? Math.max(0, knownRequired - owned) : missing) :
-        shoppingDirectCalculate(runtime, { itemId: node.id, quantity: required ?? knownRequired, recipeKey: node.recipeKey });
+        shoppingDirectCalculate(runtime, { itemId: node.id, quantity: required ?? knownRequired, recipeKey: node.recipeKey }, catalog);
       const knownAttempts = detail.attempts;
       if (required === null) {
         detail.attempts = null;
