@@ -25,6 +25,10 @@
       if (event.target.matches?.('[data-debug-section]')) { AppState.ui.debugUpdatedAt = 0; scheduleStatusRender(); }
     }, true);
     document.addEventListener('click', event => {
+      const recipeView = event.target.closest?.('[data-recipe-view]');
+      if (recipeView) { recipeSwitchView(recipeView); return; }
+      const recipeDetails = event.target.closest?.('[data-recipe-details]');
+      if (recipeDetails) { recipeToggleStep(recipeDetails); return; }
       const recipeOpen = event.target.closest?.('[data-recipe-open]');
       if (recipeOpen) { recipeOpenPlanner(recipeOpen); return; }
       const recipeCollectControl = event.target.closest?.('[data-recipe-collect]');

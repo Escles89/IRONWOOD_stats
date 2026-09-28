@@ -334,3 +334,39 @@ test('quantity edits have an explicit keyboard-submit control and orphaned draft
   f.rt.state.user.inventory['201'].amount = 100; f.render();
   assert.doesNotMatch(f.panel(), /Finish editing/);
 });
+
+test('a recipe batch follows the remaining shortfall after outside inventory gains', async () => {
+  const f = setup();
+  f.rt.state.user.inventory['201'].amount = 3769;
+  f.rt.state.user.inventory['202'].amount = 40000;
+  f.open(); f.save('18570'); f.click('data-recipe-use');
+  f.emit('submit', 'data-recipe-quantity-form', '', { recipeScope: 'active', recipeItem: '201' }, { amount: { value: '14801' } });
+  f.rt.state.user.inventory['201'].amount = 14801;
+  f.click('data-recipe-start');
+  assert.equal(f.calls.some(call => call[0] === 'start'), false);
+  assert.match(f.panel(), /next action or quantity changed/);
+  f.render();
+  assert.match(f.panel(), /3,769 Iron Sword/);
+  assert.match(f.panel(), /Native quantity: 3,769/);
+  assert.match(f.panel(), /aria-label="active quantity for Iron Sword"[^>]*value="3769"/);
+  f.click('data-recipe-start'); await f.until(() => !f.busy());
+  assert.deepEqual(f.calls.filter(call => call[0] === 'start').at(-1).slice(1, 4), ['4', '103', 3769]);
+});
+
+test('planner separates the active plan from its calculator and reveals step details on demand', () => {
+  const f = setup(); f.open(); f.save(); f.click('data-recipe-use');
+  assert.match(f.panel(), /data-recipe-view="plan"[^>]*aria-pressed="true"/);
+  assert.match(f.panel(), /data-recipe-panel="calculator" hidden/);
+  assert.match(f.panel(), /aria-label="Details for active Iron Sword"[^>]*aria-expanded="false"/);
+  f.click('data-recipe-details', 'active:201');
+  assert.match(f.panel(), /aria-label="Details for active Iron Sword"[^>]*aria-expanded="true"/);
+  f.render();
+  assert.match(f.panel(), /aria-label="Details for active Iron Sword"[^>]*aria-expanded="true"/);
+  f.click('data-recipe-view', 'calculator');
+  assert.match(f.panel(), /data-recipe-panel="plan" hidden/);
+  assert.match(f.panel(), /data-recipe-view="calculator"[^>]*aria-pressed="true"/);
+  f.click('data-recipe-view', 'manual');
+  assert.match(f.panel(), /data-recipe-panel="calculator" hidden/);
+  assert.match(f.panel(), /data-recipe-view="manual"[^>]*aria-pressed="true"/);
+  assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+});

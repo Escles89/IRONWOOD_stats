@@ -22,6 +22,7 @@
     AppState.ui.quickSkills.trigger = trigger;
     AppState.ui.quickSkills.open = true;
     AppState.ui.recipePlan.open = true;
+    AppState.ui.recipePlan.view = plannedObserve().plan ? 'plan' : 'calculator';
     render();
     document.querySelector('#iw-quick-skills-panel [data-quick-close]')?.focus();
   }
@@ -32,7 +33,7 @@
     if (control.dataset.recipeUse !== JSON.stringify([ui.owner, plan])) { ui.message = 'Calculator target changed. Review the preview before using it as a plan.'; render(); return; }
     const snapshot = recipeObservation(plan, 'preview');
     for (const node of snapshot.nodes) if (node.chosen && node.id !== plan.target.itemId && !plan.sources[node.id]) plan.sources[node.id] = node.chosen.key;
-    if (plannedPersist(plan)) ui.editing = false;
+    if (plannedPersist(plan)) { ui.editing = false; AppState.ui.recipePlan.view = 'plan'; }
     render();
   }
 
@@ -217,5 +218,22 @@
     if (quickBusy() || control.dataset.recipeOwner !== plannedObserve().owner) return;
     const key = recipeQuantityDraftKey(control.dataset.recipeScope, control.dataset.recipeItem);
     AppState.ui.recipePlan.quantityDrafts[key] = control.value;
+    render();
+  }
+
+  function recipeSwitchView(control) {
+    if (!['plan', 'calculator', 'manual'].includes(control.dataset.recipeView)) return;
+    AppState.ui.recipePlan.view = control.dataset.recipeView;
+    render();
+    const body = document.querySelector('#iw-quick-skills-panel .iw-quick-body');
+    if (body) body.scrollTop = 0;
+  }
+
+  function recipeToggleStep(control) {
+    if (control.dataset.recipeOwner !== plannedObserve().owner) return;
+    const [scope, id] = control.dataset.recipeDetails.split(':');
+    if (!['active', 'preview'].includes(scope)) return;
+    const key = recipeQuantityDraftKey(scope, id), ui = AppState.ui.recipePlan;
+    ui.expandedStep = ui.expandedStep === key ? null : key;
     render();
   }

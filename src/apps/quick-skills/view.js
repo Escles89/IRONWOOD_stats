@@ -238,7 +238,7 @@
     if (event.key === 'Escape') { event.preventDefault(); quickClose(); return true; }
     if (event.key !== 'Tab') return false;
     const controls = [...(document.querySelector('#iw-quick-skills-panel')?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href]:not([tabindex="-1"]), summary') || [])]
-      .filter(control => control.tagName === 'SUMMARY' || !control.closest('details:not([open])'));
+      .filter(control => !control.closest('[hidden]') && (control.tagName === 'SUMMARY' || !control.closest('details:not([open])')));
     const index = controls.indexOf(document.activeElement);
     if (index < 0 || (event.shiftKey ? index === 0 : index === controls.length - 1)) {
       event.preventDefault();

@@ -46,7 +46,12 @@
       const chosen = node.chosen;
       const target = chosen && { skillId: chosen.skillId, actionId: chosen.recipe.id, skillName: chosen.skillName, name: chosen.recipe.name, finite: !chosen.gathering && quickFiniteAction(chosen.skillId, chosen.recipe, runtime) };
       const supported = chosen?.recipe.drops?.[0]?.id === node.id && node.attempts !== null;
-      const amount = target?.finite ? plan.quantities[node.key] ?? (supported ? Math.min(node.attempts, chosen.recipe.uniqueCraft ? 1 : 1000000) : null) : null;
+      const suggested = supported ? Math.min(node.attempts, chosen.recipe.uniqueCraft ? 1 : 1000000) : null;
+      const saved = plan.quantities[node.key];
+      // Inventory gains shrink a recipe batch; smaller deliberate batches stay
+      // valid. Unknown yields and unique crafts still need explicit validation.
+      const capped = saved !== undefined && supported && !chosen.recipe.uniqueCraft && saved > suggested;
+      const amount = target?.finite ? capped ? suggested : saved ?? suggested : null;
       const blockers = node.edges.filter(edge => {
         if (edge.cycle) return true;
         const supply = nodes.get(edge.key);
@@ -70,7 +75,7 @@
         if (!Number.isFinite(limit)) reason = 'Native material limit unknown.';
         else if (amount > limit) reason = 'Native quantity exceeds current supplies. Adjust the quantity.';
       }
-      return { ...node, target, amount, ready: !!target && !reason, reason };
+      return { ...node, target, amount, capped, ready: !!target && !reason, reason };
     });
     const running = steps.find(step => quickSameAction(step.target, runtime.state.user.action));
     const ready = steps.filter(step => step.ready && !quickSameAction(step.target, runtime.state.user.action));
