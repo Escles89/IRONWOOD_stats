@@ -36,7 +36,7 @@
 
   function recipeCalculate(runtime, plan) {
     const catalog = recipeCatalog(runtime);
-    const target = { ...plan.target, conversions: plan.conversions, recipes: { ...plan.target.recipes, ...plan.sources } };
+    const target = recipeCalculationTarget(plan);
     // Calculation is pure with respect to activity locks. Callers separately
     // mark unavailable observations and guard every native mutation.
     const calculationRuntime = { ...runtime, recipePlanning: true };
@@ -59,7 +59,7 @@
         return needed === null || reserved === null || supply?.owned === null || !supply || supply.owned - reserved < needed;
       });
       let reason = !target ? node.special ? 'Manual conversion or acquisition required.' : node.gaps[0] || 'Choose a source or acquire manually.'
-        : node.missing === null ? 'Required quantity or owned balance unknown.'
+        : node.owned === null || node.missing === null && !(target.finite && quickAmount(plan.quantities[node.key])) ? 'Required quantity or owned balance unknown.'
         : target.finite && !quickAmount(amount) ? 'Choose a native quantity; yield is uncertain.'
         : target.finite && chosen.recipe.uniqueCraft && amount !== 1 ? 'Unique craft requires one native quantity.'
         : blockers.length ? `Requires ${blockers.map(edge => edge.name).join(', ')} in owned inventory${blockers.some(edge => edge.cycle) ? ' · circular dependency' : ''}.`
@@ -76,4 +76,16 @@
     const ready = steps.filter(step => step.ready && !quickSameAction(step.target, runtime.state.user.action));
     const next = ready.find(step => step.key === plan.selected) || ready[0] || (running ? steps.find(step => step.target && step !== running) : null) || null;
     return { ...snapshot, steps, running, next };
+  }
+
+  function recipeCalculationTarget(plan) {
+    return { ...plan.target, conversions: plan.conversions, recipes: { ...plan.target.recipes, ...plan.sources } };
+  }
+
+  function recipeObservationKey(runtime, plan, unavailable) {
+    const user = runtime.state.user;
+    return JSON.stringify([shoppingObservationKey(runtime, recipeCalculationTarget(plan), recipeCatalog(runtime)),
+      plan.quantities, plan.selected, unavailable, plannedActionIdentity(user.action), plannedCurrentState(runtime).kind,
+      RECIPE_GATHERING_SKILLS.map(id => user.skills?.[id]), user.coins, user.equipment, user.traits, user.masteries,
+      user.marks, user.adventure, user.guild]);
   }

@@ -8,7 +8,7 @@ Quick Skills shows one **Next** action for the plan. The full planner lists depe
 
 **Start next** starts only the displayed action, after rechecking the game. It does not start later steps. Current work blocks Start next. Continuous gathering shows the required acquisition and known pending loot; stop it yourself with **Stop & collect**. Completed finite work with retained loot has **Collect completed work**. Collection is separate from starting and keeps the plan.
 
-For crafting, **Native quantity** means Ironwood's quantity control, not guaranteed output. Known base yields provide a suggestion; uncertain yields are labelled and can require your own quantity. Supplies and unique-craft limits still apply. If the next action or quantity changes, review the new choice before clicking again.
+For crafting, **Native quantity** means Ironwood's quantity control, not guaranteed output. Known base yields provide a suggestion; uncertain yields are labelled and can require your own quantity. Select **Apply quantity** (or press Enter in its field) to save an edit. Supplies and unique-craft limits still apply. If the next action or quantity changes, review the new choice before clicking again.
 
 The plan recalculates from observed owned inventory, including items gained or spent elsewhere. Pending loot and projected conversion output do not count as owned. **Target satisfied** keeps the target saved; spending those items later can reveal more work. **Refresh plan** explicitly checks inventory without starting chores. Waiting alone does not request hidden page reads.
 

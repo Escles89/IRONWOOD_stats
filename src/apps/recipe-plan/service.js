@@ -6,15 +6,14 @@
   function recipeObservation(plan, slot = 'active') {
     if (!plan || !quickOwner(quickRuntime())) return null;
     const runtime = quickRuntime(), ui = AppState.ui.recipePlan;
-    const signature = JSON.stringify([quickOwner(runtime), plan, recipeCatalog(runtime).revision, runtime.state.user.inventory,
-      Object.keys(SHOPPING_RESOURCES).map(id => runtime.state.user[id]), runtime.state.user.skills, runtime.state.user.equipment,
-      plannedActionIdentity(runtime.state.user.action), runtime.action?.actionLoot]);
     const unavailable = shoppingPending(runtime) || runtime.state.loadingApp !== false || runtime.state.syncingData !== false || runtime.action?.actionLoading !== false || !shoppingRecord(runtime.state.user.inventory);
+    const signature = recipeObservationKey(runtime, plan, unavailable);
     const cached = ui[slot];
-    if (!unavailable && cached?.signature === signature) return cached.snapshot;
+    if (!unavailable && !cached?.snapshot.unavailable && cached?.signature === signature) return cached.snapshot;
     if (unavailable && cached?.owner === quickOwner(runtime) && cached.plan === JSON.stringify(plan)) return { ...cached.snapshot, unavailable: true };
     const snapshot = { ...recipeCalculate(runtime, plan), unavailable, observedAt: Date.now() };
-    ui[slot] = { signature, snapshot, owner: quickOwner(runtime), plan: JSON.stringify(plan) };
+    ui.revision = (ui.revision || 0) + 1;
+    ui[slot] = { signature, snapshot, revision: ui.revision, owner: quickOwner(runtime), plan: JSON.stringify(plan) };
     return snapshot;
   }
 
@@ -29,7 +28,7 @@
 
   function recipeActivate(control) {
     const ui = plannedObserve(), plan = recipePreviewPlan();
-    if (!ui.owner || !plan || quickBusy()) return;
+    if (!ui.owner || !plan || quickBusy() || recipeHasDraft('preview')) return;
     if (control.dataset.recipeUse !== JSON.stringify([ui.owner, plan])) { ui.message = 'Calculator target changed. Review the preview before using it as a plan.'; render(); return; }
     const snapshot = recipeObservation(plan, 'preview');
     for (const node of snapshot.nodes) if (node.chosen && node.id !== plan.target.itemId && !plan.sources[node.id]) plan.sources[node.id] = node.chosen.key;
@@ -45,7 +44,11 @@
     const step = snapshot?.steps.find(step => step.id === control.dataset.recipeItem);
     if (!step) return;
     const updated = JSON.parse(JSON.stringify(plan));
-    if (field === 'source') {
+    if (field === 'conversion') {
+      if (!SHOPPING_CONVERSIONS.includes(step.id) || control.value && !shoppingConversionChoices(quickRuntime(), step.id).some(choice => choice.id === control.value)) return;
+      if (control.value) updated.conversions[step.id] = control.value;
+      else delete updated.conversions[step.id];
+    } else if (field === 'source') {
       if (!step.choices.some(choice => choice.key === control.value)) return;
       if (step.id === updated.target.itemId) updated.target.recipeKey = control.value;
       else updated.sources[step.id] = control.value;
@@ -59,10 +62,12 @@
     }
     if (active) plannedPersist(updated);
     else {
+      AppState.ui.shopping.conversions = updated.conversions;
       AppState.ui.shopping.plan.recipeKey = updated.target.recipeKey;
       AppState.ui.shopping.plan.sources = updated.sources;
       AppState.ui.shopping.plan.quantities = updated.quantities;
       shoppingPersist();
+      AppState.ui.recipePlan.quantityDrafts = {};
     }
     render();
   }
@@ -73,6 +78,7 @@
 
   function recipeStartReason(snapshot, runtime = quickRuntime()) {
     if (quickBusy()) return 'Another action is in progress.';
+    if (recipeHasDraft('active')) return 'Finish editing the native quantity and select Apply quantity before starting.';
     if (!snapshot || snapshot.unavailable) return 'Current balances unavailable. Refresh to check.';
     const current = plannedCurrentState(runtime);
     if (current.kind === 'completed') return 'Collect completed work before starting next.';
@@ -182,8 +188,34 @@
       // The verified current action is unchanged. Update user observations,
       // without replaying the native action loop (which can collect work).
       runtime.state.syncUser(response.user);
+      AppState.ui.recipePlan.active = null;
+      AppState.ui.recipePlan.preview = null;
+      AppState.ui.shopping.signature = '';
       ui.observation = null;
       ui.message = 'Inventory observed. Review the next action before starting.';
     } catch (error) { if (ui.owner === owner) ui.message = `Refresh unavailable: ${error.message}`; }
     finally { AppState.ui.quickSkills.busy = false; render(); }
+  }
+
+  function recipeQuantityDraftKey(scope, id) {
+    return JSON.stringify([plannedObserve().owner, scope, id]);
+  }
+
+  function recipeHasDraft(scope) {
+    const snapshot = AppState.ui.recipePlan[scope]?.snapshot;
+    for (const key of Object.keys(AppState.ui.recipePlan.quantityDrafts)) {
+      const [owner, draftScope, id] = JSON.parse(key);
+      if (owner === plannedObserve().owner && draftScope === scope && !snapshot?.steps.some(step => step.id === id && step.target?.finite)) delete AppState.ui.recipePlan.quantityDrafts[key];
+    }
+    return Object.keys(AppState.ui.recipePlan.quantityDrafts).some(key => {
+      const [owner, draftScope] = JSON.parse(key);
+      return owner === plannedObserve().owner && draftScope === scope;
+    });
+  }
+
+  function recipeDraftQuantity(control) {
+    if (quickBusy() || control.dataset.recipeOwner !== plannedObserve().owner) return;
+    const key = recipeQuantityDraftKey(control.dataset.recipeScope, control.dataset.recipeItem);
+    AppState.ui.recipePlan.quantityDrafts[key] = control.value;
+    render();
   }

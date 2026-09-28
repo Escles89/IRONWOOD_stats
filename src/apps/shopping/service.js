@@ -62,6 +62,7 @@
       if ((recipeKey && !choices.some(entry => entry.key === recipeKey)) || (invalidated && !recipeKey)) ui.message = 'Choose a current recipe.';
       else {
         ui.plan = { itemId, quantity, recipeKey: recipeKey || (choices.length === 1 ? choices[0].key : ''), recipes: ui.plan?.itemId === itemId ? { ...ui.plan.recipes } : {}, sources: ui.plan?.itemId === itemId ? { ...ui.plan.sources } : {}, quantities: {} };
+        for (const key of Object.keys(AppState.ui.recipePlan.quantityDrafts)) if (JSON.parse(key)[1] === 'preview') delete AppState.ui.recipePlan.quantityDrafts[key];
         ui.editing = false;
         ui.selectedStep = null;
         ui.signature = '';

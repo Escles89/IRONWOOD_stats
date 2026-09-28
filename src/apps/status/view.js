@@ -239,6 +239,7 @@
       return render();
     },
     updateLive(state) {
+      recipeUpdateProgress();
       const { action, loot, consumables, materials, masteryProgress } = state.live;
       return updateLiveValues(action, loot, consumables, materials, masteryProgress);
     }

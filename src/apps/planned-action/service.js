@@ -36,6 +36,7 @@
     try {
       localStorage.setItem(PLANNED_ACTION_KEY + ui.owner, JSON.stringify({ version: plan?.kind === 'recipe' ? 2 : 1, plan }));
       ui.plan = plan;
+      AppState.ui.recipePlan.quantityDrafts = {};
       ui.message = '';
       ui.observation = null;
       return true;
@@ -245,7 +246,7 @@
     const ui = plannedObserve(), runtime = quickRuntime();
     plannedTargets(runtime);
     return [ui.owner, ui.plan, ui.editing, ui.draft, ui.filter, ui.message, ui.observation,
-      ui.plan?.kind === 'recipe' ? (recipeObservation(ui.plan), AppState.ui.recipePlan.active?.signature) : null,
+      ui.plan?.kind === 'recipe' ? (recipeObservation(ui.plan), AppState.ui.recipePlan.active?.revision) : null,
       AppState.ui.plannedCatalog.revision, quickBusy(), plannedCurrentBlockReason(runtime),
       plannedKnownReason(runtime, plannedTargets(runtime).find(target => quickSameAction(target, ui.plan))),
       plannedKnownReason(runtime, plannedTargets(runtime).find(target => quickSameAction(target, ui.draft))), location.pathname,

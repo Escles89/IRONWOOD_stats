@@ -5,6 +5,7 @@
         event.stopImmediatePropagation();
         return;
       }
+      if (event.target.matches?.('[data-recipe-quantity-form]')) { event.preventDefault(); recipeChange({ dataset: event.target.dataset, value: event.target.elements.amount.value }, 'quantity'); return; }
       if (event.target.matches?.('[data-planned-form]')) { event.preventDefault(); plannedSave(event.target); return; }
       if (event.target.matches?.('[data-shopping-form]')) { event.preventDefault(); shoppingSave(event.target); return; }
       if (!event.target.matches?.('[data-quick-amount-form]')) return;
@@ -12,6 +13,7 @@
       quickSubmitAmount(event.target);
     }, true);
     document.addEventListener('input', event => {
+      if (event.target.matches?.('[data-recipe-quantity]')) { recipeDraftQuantity(event.target); return; }
       if (event.target.matches?.('input[data-planned-field]')) { plannedDraft(event.target); return; }
       if (event.target.matches?.('[data-shopping-quantity]') || event.target.matches?.('[data-shopping-filter]')) { shoppingDraft(event.target); return; }
       const form = event.target.closest?.('[data-quick-amount-form]');
@@ -86,6 +88,7 @@
       if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
     }, true);
     document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-recipe-conversion]')) { recipeChange(event.target, 'conversion'); return; }
       if (event.target.matches?.('[data-recipe-source]')) { recipeChange(event.target, 'source'); return; }
       if (event.target.matches?.('[data-recipe-quantity]')) { recipeChange(event.target, 'quantity'); return; }
       if (event.target.matches?.('select[data-planned-field]')) { plannedDraft(event.target); return; }

@@ -91,7 +91,7 @@ test('explicit collection credits observed inventory, replans, and leaves the fo
   f.open(); f.save(); f.click('data-recipe-use'); f.click('data-recipe-start'); await f.until(() => !f.busy());
   f.rt.action.actionLoot = { '203': { amount: 80 } };
   f.open();
-  assert.match(f.panel(), /Pending loot: 80 \(not owned\)/);
+  assert.match(f.panel(), /Pending loot: <span[^>]+>80<\/span> \(not owned\)/);
   f.click('data-recipe-collect'); await f.until(() => !f.busy());
   assert.equal(f.calls.filter(call => call[0] === 'stop').length, 1);
   assert.equal(f.calls.filter(call => call[0] === 'start').length, 1);
@@ -255,4 +255,82 @@ test('unique crafts require the native one-item limit even after a quantity edit
   f.emit('change', 'data-recipe-quantity', '2', { recipeScope: 'active', recipeItem: '201' });
   assert.match(f.panel(), /unique craft.*one native quantity/i);
   assert.doesNotMatch(f.panel(), /Next · Smithing · Iron Sword/);
+});
+
+test('a restored plan recovers when loading ends and refresh rechecks changed native eligibility', async () => {
+  const first = setup(); first.open(); first.save(); first.click('data-recipe-use');
+  const f = setup({ storage: first.h.storage });
+  f.rt.action.actionLoading = true; f.open();
+  assert.match(f.panel(), /Current balances unavailable/);
+  f.rt.action.actionLoading = false; f.render();
+  assert.doesNotMatch(f.panel(), /Current balances unavailable/);
+  f.rt.actionCatalog['101'].level = 10;
+  f.rt.actionSkillLevel = user => user.traits?.bonus ? 20 : 1;
+  f.click('data-recipe-refresh'); await f.until(() => !f.busy());
+  assert.match(f.panel(), /Requires Mining level 10/);
+  f.rt.state.user.traits = { bonus: true }; f.render();
+  assert.match(f.panel(), /Next · Mining · Iron Rock/);
+  assert.doesNotMatch(f.panel(), /Requires Mining level 10/);
+});
+
+test('a player-selected intermediate batch can progress beneath an unknown total requirement', async () => {
+  const f = setup();
+  f.rt.actionCatalog['103'].drops[0].amount = 5;
+  f.rt.state.user.inventory['202'].amount = 0;
+  f.rt.state.user.inventory['203'].amount = 40;
+  f.open(); f.save(); f.click('data-recipe-use');
+  f.emit('change', 'data-recipe-quantity', '20', { recipeScope: 'active', recipeItem: '202' });
+  assert.match(f.panel(), /Next · Smelting · Iron Bar/);
+  assert.match(f.panel(), /Native quantity: 20/);
+  assert.match(f.panel(), /Unknown Iron Bar/);
+  f.click('data-recipe-start'); await f.until(() => !f.busy());
+  assert.deepEqual(f.calls.filter(call => call[0] === 'start').at(-1).slice(1, 4), ['3', '102', 20]);
+});
+
+test('plan observations read relevant balances without enumerating unrelated inventory or loot', () => {
+  const f = setup(); f.open(); f.save(); f.click('data-recipe-use');
+  f.rt.state.user.inventory = new Proxy(f.rt.state.user.inventory, { ownKeys() { assert.fail('Full native inventory traversal'); } });
+  f.rt.action.actionLoot = new Proxy({}, { ownKeys() { return []; }, get(target, key) { if (key === 'toJSON') assert.fail('Loot serialization'); return target[key]; } });
+  f.render();
+  assert.match(f.panel(), /Next · Mining · Iron Rock/);
+});
+
+test('live observations preserve an unfinished quantity edit and cannot start its older saved value', () => {
+  const f = setup(); f.rt.state.user.inventory['202'].amount = 140;
+  f.open(); f.save(); f.click('data-recipe-use');
+  f.emit('input', 'data-recipe-quantity', '12', { recipeScope: 'active', recipeItem: '201' });
+  f.rt.state.user.inventory['203'].amount = 5; f.render();
+  assert.match(f.panel(), /aria-label="active quantity for Iron Sword"[^>]*value="12"/);
+  assert.match(f.panel(), /Finish editing the native quantity/);
+  f.click('data-recipe-start');
+  assert.equal(f.calls.some(call => call[0] === 'start'), false);
+  f.emit('change', 'data-recipe-quantity', '12', { recipeScope: 'active', recipeItem: '201' });
+  assert.match(f.panel(), /Native quantity: 12/);
+  assert.doesNotMatch(f.panel(), /Finish editing the native quantity/);
+});
+
+test('manual resource choices remain selectable when multiple conversion inputs are available', () => {
+  const f = setup(); f.rt.actionCatalog['103'].metalParts = 3; f.rt.state.user.metalParts = 0;
+  f.rt.conversionCatalog = { metalParts: { '202': 2, '201': 5 } };
+  f.open(); f.save(); f.click('data-recipe-use');
+  assert.match(f.panel(), /Conversion input for Metal Parts/);
+  f.emit('change', 'data-recipe-conversion', '202', { recipeScope: 'active', recipeItem: 'metalParts' });
+  assert.match(f.panel(), /Manual conversion: 105 Iron Bar → 210 Metal Parts/);
+  assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+});
+
+test('quantity edits have an explicit keyboard-submit control and orphaned drafts do not block plans', () => {
+  const f = setup(); f.rt.state.user.inventory['202'].amount = 140;
+  f.open(); f.save(); f.click('data-recipe-use');
+  f.emit('input', 'data-recipe-quantity', '12', { recipeScope: 'active', recipeItem: '201' });
+  assert.match(f.panel(), /data-recipe-quantity-form/);
+  f.emit('submit', 'data-recipe-quantity-form', '', { recipeScope: 'active', recipeItem: '201' }, { amount: { value: '12' } });
+  assert.match(f.panel(), /Native quantity: 12/);
+  assert.doesNotMatch(f.panel(), /Finish editing/);
+  f.emit('input', 'data-recipe-quantity', '4', { recipeScope: 'preview', recipeItem: '201' });
+  f.save('200', '202', '3:102');
+  assert.doesNotMatch(f.panel(), /data-recipe-use[^>]* disabled/);
+  f.emit('input', 'data-recipe-quantity', '7', { recipeScope: 'active', recipeItem: '201' });
+  f.rt.state.user.inventory['201'].amount = 100; f.render();
+  assert.doesNotMatch(f.panel(), /Finish editing/);
 });

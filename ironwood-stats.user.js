@@ -114,7 +114,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
         headerActionSnapshot: null,
         preferencesTrigger: null,
         collectingLoot: false,
-        recipePlan: { open: false, catalogs: new WeakMap(), active: null, preview: null, message: '' },
+        recipePlan: { open: false, quantityDrafts: {}, catalogs: new WeakMap(), active: null, preview: null, message: '' },
         plannedCatalog: { entries: new WeakMap(), revision: 0 },
         plannedAction: { owner: null, plan: null, editing: false, draft: { skillId: '', actionId: '', amount: '' }, filter: '', message: '', observation: null },
         quickSkills: { owner: null, data: null, open: false, busy: false, prompt: null, trigger: null, message: '', signature: '' },
@@ -4220,6 +4220,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     try {
       localStorage.setItem(PLANNED_ACTION_KEY + ui.owner, JSON.stringify({ version: plan?.kind === 'recipe' ? 2 : 1, plan }));
       ui.plan = plan;
+      AppState.ui.recipePlan.quantityDrafts = {};
       ui.message = '';
       ui.observation = null;
       return true;
@@ -4429,7 +4430,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     const ui = plannedObserve(), runtime = quickRuntime();
     plannedTargets(runtime);
     return [ui.owner, ui.plan, ui.editing, ui.draft, ui.filter, ui.message, ui.observation,
-      ui.plan?.kind === 'recipe' ? (recipeObservation(ui.plan), AppState.ui.recipePlan.active?.signature) : null,
+      ui.plan?.kind === 'recipe' ? (recipeObservation(ui.plan), AppState.ui.recipePlan.active?.revision) : null,
       AppState.ui.plannedCatalog.revision, quickBusy(), plannedCurrentBlockReason(runtime),
       plannedKnownReason(runtime, plannedTargets(runtime).find(target => quickSameAction(target, ui.plan))),
       plannedKnownReason(runtime, plannedTargets(runtime).find(target => quickSameAction(target, ui.draft))), location.pathname,
@@ -5123,6 +5124,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       if ((recipeKey && !choices.some(entry => entry.key === recipeKey)) || (invalidated && !recipeKey)) ui.message = 'Choose a current recipe.';
       else {
         ui.plan = { itemId, quantity, recipeKey: recipeKey || (choices.length === 1 ? choices[0].key : ''), recipes: ui.plan?.itemId === itemId ? { ...ui.plan.recipes } : {}, sources: ui.plan?.itemId === itemId ? { ...ui.plan.sources } : {}, quantities: {} };
+        for (const key of Object.keys(AppState.ui.recipePlan.quantityDrafts)) if (JSON.parse(key)[1] === 'preview') delete AppState.ui.recipePlan.quantityDrafts[key];
         ui.editing = false;
         ui.selectedStep = null;
         ui.signature = '';
@@ -5449,7 +5451,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
 
   function recipeCalculate(runtime, plan) {
     const catalog = recipeCatalog(runtime);
-    const target = { ...plan.target, conversions: plan.conversions, recipes: { ...plan.target.recipes, ...plan.sources } };
+    const target = recipeCalculationTarget(plan);
     // Calculation is pure with respect to activity locks. Callers separately
     // mark unavailable observations and guard every native mutation.
     const calculationRuntime = { ...runtime, recipePlanning: true };
@@ -5472,7 +5474,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
         return needed === null || reserved === null || supply?.owned === null || !supply || supply.owned - reserved < needed;
       });
       let reason = !target ? node.special ? 'Manual conversion or acquisition required.' : node.gaps[0] || 'Choose a source or acquire manually.'
-        : node.missing === null ? 'Required quantity or owned balance unknown.'
+        : node.owned === null || node.missing === null && !(target.finite && quickAmount(plan.quantities[node.key])) ? 'Required quantity or owned balance unknown.'
         : target.finite && !quickAmount(amount) ? 'Choose a native quantity; yield is uncertain.'
         : target.finite && chosen.recipe.uniqueCraft && amount !== 1 ? 'Unique craft requires one native quantity.'
         : blockers.length ? `Requires ${blockers.map(edge => edge.name).join(', ')} in owned inventory${blockers.some(edge => edge.cycle) ? ' · circular dependency' : ''}.`
@@ -5491,6 +5493,18 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     return { ...snapshot, steps, running, next };
   }
 
+  function recipeCalculationTarget(plan) {
+    return { ...plan.target, conversions: plan.conversions, recipes: { ...plan.target.recipes, ...plan.sources } };
+  }
+
+  function recipeObservationKey(runtime, plan, unavailable) {
+    const user = runtime.state.user;
+    return JSON.stringify([shoppingObservationKey(runtime, recipeCalculationTarget(plan), recipeCatalog(runtime)),
+      plan.quantities, plan.selected, unavailable, plannedActionIdentity(user.action), plannedCurrentState(runtime).kind,
+      RECIPE_GATHERING_SKILLS.map(id => user.skills?.[id]), user.coins, user.equipment, user.traits, user.masteries,
+      user.marks, user.adventure, user.guild]);
+  }
+
   // Source: apps/recipe-plan/service.js
   function recipePreviewPlan() {
     const shopping = shoppingObserve();
@@ -5500,15 +5514,14 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
   function recipeObservation(plan, slot = 'active') {
     if (!plan || !quickOwner(quickRuntime())) return null;
     const runtime = quickRuntime(), ui = AppState.ui.recipePlan;
-    const signature = JSON.stringify([quickOwner(runtime), plan, recipeCatalog(runtime).revision, runtime.state.user.inventory,
-      Object.keys(SHOPPING_RESOURCES).map(id => runtime.state.user[id]), runtime.state.user.skills, runtime.state.user.equipment,
-      plannedActionIdentity(runtime.state.user.action), runtime.action?.actionLoot]);
     const unavailable = shoppingPending(runtime) || runtime.state.loadingApp !== false || runtime.state.syncingData !== false || runtime.action?.actionLoading !== false || !shoppingRecord(runtime.state.user.inventory);
+    const signature = recipeObservationKey(runtime, plan, unavailable);
     const cached = ui[slot];
-    if (!unavailable && cached?.signature === signature) return cached.snapshot;
+    if (!unavailable && !cached?.snapshot.unavailable && cached?.signature === signature) return cached.snapshot;
     if (unavailable && cached?.owner === quickOwner(runtime) && cached.plan === JSON.stringify(plan)) return { ...cached.snapshot, unavailable: true };
     const snapshot = { ...recipeCalculate(runtime, plan), unavailable, observedAt: Date.now() };
-    ui[slot] = { signature, snapshot, owner: quickOwner(runtime), plan: JSON.stringify(plan) };
+    ui.revision = (ui.revision || 0) + 1;
+    ui[slot] = { signature, snapshot, revision: ui.revision, owner: quickOwner(runtime), plan: JSON.stringify(plan) };
     return snapshot;
   }
 
@@ -5523,7 +5536,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
 
   function recipeActivate(control) {
     const ui = plannedObserve(), plan = recipePreviewPlan();
-    if (!ui.owner || !plan || quickBusy()) return;
+    if (!ui.owner || !plan || quickBusy() || recipeHasDraft('preview')) return;
     if (control.dataset.recipeUse !== JSON.stringify([ui.owner, plan])) { ui.message = 'Calculator target changed. Review the preview before using it as a plan.'; render(); return; }
     const snapshot = recipeObservation(plan, 'preview');
     for (const node of snapshot.nodes) if (node.chosen && node.id !== plan.target.itemId && !plan.sources[node.id]) plan.sources[node.id] = node.chosen.key;
@@ -5539,7 +5552,11 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     const step = snapshot?.steps.find(step => step.id === control.dataset.recipeItem);
     if (!step) return;
     const updated = JSON.parse(JSON.stringify(plan));
-    if (field === 'source') {
+    if (field === 'conversion') {
+      if (!SHOPPING_CONVERSIONS.includes(step.id) || control.value && !shoppingConversionChoices(quickRuntime(), step.id).some(choice => choice.id === control.value)) return;
+      if (control.value) updated.conversions[step.id] = control.value;
+      else delete updated.conversions[step.id];
+    } else if (field === 'source') {
       if (!step.choices.some(choice => choice.key === control.value)) return;
       if (step.id === updated.target.itemId) updated.target.recipeKey = control.value;
       else updated.sources[step.id] = control.value;
@@ -5553,10 +5570,12 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     }
     if (active) plannedPersist(updated);
     else {
+      AppState.ui.shopping.conversions = updated.conversions;
       AppState.ui.shopping.plan.recipeKey = updated.target.recipeKey;
       AppState.ui.shopping.plan.sources = updated.sources;
       AppState.ui.shopping.plan.quantities = updated.quantities;
       shoppingPersist();
+      AppState.ui.recipePlan.quantityDrafts = {};
     }
     render();
   }
@@ -5567,6 +5586,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
 
   function recipeStartReason(snapshot, runtime = quickRuntime()) {
     if (quickBusy()) return 'Another action is in progress.';
+    if (recipeHasDraft('active')) return 'Finish editing the native quantity and select Apply quantity before starting.';
     if (!snapshot || snapshot.unavailable) return 'Current balances unavailable. Refresh to check.';
     const current = plannedCurrentState(runtime);
     if (current.kind === 'completed') return 'Collect completed work before starting next.';
@@ -5676,10 +5696,36 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       // The verified current action is unchanged. Update user observations,
       // without replaying the native action loop (which can collect work).
       runtime.state.syncUser(response.user);
+      AppState.ui.recipePlan.active = null;
+      AppState.ui.recipePlan.preview = null;
+      AppState.ui.shopping.signature = '';
       ui.observation = null;
       ui.message = 'Inventory observed. Review the next action before starting.';
     } catch (error) { if (ui.owner === owner) ui.message = `Refresh unavailable: ${error.message}`; }
     finally { AppState.ui.quickSkills.busy = false; render(); }
+  }
+
+  function recipeQuantityDraftKey(scope, id) {
+    return JSON.stringify([plannedObserve().owner, scope, id]);
+  }
+
+  function recipeHasDraft(scope) {
+    const snapshot = AppState.ui.recipePlan[scope]?.snapshot;
+    for (const key of Object.keys(AppState.ui.recipePlan.quantityDrafts)) {
+      const [owner, draftScope, id] = JSON.parse(key);
+      if (owner === plannedObserve().owner && draftScope === scope && !snapshot?.steps.some(step => step.id === id && step.target?.finite)) delete AppState.ui.recipePlan.quantityDrafts[key];
+    }
+    return Object.keys(AppState.ui.recipePlan.quantityDrafts).some(key => {
+      const [owner, draftScope] = JSON.parse(key);
+      return owner === plannedObserve().owner && draftScope === scope;
+    });
+  }
+
+  function recipeDraftQuantity(control) {
+    if (quickBusy() || control.dataset.recipeOwner !== plannedObserve().owner) return;
+    const key = recipeQuantityDraftKey(control.dataset.recipeScope, control.dataset.recipeItem);
+    AppState.ui.recipePlan.quantityDrafts[key] = control.value;
+    render();
   }
 
   // Source: apps/recipe-plan/view.js
@@ -5692,7 +5738,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     const reason = snapshot ? recipeStartReason(snapshot) : !plan ? '' : plannedCurrentState().kind === 'completed' ? 'Collect completed work before starting next.' : plannedCurrentBlockReason() || plannedKnownReason(quickRuntime(), target);
     const pending = snapshot?.running ? shoppingNumber(quickRuntime()?.action?.actionLoot?.[snapshot.running.id]?.amount ?? (shoppingRecord(quickRuntime()?.action?.actionLoot) ? 0 : null)) : null;
     return `<section class="iw-recipe-summary" aria-label="Plan summary"><button type="button" class="iw-small-button" data-recipe-open aria-label="Open Recipe Calc and planner">Recipe Calc & planner</button>
-      ${snapshot?.running ? `<p>In progress · ${escapeHtml(snapshot.running.target.skillName)} · ${escapeHtml(snapshot.running.target.name)} · Required acquisition: ${recipeAmount(snapshot.running.missing)} · Pending loot: ${recipeAmount(pending)} (not owned)</p>` : ''}
+      ${snapshot?.running ? `<p>In progress · ${escapeHtml(snapshot.running.target.skillName)} · ${escapeHtml(snapshot.running.target.name)} · Required acquisition: ${recipeAmount(snapshot.running.missing)} · Pending loot: <span data-recipe-pending="${snapshot.running.id}" data-recipe-owner="${escapeHtml(ui.owner)}">${recipeAmount(pending)}</span> (not owned)</p>` : ''}
       <p>${snapshot?.shortfall === 0 ? 'Target satisfied' : target ? `Next · ${escapeHtml(target.skillName)} · ${escapeHtml(target.name)}` : snapshot ? 'No ready action. Open planner for missing requirements.' : 'No active plan'}</p>
       ${target ? `<p>${target.finite ? `Native quantity: ${recipeAmount(snapshot ? snapshot.next.amount : plan.amount)} · not guaranteed output` : snapshot ? `Required acquisition: ${recipeAmount(snapshot.next.missing)} · continuous gathering` : 'Continuous action'}</p><button type="button" class="iw-small-button" ${snapshot ? `data-recipe-start="${escapeHtml(recipeStepToken(ui.owner, plan, snapshot.next))}"` : 'data-planned-start'} aria-label="Start next" ${reason || quickBusy() ? 'disabled' : ''}>Start next</button>` : ''}
       ${plan ? `<button type="button" class="iw-small-button" data-planned-clear ${quickBusy() ? 'disabled' : ''}>Clear active plan</button>` : ''}<button type="button" class="iw-small-button" data-recipe-refresh ${quickBusy() || !ui.owner ? 'disabled' : ''}>Refresh plan</button>
@@ -5703,7 +5749,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     if (!snapshot) return '';
     return `<section class="iw-recipe-steps"><h3>${active ? 'Active recipe plan' : 'Preview recipe plan'}</h3><p>${escapeHtml(snapshot.name)} · Target owned quantity: ${recipeAmount(plan.target.quantity)}</p>
       ${snapshot.shortfall === 0 ? '<p>Target satisfied</p>' : `<ol>${snapshot.steps.map(step => `<li><strong>${recipeAmount(step.missing)} ${escapeHtml(step.name)}</strong><p>${step.target ? `${escapeHtml(step.target.skillName)} · ${escapeHtml(step.target.name)}` : 'Manual requirement'} · ${escapeHtml(step.reason || 'Ready')}</p>${step.edges.length ? `<p>Supplies: ${step.edges.map(edge => `${recipeAmount(edge.required)} ${escapeHtml(edge.name)}`).join(', ')}</p>` : ''}${renderRecipeChoices(step, active)}</li>`).join('')}</ol>`}
-      ${active ? '' : `<button type="button" class="iw-small-button" data-recipe-use="${escapeHtml(JSON.stringify([plannedObserve().owner, plan]))}" ${snapshot.unavailable || quickBusy() ? 'disabled' : ''}>Use as plan</button>`}</section>`;
+      ${active ? '' : `<button type="button" class="iw-small-button" data-recipe-use="${escapeHtml(JSON.stringify([plannedObserve().owner, plan]))}" ${snapshot.unavailable || quickBusy() || recipeHasDraft('preview') ? 'disabled' : ''}>Use as plan</button>`}</section>`;
   }
 
   function renderRecipePlanner() {
@@ -5715,12 +5761,25 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
 
   function renderRecipeChoices(step, active) {
     const scope = active ? 'active' : 'preview';
-    return `${step.choices?.length > 1 || step.recipeKey && !step.chosen ? `<label>Choose a source for ${escapeHtml(step.name)}<select data-recipe-source data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}" aria-label="${scope} source for ${escapeHtml(step.name)}"><option value="">Choose a source</option>${step.choices.map(choice => `<option value="${choice.key}" ${choice.key === step.chosen?.key ? 'selected' : ''}>${escapeHtml(choice.skillName)} · ${escapeHtml(choice.recipe.name)}</option>`).join('')}</select></label>` : ''}
-      ${step.target?.finite ? `<label>Native quantity (not guaranteed output)<input data-recipe-quantity data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}" aria-label="${scope} quantity for ${escapeHtml(step.name)}" type="number" min="1" max="1000000" step="1" value="${step.amount ?? ''}"></label><p>${step.fixed ? 'Base calculation' : 'Uncertain yield; actual output may differ'}</p>` : ''}
+    return `${!step.special && (step.choices?.length > 1 || step.recipeKey && !step.chosen) ? `<label>Choose a source for ${escapeHtml(step.name)}<select data-recipe-source data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}" aria-label="${scope} source for ${escapeHtml(step.name)}"><option value="">Choose a source</option>${step.choices.map(choice => `<option value="${choice.key}" ${choice.key === step.chosen?.key ? 'selected' : ''}>${escapeHtml(choice.skillName)} · ${escapeHtml(choice.recipe.name)}</option>`).join('')}</select></label>` : ''}
+      ${step.special && SHOPPING_CONVERSIONS.includes(step.id) ? `<label>Conversion input for ${escapeHtml(step.name)}<select data-recipe-conversion data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}" aria-label="${scope} conversion input for ${escapeHtml(step.name)}"><option value="">Choose an input</option>${step.choices.map(choice => `<option value="${choice.id}" ${choice.id === step.sourceId ? 'selected' : ''}>${escapeHtml(choice.name)} · ${recipeAmount(choice.output)} each</option>`).join('')}</select></label>` : ''}
+      ${step.special ? step.gaps.map(gap => `<p>${escapeHtml(gap)}</p>`).join('') : ''}
+      ${step.target?.finite ? `<form data-recipe-quantity-form data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}"><label>Native quantity (not guaranteed output)<input name="amount" data-recipe-quantity data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}" aria-label="${scope} quantity for ${escapeHtml(step.name)}" type="number" min="1" max="1000000" step="1" value="${escapeHtml(AppState.ui.recipePlan.quantityDrafts[recipeQuantityDraftKey(scope, step.id)] ?? step.amount ?? '')}" required></label><button type="submit" class="iw-small-button">Apply quantity</button></form><p>${step.fixed ? 'Base calculation' : 'Uncertain yield; actual output may differ'}</p>` : ''}
       ${active && step.ready ? `<button type="button" class="iw-small-button" data-recipe-select data-recipe-scope="active" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}">Choose ${escapeHtml(step.name)} next</button>` : ''}
       ${step.conversion ? `<p>Manual conversion: ${recipeAmount(step.attempts)} ${escapeHtml(step.conversion.name)} → ${recipeAmount(step.output)} ${escapeHtml(step.name)} (projected, not owned).</p>` : ''}
       ${step.wood ? `<p>Spare owned wood can supply ${recipeAmount(step.woodOutput)} Charcoal through manual conversion; ${recipeAmount(step.acquire)} still to acquire.</p>` : ''}
       ${!step.target ? '<a href="/inventory">Open inventory for manual acquisition or conversion ↗</a>' : ''}`;
+  }
+
+  function recipeUpdateProgress() {
+    const runtime = quickRuntime(), owner = quickOwner(runtime);
+    for (const node of document.querySelectorAll('[data-recipe-pending]')) {
+      if (node.dataset.recipeOwner !== owner) continue;
+      const loot = runtime?.action?.actionLoot;
+      const amount = shoppingNumber(loot?.[node.dataset.recipePending]?.amount ?? (shoppingRecord(loot) ? 0 : null));
+      const text = recipeAmount(amount);
+      if (node.textContent !== text) node.textContent = text;
+    }
   }
 
   // Source: apps/status/selectors.js
@@ -6603,6 +6662,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       return render();
     },
     updateLive(state) {
+      recipeUpdateProgress();
       const { action, loot, consumables, materials, masteryProgress } = state.live;
       return updateLiveValues(action, loot, consumables, materials, masteryProgress);
     }
@@ -7594,6 +7654,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
         event.stopImmediatePropagation();
         return;
       }
+      if (event.target.matches?.('[data-recipe-quantity-form]')) { event.preventDefault(); recipeChange({ dataset: event.target.dataset, value: event.target.elements.amount.value }, 'quantity'); return; }
       if (event.target.matches?.('[data-planned-form]')) { event.preventDefault(); plannedSave(event.target); return; }
       if (event.target.matches?.('[data-shopping-form]')) { event.preventDefault(); shoppingSave(event.target); return; }
       if (!event.target.matches?.('[data-quick-amount-form]')) return;
@@ -7601,6 +7662,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       quickSubmitAmount(event.target);
     }, true);
     document.addEventListener('input', event => {
+      if (event.target.matches?.('[data-recipe-quantity]')) { recipeDraftQuantity(event.target); return; }
       if (event.target.matches?.('input[data-planned-field]')) { plannedDraft(event.target); return; }
       if (event.target.matches?.('[data-shopping-quantity]') || event.target.matches?.('[data-shopping-filter]')) { shoppingDraft(event.target); return; }
       const form = event.target.closest?.('[data-quick-amount-form]');
@@ -7675,6 +7737,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
     }, true);
     document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-recipe-conversion]')) { recipeChange(event.target, 'conversion'); return; }
       if (event.target.matches?.('[data-recipe-source]')) { recipeChange(event.target, 'source'); return; }
       if (event.target.matches?.('[data-recipe-quantity]')) { recipeChange(event.target, 'quantity'); return; }
       if (event.target.matches?.('select[data-planned-field]')) { plannedDraft(event.target); return; }

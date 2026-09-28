@@ -44,7 +44,7 @@
         headerActionSnapshot: null,
         preferencesTrigger: null,
         collectingLoot: false,
-        recipePlan: { open: false, catalogs: new WeakMap(), active: null, preview: null, message: '' },
+        recipePlan: { open: false, quantityDrafts: {}, catalogs: new WeakMap(), active: null, preview: null, message: '' },
         plannedCatalog: { entries: new WeakMap(), revision: 0 },
         plannedAction: { owner: null, plan: null, editing: false, draft: { skillId: '', actionId: '', amount: '' }, filter: '', message: '', observation: null },
         quickSkills: { owner: null, data: null, open: false, busy: false, prompt: null, trigger: null, message: '', signature: '' },
