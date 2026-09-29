@@ -1,6 +1,6 @@
   function renderPlannedActionCard(inPlanner = false) {
     if (!inPlanner && location.pathname !== '/status') return '';
-    if (plannedObserve().plan?.kind === 'recipe' && !inPlanner) return renderRecipeSummary();
+    if (plannedObserve().plan?.kind === 'recipe' && !inPlanner) return '';
     const ui = plannedObserve(), runtime = quickRuntime(), targets = plannedTargets(runtime), busy = quickBusy();
     const manual = ui.plan?.kind !== 'recipe' ? ui.plan : null;
     const target = targets.find(target => quickSameAction(target, ui.plan));

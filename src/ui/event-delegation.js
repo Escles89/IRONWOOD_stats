@@ -37,8 +37,6 @@
       if (recipeStartControl) { recipeStart(recipeStartControl); return; }
       const recipeSelect = event.target.closest?.('[data-recipe-select]');
       if (recipeSelect) { recipeChange(recipeSelect, 'selected'); return; }
-      const recipeUse = event.target.closest?.('[data-recipe-use]');
-      if (recipeUse) { recipeActivate(recipeUse); return; }
       if (event.target.closest?.('[data-recipe-refresh]')) { recipeRefresh(); return; }
       if (event.target.closest?.('[data-planned-refresh]')) { plannedRefresh(); return; }
       if (event.target.closest?.('[data-planned-start]')) { plannedStart(); return; }
@@ -49,7 +47,8 @@
       const shoppingStepLink = event.target.closest?.('[data-shopping-step-link]');
       if (shoppingStepLink) { event.preventDefault(); shoppingOpenStep(shoppingStepLink); return; }
       if (event.target.closest?.('[data-shopping-refresh]')) { shoppingRefresh(); return; }
-      if (event.target.closest?.('[data-shopping-edit]')) { shoppingEdit(); return; }
+      const shoppingEditControl = event.target.closest?.('[data-shopping-edit]');
+      if (shoppingEditControl) { recipeEditCalculator(shoppingEditControl); return; }
       if (event.target.closest?.('[data-shopping-clear]')) { shoppingClear(); return; }
       if (event.target.closest?.('[data-shopping-cancel]')) { AppState.ui.shopping.editing = false; render(); return; }
       if (event.target.matches?.('[data-quick-backdrop]')) { quickClose(); return; }

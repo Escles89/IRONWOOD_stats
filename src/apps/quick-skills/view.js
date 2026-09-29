@@ -74,7 +74,7 @@
         </div>
       </form></div>`);
     }
-    if (AppState.ui.recipePlan.open) return shell(`${quickModalHeading('Recipe Calc & planner', 'Preview, choose, then start each action manually.', '/assets/icon.png', 'Close planner')}<div class="iw-quick-body iw-recipe-planner">${renderRecipePlanner()}</div>`);
+    if (AppState.ui.recipePlan.open) return shell(`${quickModalHeading('Recipe Calc & planner', 'Edit your target, then start each action manually.', '/assets/icon.png', 'Close planner')}<div class="iw-quick-body iw-recipe-planner">${renderRecipePlanner()}</div>`);
     return shell(`${quickModalHeading('Skills', 'Your last actions, ready when you are.', '/assets/icon.png', 'Close Skills')}
       <div class="iw-quick-body"><p class="iw-quick-message${ui.message ? ' has-message' : ''}" role="status">${escapeHtml(ui.message || 'Start a remembered action, or open a skill to choose something new.')}</p>
       ${renderRecipeSummary()}<ul class="iw-quick-grid">${quickSkills(runtime).map(skill => {

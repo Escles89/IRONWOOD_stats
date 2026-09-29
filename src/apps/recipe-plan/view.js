@@ -38,12 +38,12 @@
 
   function renderRecipePlanner() {
     shoppingObserve();
-    const plan = plannedObserve().plan, preview = recipePreviewPlan(), ui = AppState.ui.recipePlan;
+    const plan = plannedObserve().plan, ui = AppState.ui.recipePlan;
     const view = ui.view || (plan ? 'plan' : 'calculator');
     const current = plannedCurrentState(), collection = ['continuous', 'completed'].includes(current.kind);
     return `<nav class="iw-recipe-nav" aria-label="Planner views">${[['plan', 'Active plan'], ['calculator', 'Calculator'], ['manual', 'Single action']].map(([key, label]) => `<button type="button" data-recipe-view="${key}" aria-label="${label} view" aria-pressed="${view === key}" aria-controls="iw-recipe-panel-${key}">${label}</button>`).join('')}</nav>
       <div id="iw-recipe-panel-plan" data-recipe-panel="plan" ${view === 'plan' ? '' : 'hidden'}>${renderRecipeSummary(true)}${collection ? `<div class="iw-recipe-collection"><button type="button" class="iw-small-button" data-recipe-collect="${escapeHtml(recipeCollectionToken())}" aria-label="${current.kind === 'continuous' ? 'Stop & collect' : 'Collect completed work'}" ${quickBusy() ? 'disabled' : ''}>${current.kind === 'continuous' ? 'Stop & collect' : 'Collect completed work'}</button><small>Collection does not start the next action.</small></div>` : ''}${plan?.kind === 'recipe' ? renderRecipeSteps(plan, recipeObservation(plan), true) : '<p class="iw-recipe-note">Use the Calculator to build a recipe plan, or choose a Single action.</p>'}</div>
-      <div id="iw-recipe-panel-calculator" data-recipe-panel="calculator" ${view === 'calculator' ? '' : 'hidden'}>${renderShoppingCard(true)}${preview ? renderRecipeSteps(preview, recipeObservation(preview, 'preview'), false) : ''}</div>
+      <div id="iw-recipe-panel-calculator" data-recipe-panel="calculator" ${view === 'calculator' ? '' : 'hidden'}>${renderShoppingCard(true)}</div>
       <div id="iw-recipe-panel-manual" data-recipe-panel="manual" ${view === 'manual' ? '' : 'hidden'}><p class="iw-recipe-note">Save one action to replace the active plan.</p>${renderPlannedActionCard(true)}</div>`;
   }
 
@@ -70,8 +70,14 @@
     }
   }
 
-  function renderRecipeSendButton() {
-    const plan = recipePreviewPlan(), snapshot = recipeObservation(plan, 'preview');
-    if (!plan) return '';
-    return `<button type="button" class="iw-small-button iw-recipe-primary" data-recipe-use="${escapeHtml(JSON.stringify([plannedObserve().owner, plan]))}" ${!snapshot || snapshot.unavailable || quickBusy() || recipeHasDraft('preview') ? 'disabled' : ''}>Send to planner</button>`;
+  function renderRecipeOverview() {
+    const plan = plannedObserve().plan;
+    if (plan?.kind !== 'recipe') return '';
+    const snapshot = recipeObservation(plan);
+    if (!snapshot) return '';
+    const next = snapshot.next, steps = next ? [next, ...snapshot.steps.filter(step => step !== next)] : snapshot.steps;
+    return `<aside class="iw-shopping-planned" aria-label="Planned overview"><div class="iw-shopping-planned-heading"><strong>Planned</strong><span>${snapshot.steps.length} remaining requirements</span></div>
+      ${plan.target.itemId !== AppState.ui.shopping.plan?.itemId || plan.target.quantity !== AppState.ui.shopping.plan?.quantity ? `<p>${escapeHtml(snapshot.name)} · Target ${recipeAmount(plan.target.quantity)}</p>` : ''}
+      ${snapshot.shortfall === 0 ? '<p>Target satisfied</p>' : `<ol>${steps.slice(0, 3).map(step => `<li><span class="iw-shopping-planned-state">${snapshot.running?.key === step.key ? 'In progress' : step === next ? 'Next' : !step.target ? 'Manual' : step.ready ? 'Ready' : 'Waiting'}</span><span>${recipeAmount(step.missing)} ${escapeHtml(step.name)}</span></li>`).join('')}</ol>`}
+      ${steps.length > 3 ? `<small>+${steps.length - 3} more in the Skills planner</small>` : ''}${snapshot.unavailable ? '<small>Last observation · balances unavailable</small>' : ''}</aside>`;
   }

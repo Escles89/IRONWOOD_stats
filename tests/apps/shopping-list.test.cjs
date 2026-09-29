@@ -7,9 +7,9 @@ function setup(storage = new Map(), configure = () => {}) {
   const page = { hidden: false, innerHTML: '', style: { setProperty() {} }, contains: () => true, querySelector: () => null, querySelectorAll: () => [] };
   const document = { getElementById: id => nodes.get(id) || null, hidden: false, activeElement: null,
     body: { textContent: '', appendChild(node) { nodes.set(node.id, node); } },
-    querySelector: selector => selector === '.iw-shopping-modal [data-modal-close]' ? closeControl : nodes.get(selector.slice(1)) || null,
+    querySelector: selector => selector === '.iw-shopping-modal [data-modal-close]' ? closeControl : nodes.get(selector.split(' ')[0].slice(1)) || null,
     querySelectorAll: () => [],
-    createElement() { return { innerHTML: '', get content() { return { firstElementChild: { markup: this.innerHTML } }; },
+    createElement() { return { innerHTML: '', setAttribute() {}, focus() { document.activeElement = this; }, contains: () => false, querySelector: () => null, querySelectorAll: () => [], get content() { return { firstElementChild: { markup: this.innerHTML } }; },
       appendChild(child) { this.innerHTML = child.markup; }, remove() { nodes.delete(this.id); } }; },
     addEventListener(type, callback) { (listeners[type] ||= []).push(callback); } };
   const closeControl = { focus() { document.activeElement = this; } };
@@ -36,7 +36,7 @@ function setup(storage = new Map(), configure = () => {}) {
       catalogSignature = signature;
     }
   }
-  function render() { currentCatalog(); h.context.render(); assert.deepEqual(errors, []); return page.innerHTML + (nodes.get('iw-global-dialogs')?.innerHTML || ''); }
+  function render() { currentCatalog(); h.context.render(); assert.deepEqual(errors, []); return page.innerHTML + (nodes.get('iw-global-dialogs')?.innerHTML || '') + (nodes.get('iw-quick-skills-panel')?.innerHTML || ''); }
   function emit(type, attr, value, fields, dataset = {}) {
     currentCatalog();
     const target = { value, dataset: { shoppingOwner: JSON.stringify([user.displayName, runtime.state.isSolo]), ...dataset }, open: value === true, disabled: false,
@@ -593,13 +593,13 @@ test('saved conversion inputs expand recipes, round fixed yields and share sourc
   assert.deepEqual(s.calls, []);
 });
 
-test('conversion defaults can be set before a target, removed, and retained visibly when native inputs disappear', () => {
+test('conversion inputs save with the target, can be removed, and remain visible when native inputs disappear', () => {
   const s = setup(new Map(), conversionFixture);
   s.detail('defaults');
   assert.match(s.modal(), /Default inputs/);
   s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
+  s.save('101', '3');
   const reload = setup(s.storage, conversionFixture);
-  reload.save('101', '3');
   assert.match(reload.render(), /8 Iron Ore/);
   reload.runtime.conversionCatalog = { ...reload.runtime.conversionCatalog, metalParts: {} };
   assert.match(reload.detail('resource:metalParts'), /Saved conversion input is unavailable/);
@@ -707,7 +707,8 @@ test('Recipe Calc keeps Inputs in Edit and preserves expanded recipe details dur
   assert.match(s.render(), /Recipe Calc<sup>™<\/sup>/);
   assert.doesNotMatch(s.page.innerHTML, /data-shopping-step-link="defaults"/);
   s.emit('click', '[data-shopping-edit]');
-  assert.match(s.page.innerHTML, /data-shopping-step-link="defaults"/);
+  assert.doesNotMatch(s.page.innerHTML, /data-shopping-form/);
+  assert.match(s.render(), /data-shopping-step-link="defaults"/);
   s.emit('click', '[data-shopping-cancel]');
   s.detail();
   s.emit('toggle', '[data-shopping-recipe-details]', true, null, { shoppingStep: 'item:101' });

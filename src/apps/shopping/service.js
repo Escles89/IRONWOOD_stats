@@ -52,7 +52,7 @@
 
   function shoppingSave(form) {
     const formOwner = form.dataset.shoppingOwner, ui = shoppingObserve(), runtime = quickRuntime();
-    if (!ui.owner || ui.owner !== formOwner) return;
+    if (!ui.owner || ui.owner !== formOwner || quickBusy()) return;
     const itemId = form.querySelector('[name="item"]').value, quantity = Number(form.querySelector('[name="quantity"]').value);
     const recipeKey = form.querySelector('[name="recipe"]')?.value || '';
     if (!shoppingItem(runtime, itemId) || !shoppingQuantity(quantity)) ui.message = 'Choose an item and a positive whole-number Target owned quantity.';
@@ -61,7 +61,13 @@
       const invalidated = ui.plan?.itemId === itemId && ui.plan.recipeKey && !choices.some(entry => entry.key === ui.plan.recipeKey);
       if ((recipeKey && !choices.some(entry => entry.key === recipeKey)) || (invalidated && !recipeKey)) ui.message = 'Choose a current recipe.';
       else {
-        ui.plan = { itemId, quantity, recipeKey: recipeKey || (choices.length === 1 ? choices[0].key : ''), recipes: ui.plan?.itemId === itemId ? { ...ui.plan.recipes } : {}, sources: ui.plan?.itemId === itemId ? { ...ui.plan.sources } : {}, quantities: {} };
+        const previous = ui.draft.itemId === itemId ? ui.draft : ui.plan?.itemId === itemId ? ui.plan : null;
+        const resolvedRecipe = recipeKey || (choices.length === 1 ? choices[0].key : '');
+        const plan = { itemId, quantity, recipeKey: resolvedRecipe, recipes: { ...previous?.recipes }, sources: { ...previous?.sources }, quantities: previous?.recipeKey === resolvedRecipe ? { ...previous?.quantities } : {} };
+        const conversions = ui.draft.conversions || ui.conversions;
+        if (!recipeSaveCalculator(plan, conversions)) { ui.message = plannedObserve().message || 'The plan could not be saved.'; render(); return; }
+        ui.plan = plan;
+        ui.conversions = { ...conversions };
         for (const key of Object.keys(AppState.ui.recipePlan.quantityDrafts)) if (JSON.parse(key)[1] === 'preview') delete AppState.ui.recipePlan.quantityDrafts[key];
         ui.editing = false;
         ui.selectedStep = null;
@@ -69,6 +75,7 @@
         ui.snapshot = null;
         ui.message = '';
         shoppingPersist();
+        if (AppState.ui.recipePlan.open) AppState.ui.recipePlan.view = 'plan';
       }
     }
     AppState.ui.lastSignature = '';
@@ -80,10 +87,12 @@
     if (!ui.owner) return;
     ui.selectedStep = null;
     ui.editing = true;
-    ui.draft = ui.plan ? { ...ui.plan, quantity: String(ui.plan.quantity) } : { itemId: '', quantity: '100', recipeKey: '' };
+    const active = plannedObserve().plan;
+    const plan = active?.kind === 'recipe' ? { ...active.target, sources: { ...active.sources }, quantities: { ...active.quantities }, conversions: { ...active.conversions } } : ui.plan;
+    ui.draft = plan ? { ...plan, quantity: String(plan.quantity) } : { itemId: '', quantity: '100', recipeKey: '' };
     ui.filter = '';
     render();
-    document.querySelector('[data-shopping-item]')?.focus();
+    document.querySelector('#iw-quick-skills-panel [data-shopping-item]')?.focus();
   }
 
   function shoppingClear() {
@@ -146,14 +155,19 @@
   function shoppingChooseRecipe(control) {
     const owner = control.dataset.shoppingOwner, itemId = control.dataset.shoppingRecipeItem;
     const ui = shoppingObserve(), runtime = quickRuntime();
-    if (!ui.plan || ui.owner !== owner || ui.unavailable || !quickId(itemId)) return;
+    if (!ui.plan || ui.owner !== owner || ui.unavailable || ui.editing || !quickId(itemId)) return;
     if (!ui.snapshot?.nodes.some(node => !node.special && node.id === itemId)) return;
     if (!(shoppingRecipes(runtime).byItem.get(itemId) || []).some(entry => entry.key === control.value)) return;
     if (itemId === ui.plan.itemId) ui.plan.recipeKey = control.value;
-    else ui.plan.recipes = { ...ui.plan.recipes, [itemId]: control.value };
+    else {
+      ui.plan.recipes = { ...ui.plan.recipes, [itemId]: control.value };
+      ui.plan.sources = { ...ui.plan.sources, [itemId]: control.value };
+    }
+    if (ui.plan.quantities) delete ui.plan.quantities[`item:${itemId}`];
     ui.signature = '';
     ui.message = '';
     shoppingPersist();
+    recipeUpdateFromCalculator();
     render();
   }
 
@@ -194,12 +208,20 @@
     const ui = shoppingObserve(), runtime = quickRuntime();
     if (!ui.owner || ui.owner !== owner || shoppingPending(runtime) || !SHOPPING_CONVERSIONS.includes(resource)) return;
     if (control.value && !shoppingConversionChoices(runtime, resource).some(choice => choice.id === control.value)) return;
+    if (ui.editing) {
+      ui.draft.conversions = { ...(ui.draft.conversions || ui.conversions) };
+      if (control.value) ui.draft.conversions[resource] = control.value;
+      else delete ui.draft.conversions[resource];
+      render();
+      return;
+    }
     ui.conversions = { ...ui.conversions };
     if (control.value) ui.conversions[resource] = control.value;
     else delete ui.conversions[resource];
     ui.signature = '';
     ui.message = '';
     shoppingPersist();
+    recipeUpdateFromCalculator();
     render();
   }
 

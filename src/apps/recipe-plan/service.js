@@ -27,15 +27,22 @@
     document.querySelector('#iw-quick-skills-panel [data-quick-close]')?.focus();
   }
 
-  function recipeActivate(control) {
-    const ui = plannedObserve(), plan = recipePreviewPlan();
-    if (!ui.owner || !plan || quickBusy() || recipeHasDraft('preview')) return;
-    if (control.dataset.recipeUse !== JSON.stringify([ui.owner, plan])) { ui.message = 'Calculator target changed. Review the preview before using it as a plan.'; render(); return; }
+  function recipeSaveCalculator(calculator, conversions) {
+    const ui = plannedObserve();
+    if (!ui.owner || quickBusy()) return false;
+    const plan = { kind: 'recipe', target: { itemId: calculator.itemId, quantity: calculator.quantity, recipeKey: calculator.recipeKey, recipes: { ...calculator.recipes } }, conversions: { ...conversions }, sources: { ...calculator.sources }, quantities: { ...calculator.quantities }, selected: null };
     const snapshot = recipeObservation(plan, 'preview');
-    if (!snapshot || snapshot.unavailable) return;
+    if (!snapshot) return false;
     for (const node of snapshot.nodes) if (node.chosen && node.id !== plan.target.itemId && !plan.sources[node.id]) plan.sources[node.id] = node.chosen.key;
-    if (plannedPersist(plan)) { ui.editing = false; recipeOpenPlanner(control); return; }
-    render();
+    return plannedPersist(plan);
+  }
+
+  function recipeEditCalculator(trigger) {
+    AppState.ui.quickSkills.trigger = trigger;
+    AppState.ui.quickSkills.open = true;
+    AppState.ui.recipePlan.open = true;
+    AppState.ui.recipePlan.view = 'calculator';
+    shoppingEdit();
   }
 
   function recipeChange(control, field) {
@@ -62,7 +69,9 @@
       if (!step.ready) return;
       updated.selected = step.key;
     }
-    if (active) plannedPersist(updated);
+    if (active) {
+      if (plannedPersist(updated)) recipeUpdateCalculator(updated);
+    }
     else {
       AppState.ui.shopping.conversions = updated.conversions;
       AppState.ui.shopping.plan.recipeKey = updated.target.recipeKey;
@@ -237,4 +246,19 @@
     const key = recipeQuantityDraftKey(scope, id), ui = AppState.ui.recipePlan;
     ui.expandedStep = ui.expandedStep === key ? null : key;
     render();
+  }
+
+  function recipeUpdateFromCalculator() {
+    const ui = shoppingObserve(), active = plannedObserve().plan;
+    if (active?.kind === 'recipe' && ui.plan?.itemId === active.target.itemId && ui.plan.quantity === active.target.quantity)
+      recipeSaveCalculator(ui.plan, ui.conversions);
+  }
+
+  function recipeUpdateCalculator(plan) {
+    const ui = shoppingObserve();
+    if (ui.plan?.itemId !== plan.target.itemId || ui.plan.quantity !== plan.target.quantity) return;
+    ui.plan = { ...plan.target, sources: { ...plan.sources }, quantities: { ...plan.quantities } };
+    ui.conversions = { ...plan.conversions };
+    ui.signature = '';
+    shoppingPersist();
   }

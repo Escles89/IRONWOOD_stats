@@ -1,10 +1,12 @@
 # Recipe Calc and recipe plans
 
-Open **Skills → Recipe Calc & planner**, or **Open planner** on Status. The combined panel opens over the page you are using.
+Open **Skills → Recipe Calc & planner**, or select **Edit** on the Status Recipe Calc card. The combined panel opens over the page you are using.
 
 The panel has three views: **Active plan**, **Calculator**, and **Single action**. It opens on your active plan when one exists.
 
-In **Calculator**, save a finished item and its **Target owned quantity** in Recipe Calc. The preview subtracts items you already own and expands the remaining gathering and crafting requirements. Choose sources where several actions can supply an item. Select **Send to planner** in the Recipe Calc header to replace the active plan and open it directly. The button is available on Status and in the Calculator view after saving the target. Editing the calculator afterward only changes the preview until you activate it again.
+In **Calculator**, choose a finished item and its **Target owned quantity**, then select **Save plan**. Saving updates the active recipe plan directly and returns to Active plan. **Edit** starts from the active recipe, including its source and conversion choices; **Cancel** discards unsaved target and input edits. There is no separate Send to planner step.
+
+Status keeps one compact Recipe Calc card with the recipe tree and a short **Planned** overview. The overview shows up to three remaining requirements, including the next action and work already in progress. Open the full planner through Skills for action controls and the complete list.
 
 Quick Skills shows one **Next** action for the plan. The active plan shows compact requirement rows with Next, Ready, Blocked or Manual badges. Expand a row to see required, owned and missing amounts, batch supplies, quantity controls and source choices; **Choose … next** selects another ready step. Conversions and other manual requirements include an inventory link. Opening that link does not complete the requirement: the resulting balance must be observed.
 
