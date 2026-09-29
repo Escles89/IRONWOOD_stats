@@ -608,12 +608,12 @@ test('Status labels partial loot coverage and drops retained loot rather than tr
 test('Current Loot updates the visible mastery bar without rewriting the dashboard', () => {
   const s = setup(); currentLoot(s);
   s.change('1'); s.escape();
-  assert.match(statusMasteryRow(s), /Woodcutting<span data-mastery-total>· 80%<\/span>/);
+  assert.match(statusMasteryRow(s), /Woodcutting<span data-mastery-total>80%<\/span>/);
   const writes = s.page.writes;
   s.runtime.action.actionLoot['101'].amount = 20; s.render();
   assert.match(statusMasteryRow(s), /20% contributed · 90% with inventory \+ loot/);
   assert.match(statusMasteryRow(s), /data-mastery-inventory style="width:70%"/);
-  assert.match(statusMasteryRow(s), /Woodcutting<span data-mastery-total>· 90%<\/span>/);
+  assert.match(statusMasteryRow(s), /Woodcutting<span data-mastery-total>90%<\/span>/);
   assert.equal(s.page.writes, writes);
   assert.deepEqual(s.calls, []);
 });

@@ -1,7 +1,7 @@
   const masteryPercent = value => `${Math.floor(value * 10) / 10}%`;
 
   function masteryStatusTotal(progress) {
-    return progress.possible === undefined ? '· —' : `· ${progress.lootIncomplete && progress.possible < 100 ? '≥' : ''}${masteryPercent(progress.possible)}`;
+    return progress.possible === undefined ? '—' : `${progress.lootIncomplete && progress.possible < 100 ? '≥' : ''}${masteryPercent(progress.possible)}`;
   }
 
   function masteryStatusLabel(progress) {
