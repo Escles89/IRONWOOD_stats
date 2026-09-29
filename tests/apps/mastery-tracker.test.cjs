@@ -21,7 +21,7 @@ function setup(storage = new Map(), configure = () => {}) {
     };
   }
   const masteryRow = { querySelector(selector) {
-    const patterns = { small: /<small>[^<]*<\/small>/, '.iw-mastery-coverage': /<span class="iw-mastery-coverage"[^>]*>/,
+    const patterns = { small: /<small>[^<]*<\/small>/, '[data-mastery-total]': /<span data-mastery-total>[^<]*<\/span>/, '.iw-mastery-coverage': /<span class="iw-mastery-coverage"[^>]*>/,
       '[data-mastery-contributed]': /<span data-mastery-contributed[^>]*>/, '[data-mastery-inventory]': /<span data-mastery-inventory[^>]*>/ };
     return patterns[selector] ? rowElement(patterns[selector]) : null;
   } };
@@ -608,10 +608,12 @@ test('Status labels partial loot coverage and drops retained loot rather than tr
 test('Current Loot updates the visible mastery bar without rewriting the dashboard', () => {
   const s = setup(); currentLoot(s);
   s.change('1'); s.escape();
+  assert.match(statusMasteryRow(s), /Woodcutting<span data-mastery-total>· 80%<\/span>/);
   const writes = s.page.writes;
   s.runtime.action.actionLoot['101'].amount = 20; s.render();
   assert.match(statusMasteryRow(s), /20% contributed · 90% with inventory \+ loot/);
   assert.match(statusMasteryRow(s), /data-mastery-inventory style="width:70%"/);
+  assert.match(statusMasteryRow(s), /Woodcutting<span data-mastery-total>· 90%<\/span>/);
   assert.equal(s.page.writes, writes);
   assert.deepEqual(s.calls, []);
 });
