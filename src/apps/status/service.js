@@ -202,8 +202,8 @@
       ['potion-divine-gather-yield.png', 'Divine Gather Yield Potion'],
       ['potion-divine-preservation.png', 'Divine Multi Craft Potion'],
       ['potion-divine-combat-loot.png', 'Divine Combat Loot Potion'],
-      ['potion-divine-craft-efficiency.png', 'Divine Craft Efficiency Potion'],
-      ['potion-divine-combat-efficiency.png', 'Divine Combat Efficiency Potion']
+      ['potion-divine-craft-efficiency.png', 'Divine Craft XP Potion'],
+      ['potion-divine-combat-efficiency.png', 'Divine Combat XP Potion']
     ];
     const potionMap = new Map();
     if (potionTypes.includes('Divine')) canonicalDivinePotions.forEach(([key, name]) => potionMap.set(key, {

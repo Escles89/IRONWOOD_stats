@@ -65,6 +65,30 @@ test('potion selection preserves the legacy setting and supports an explicitly e
   assert.equal(h.run('JSON.stringify(getPotionTypes())'),'[]');
 });
 
+test('Divine XP potion defaults use game names despite legacy efficiency image filenames',()=>{
+  const h=setup();
+  h.run('StatusRenderer.render(AppState)');
+  const names=JSON.parse(h.run('JSON.stringify(AppState.derived.displayedPotions.map(item=>item.name))'));
+  assert.ok(names.includes('Divine Craft XP Potion'));
+  assert.ok(names.includes('Divine Combat XP Potion'));
+  assert.ok(!names.some(name=>/Efficiency/.test(name)));
+  h.run(`
+    CacheStore.set('inventory',{schema:1,items:[],allItems:[
+      {key:'potion-divine-craft-efficiency.png',name:'Divine Craft XP Potion',image:'/assets/items/potion-divine-craft-efficiency.png',amount:17},
+      {key:'potion-divine-combat-efficiency.png',name:'Divine Combat XP Potion',image:'/assets/items/potion-divine-combat-efficiency.png',amount:2891}
+    ]});
+    SourceAdapter.capture=()=>Object.assign(AppState.live,{action,loot:[],materials:[],masteryProgress:{},finiteQueue:queue,consumables:[
+      {name:'Divine Craft XP Potion',image:'/assets/items/potion-divine-craft-efficiency.png',amount:'25'}
+    ]});
+    StatusRenderer.render(AppState);
+  `);
+  const xpPotions=JSON.parse(h.run('JSON.stringify(AppState.derived.displayedPotions.filter(item=>/XP/.test(item.name)))'));
+  assert.equal(xpPotions.length,2);
+  assert.equal(xpPotions.find(item=>item.name==='Divine Craft XP Potion').stored,17);
+  assert.equal(xpPotions.find(item=>item.name==='Divine Craft XP Potion').equipped,25);
+  assert.equal(xpPotions.find(item=>item.name==='Divine Combat XP Potion').stored,2891);
+});
+
 test('action summary shows earned XP percentage, including zero after leveling up',()=>{
   const h=setup();
   for(const progress of [87,0,100]) {

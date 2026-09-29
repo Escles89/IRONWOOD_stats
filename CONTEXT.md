@@ -106,6 +106,12 @@ Items already submitted toward a Skill Mastery's requirements. They count toward
 The total quantity of a finished item the player wants to hold. Existing owned items count toward this target; only the shortfall needs to be produced or acquired.
 _Avoid_: Additional quantity to craft.
 
+**Recipe chain**:
+A finished item and the ingredient dependencies needed to reach its target owned quantity through the selected recipes. Owned finished items and intermediates reduce the remaining requirements.
+
+**Recipe plan**:
+A plan of gathering and crafting actions derived from a recipe chain, with remaining requirements determined by owned inventory. Each action is started manually.
+
 **Missing now**:
 The outstanding amount of a requirement not covered by owned inventory, floored at zero. For Skill Mastery, already contributed items reduce the requirement first; unknown amounts leave the shortfall unknown.
 
@@ -115,7 +121,7 @@ The amount of a requirement that would remain after collecting the current actio
 ### Quick actions
 
 **Planned next action**:
-A specific action the player selects as their intended next activity and starts manually when ready. Selecting it records an intention; it does not make it the current action or the last action.
+A specific action identified as the player's intended next activity, either selected directly or suggested by an active recipe plan, and started manually when ready. Planning it does not make it the current action or the last action.
 
 **Quick loot**:
 A player-requested collection of the current action's pending loot followed by resuming that same action.
