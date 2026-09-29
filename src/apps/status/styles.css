@@ -1205,11 +1205,11 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
       .iw-shopping-tree-scroll { max-width:100%; overflow-x:auto; padding:18px 0 12px; background:radial-gradient(ellipse at 50% 0,#80b6c90b,transparent 65%); }
       .iw-shopping-tree, .iw-shopping-branches { list-style:none; margin:0; padding:0; display:flex; justify-content:center; }
       .iw-shopping-tree { width:max-content; min-width:100%; }
-      .iw-shopping-tree li { --junction-color:#79bf98; position:relative; display:flex; flex-direction:column; align-items:center; padding:0 12px; box-sizing:border-box; flex-shrink:0; }
+      .iw-shopping-tree li { --junction-color:#79bf98; width:calc(var(--iw-branch-width) * var(--iw-tree-unit,1px)); position:relative; display:flex; flex-direction:column; align-items:center; padding:0 calc(12 * var(--iw-tree-unit,1px)); box-sizing:border-box; flex-shrink:0; }
       .iw-shopping-tree li[data-connection="craftable"] { --junction-color:#79b8ef; }
       .iw-shopping-tree li[data-supply="insufficient"] { --junction-color:#f27683; }
       .iw-shopping-tree li[data-supply="unknown"] { --junction-color:#dbb96d; }
-      .iw-shopping-branches { position:relative; margin-top:20px; padding-top:20px; }
+      .iw-shopping-branches { width:calc(var(--iw-branch-width) * var(--iw-tree-unit,1px)); position:relative; margin-top:20px; padding-top:20px; }
       .iw-shopping-branches::after { content:''; position:absolute; top:-23px; left:calc(50% - 4px); width:6px; height:6px; border:1px solid var(--junction-color); background:var(--junction-color); box-shadow:0 0 0 2px #152b3c; transform:rotate(45deg); z-index:1; animation:iw-shopping-breathe 3.2s ease-in-out infinite; }
       @keyframes iw-shopping-breathe {
         0%, 100% { transform:rotate(45deg) scale(.9); opacity:.7; }
@@ -1350,6 +1350,7 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
   }
 
 /* Keep the calculator and its planned overview in one compact card. */
+.iw-shopping-card { container: iw-recipe-card / inline-size; }
 .iw-shopping-card .iw-card-header { padding: 10px 12px; }
 .iw-shopping-card .iw-shopping-body { padding: 10px 12px; }
 .iw-shopping-card .iw-shopping-overview { padding: 10px; margin-bottom: 8px; }
@@ -1362,7 +1363,7 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
 .iw-shopping-plan-layout { display: flex; align-items: start; gap: 16px; }
 .iw-shopping-calculation { flex: 0 1 42%; min-width: 0; }
 .iw-shopping-calculation .iw-shopping-totals { grid-template-columns: repeat(2,minmax(0,1fr)); }
-.iw-shopping-plan-layout .iw-shopping-tree-scroll { flex: 1; min-width: 0; padding: 8px 0; }
+.iw-shopping-plan-layout .iw-shopping-tree-scroll { container: iw-recipe-tree / inline-size; flex: 1; min-width: 0; padding: 8px 0; }
 .iw-shopping-card .iw-shopping-node, .iw-shopping-card .iw-shopping-tree > li > .iw-shopping-node { width: 36px; height: 36px; flex-basis: 36px; }
 .iw-shopping-card .iw-shopping-icon, .iw-shopping-card .iw-shopping-tree > li > .iw-shopping-node > .iw-shopping-icon { width: 32px; height: 32px; flex-basis: 32px; }
 .iw-shopping-card .iw-shopping-icon img, .iw-shopping-card .iw-shopping-tree > li > .iw-shopping-node > .iw-shopping-icon img { width: 24px; height: 24px; }
@@ -1374,7 +1375,7 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
 .iw-shopping-planned-state { flex: 0 0 56px; font-size: 10px; color: #9ebacb; }
 .iw-shopping-planned li:first-child .iw-shopping-planned-state { color: #a6dfc9; }
 .iw-shopping-planned small { display: block; margin-top: 5px; color: #9ebacb; }
-@media (max-width: 600px) {
+@container iw-recipe-card (max-width: 640px) {
   .iw-shopping-plan-layout { flex-direction: column; gap: 4px; }
   .iw-shopping-calculation { flex: auto; width: 100%; }
   .iw-shopping-plan-layout .iw-shopping-tree-scroll { width: 100%; flex: auto; }

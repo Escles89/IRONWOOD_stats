@@ -1,9 +1,25 @@
-  function renderMasteryStatusRow() {
-    const progress = masteryStatusProgress();
+  function masteryStatusLabel(progress) {
     const percent = value => `${Math.floor(value * 10) / 10}%`;
-    const label = progress.notice === 'Mastery complete' ? progress.notice : progress.contributed === undefined ? progress.notice
-      : `${percent(progress.contributed)} contributed · ${progress.possible === undefined ? progress.notice : `${percent(progress.possible)} with inventory`}`;
-    return `<button type="button" class="iw-status-row iw-status-mastery" data-mastery-status data-mastery-open aria-haspopup="dialog" title="View mastery requirements. Material progress only; XP and coins are separate.">
+    return progress.notice === 'Mastery complete' ? progress.notice : progress.contributed === undefined ? progress.notice
+      : `${percent(progress.contributed)} contributed · ${progress.possible === undefined ? progress.notice : `${percent(progress.possible)} with inventory + ${progress.lootIncomplete ? 'known loot' : 'loot'}`}`;
+  }
+
+  function updateMasteryStatusRow(progress) {
+    const row = AppState.ui.page?.querySelector('[data-mastery-status]');
+    if (!row) return;
+    const label = masteryStatusLabel(progress), text = row.querySelector('small');
+    if (text && text.textContent !== label) text.textContent = label;
+    const bar = row.querySelector('.iw-mastery-coverage');
+    if (bar && bar.getAttribute('aria-label') !== `Material completion: ${label}`) bar.setAttribute('aria-label', `Material completion: ${label}`);
+    for (const [selector, width] of [['[data-mastery-contributed]', progress.contributed], ['[data-mastery-inventory]', Math.max(0, (progress.possible ?? progress.contributed) - progress.contributed)]]) {
+      const fill = row.querySelector(selector);
+      if (fill && fill.style.width !== `${width}%`) fill.style.width = `${width}%`;
+    }
+  }
+
+  function renderMasteryStatusRow() {
+    const progress = masteryStatusProgress(), label = masteryStatusLabel(progress);
+    return `<button type="button" class="iw-status-row iw-status-mastery" data-mastery-status data-mastery-open aria-haspopup="dialog" title="View mastery requirements. Blue: contributed. Green: inventory and Current Loot.${progress.lootIncomplete ? ' Loot incomplete; coverage is a lower bound.' : ''} Materials only; XP and coins are separate.">
       <img src="/assets/misc/mastery.png" alt=""><span><b>${escapeHtml(progress.name)}${progress.name === 'Skill Mastery' ? '' : ' <span class="iw-mastery-status-caption">mastery</span>'}</b><small>${escapeHtml(label)}</small>
       ${progress.contributed === undefined ? '' : `<span class="iw-mastery-coverage" role="img" aria-label="Material completion: ${escapeHtml(label)}"><span data-mastery-contributed style="width:${progress.contributed}%"></span><span data-mastery-inventory style="width:${Math.max(0, (progress.possible ?? progress.contributed) - progress.contributed)}%"></span></span>`}</span><em aria-hidden="true">›</em></button>`;
   }

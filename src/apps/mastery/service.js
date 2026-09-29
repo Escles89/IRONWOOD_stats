@@ -124,8 +124,12 @@
     if (snapshot.needsReconcile || snapshot.collectionPending || rows.some(row => row.owned === null)) {
       return { name, contributed: percent(contributed), notice: snapshot.needsReconcile ? 'Inventory needs refresh' : 'Inventory coverage unknown' };
     }
-    const additional = rows.reduce((sum, row) => sum + Math.min(Math.max(0, row.required - row.contributed), row.owned), 0);
-    return { name, contributed: percent(contributed), possible: percent(contributed + additional) };
+    const loot = snapshot.loot;
+    const additional = rows.reduce((sum, row) => {
+      const pending = !loot?.retained ? masteryNumber(loot?.items?.[row.id]) ?? 0 : 0;
+      return sum + Math.min(Math.max(0, row.required - row.contributed), row.owned + pending);
+    }, 0);
+    return { name, contributed: percent(contributed), possible: percent(contributed + additional), lootIncomplete: !loot?.complete || Boolean(loot.retained) };
   }
 
   function selectMastery(id) {

@@ -78,9 +78,10 @@
       const childWidth = children.reduce((sum, child) => sum + child.width, 0);
       const width = Math.max(edge ? 48 : 56, childWidth) + 24;
       const connections = children.length ? renderShoppingConnections(children, childWidth) : '';
-      return { width, supply: connection, markup: `<li style="width:${width}px" data-shopping-node="${escapeHtml(node.key)}" data-supply="${node.supply}" data-connection="${connection}">${content}${children.length ? `<ul class="iw-shopping-branches" style="width:${childWidth}px">${connections}${children.map(child => child.markup).join('')}</ul>` : ''}</li>` };
+      return { width, supply: connection, markup: `<li style="--iw-branch-width:${width}" data-shopping-node="${escapeHtml(node.key)}" data-supply="${node.supply}" data-connection="${connection}">${content}${children.length ? `<ul class="iw-shopping-branches" style="--iw-branch-width:${childWidth}">${connections}${children.map(child => child.markup).join('')}</ul>` : ''}</li>` };
     }
-    return `<ul class="iw-shopping-tree">${branch(snapshot.nodes[0]).markup}</ul>`;
+    const root = branch(snapshot.nodes[0]);
+    return `<ul class="iw-shopping-tree" style="--iw-tree-unit:max(.55px,min(1px,calc(100cqw / ${root.width})))">${root.markup}</ul>`;
   }
 
   function renderShoppingConnections(children, width) {
@@ -97,7 +98,7 @@
     // path last so a covered sibling cannot make a shortage look covered.
     const severity = { covered: 0, craftable: 1, unknown: 2, insufficient: 3 };
     paths.sort((a, b) => severity[a.supply] - severity[b.supply]);
-    return `<svg class="iw-shopping-connections" viewBox="0 0 ${width} 43" aria-hidden="true" focusable="false">${paths.map(path => `<path data-supply="${path.supply}" d="${path.d}"/>${path.supply === 'covered' ? `<path class="iw-shopping-flow" d="${path.d}"/>` : ''}`).join('')}</svg>`;
+    return `<svg class="iw-shopping-connections" viewBox="0 0 ${width} 43" preserveAspectRatio="none" aria-hidden="true" focusable="false">${paths.map(path => `<path data-supply="${path.supply}" d="${path.d}"/>${path.supply === 'covered' ? `<path class="iw-shopping-flow" d="${path.d}"/>` : ''}`).join('')}</svg>`;
   }
 
   function renderShoppingConversion(resource, ui) {

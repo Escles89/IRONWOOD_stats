@@ -102,10 +102,11 @@
     Object.assign(AppState.derived, { eliteCombat,
       countdowns: { revive: action?.reviveRemainingMs || 0, queue: queueRemainingMs },
       panels: { adventureActive, adventureActionActive, guildTrialActionActive, guildEventActionActive, masteryAchieved } });
+    const masteryStatus = masteryStatusProgress();
     const signature = JSON.stringify({
       plannedAction: plannedRenderKey(),
       shopping: shoppingRenderKey(),
-      mastery: masteryStatusProgress(),
+      mastery: { name: masteryStatus.name, notice: masteryStatus.notice, hasProgress: masteryStatus.contributed !== undefined, lootIncomplete: masteryStatus.lootIncomplete },
       currentRegion: currentActionRegion(action),
       weapon: action?.weapon,
       pendingAttunementShards: (cache.attunement?.selected || []).map(slot => readPendingAttunementShards(slot.skill)),
@@ -117,7 +118,7 @@
       masteryAchieved,
       warningPrefs, resourceWarnings, tamingEggs, finiteQueue, trialState, eventState, day: dayKey(), materialWarning, materialWarningText, adventureActive, adventureActionActive, adventureIdleAvailable, guildEventActionActive, guildTrialActionActive, cacheRevision: AppState.ui.cacheRevision, prefs, challengePrefs, automationOn, cacheLookupsOn, potionTypes, headerIcons, questModalOpen: AppState.ui.questModalOpen, automationTask: AppState.ui.automationTask, tamingClaimNoticeUntil: AppState.ui.tamingClaimNoticeUntil
     });
-    if (signature === AppState.ui.lastSignature) { StatusRenderer.updateLive(AppState); syncHeaderActionBadges(); updateDebugPanel(); return; }
+    if (signature === AppState.ui.lastSignature) { updateMasteryStatusRow(masteryStatus); StatusRenderer.updateLive(AppState); syncHeaderActionBadges(); updateDebugPanel(); return; }
     AppState.ui.lastSignature = signature;
     const automationRows = (cache.automations?.structures || [])
       .map((item) => projectedAutomation(item, cache.automations?.checkedAt));

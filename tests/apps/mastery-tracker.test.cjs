@@ -4,8 +4,30 @@ const harness = require('../harness.cjs');
 
 function setup(storage = new Map(), configure = () => {}) {
   const listeners = {}, calls = [], errors = [], nodes = new Map();
-  const page = { hidden: false, innerHTML: '', style: { setProperty() {} }, contains: () => true,
-    querySelector: () => null, querySelectorAll: () => [] };
+  let pageMarkup = '', pageWrites = 0;
+  const rowPattern = /<button[^>]*data-mastery-status[\s\S]*?<\/button>/;
+  // Minimal DOM boundary for observing live text/attribute/style updates in the assembled row.
+  function rowElement(pattern) {
+    const read = () => pageMarkup.match(rowPattern)?.[0].match(pattern)?.[0] || '';
+    const write = value => { pageMarkup = pageMarkup.replace(rowPattern, row => row.replace(pattern, value)); };
+    if (!read()) return null;
+    return {
+      get textContent() { return read().replace(/<[^>]+>/g, ''); },
+      set textContent(value) { write(read().replace(/>[^<]*</, `>${value}<`)); },
+      getAttribute(name) { return read().match(new RegExp(`${name}="([^"]*)"`))?.[1] || null; },
+      setAttribute(name, value) { write(read().replace(new RegExp(`${name}="[^"]*"`), `${name}="${value}"`)); },
+      style: { get width() { return read().match(/width:([^";]*)/)?.[1] || ''; },
+        set width(value) { write(read().replace(/width:[^";]*/, `width:${value}`)); } }
+    };
+  }
+  const masteryRow = { querySelector(selector) {
+    const patterns = { small: /<small>[^<]*<\/small>/, '.iw-mastery-coverage': /<span class="iw-mastery-coverage"[^>]*>/,
+      '[data-mastery-contributed]': /<span data-mastery-contributed[^>]*>/, '[data-mastery-inventory]': /<span data-mastery-inventory[^>]*>/ };
+    return patterns[selector] ? rowElement(patterns[selector]) : null;
+  } };
+  const page = { hidden: false, get innerHTML() { return pageMarkup; }, set innerHTML(value) { pageMarkup = value; pageWrites++; },
+    get writes() { return pageWrites; }, style: { setProperty() {} }, contains: () => true,
+    querySelector: selector => selector === '[data-mastery-status]' && rowPattern.test(pageMarkup) ? masteryRow : null, querySelectorAll: () => [] };
   const document = { hidden: false, activeElement: null, body: { textContent: '', appendChild(node) { nodes.set(node.id, node); } },
     querySelector: selector => selector === '[data-mastery-settings]' ? settingsControl : selector === '.iw-mastery-panel [data-modal-close]' ? closeControl : nodes.get(selector.slice(1)) || null, querySelectorAll: () => [],
     createElement() { return { innerHTML: '', get content() { return { firstElementChild: { markup: this.innerHTML } }; },
@@ -494,17 +516,17 @@ function statusMasteryRow(s) {
   return s.page.innerHTML.match(/<button[^>]*data-mastery-status[\s\S]*?<\/button>/)?.[0] || '';
 }
 
-test('Status caps each mastery material and excludes Current Loot from inventory coverage', () => {
+test('Status caps each mastery material even when owned inventory and Current Loot have surplus', () => {
   const s = setup(new Map(), runtime => {
     runtime.catalog['102'] = { id: '102', name: 'Oak Log', tier: 2 };
     runtime.mastery.catalog['1'].items['102'] = '102';
     runtime.state.user.inventory['101'].amount = 1000;
   });
-  currentLoot(s, { '102': { amount: 1000 } });
+  currentLoot(s, { '101': { amount: 1000 } });
   s.change('1'); s.escape();
   assert.match(statusMasteryRow(s), /10% contributed · 50% with inventory/);
   assert.match(statusMasteryRow(s), /data-mastery-inventory style="width:40%"/);
-  s.runtime.action.actionLoot['102'].amount = 2000; s.render();
+  s.runtime.action.actionLoot['101'].amount = 2000; s.render();
   assert.match(statusMasteryRow(s), /50% with inventory/);
   assert.deepEqual(s.calls, []);
 });
@@ -558,5 +580,38 @@ test('Status updates mastery selection, handles completion and hides unavailable
   s.user.displayName = 'Other'; s.render();
   assert.match(statusMasteryRow(s), /Choose a mastery to follow/);
   assert.doesNotMatch(statusMasteryRow(s), /Mining|Woodcutting/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('Status adds current uncollected loot to inventory coverage without counting it twice after collection', () => {
+  const s = setup(); currentLoot(s);
+  s.change('1'); s.escape();
+  assert.match(statusMasteryRow(s), /20% contributed · 80% with inventory \+ loot/);
+  s.runtime.action.actionLoading = true;
+  s.user.inventory['101'].amount = 60; s.render();
+  assert.match(statusMasteryRow(s), /Inventory coverage unknown/);
+  s.runtime.action.actionLoot = {}; s.runtime.action.actionLoading = false; s.render();
+  assert.match(statusMasteryRow(s), /20% contributed · 80% with inventory \+ loot/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('Status labels partial loot coverage and drops retained loot rather than treating it as current', () => {
+  const s = setup(); currentLoot(s, { '101': { amount: 10 }, '999': { amount: -1 } });
+  s.change('1'); s.escape();
+  assert.match(statusMasteryRow(s), /80% with inventory \+ known loot/);
+  assert.match(statusMasteryRow(s), /coverage is a lower bound/);
+  s.runtime.action.actionSeed = undefined; s.render();
+  assert.match(statusMasteryRow(s), /70% with inventory \+ known loot/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('Current Loot updates the visible mastery bar without rewriting the dashboard', () => {
+  const s = setup(); currentLoot(s);
+  s.change('1'); s.escape();
+  const writes = s.page.writes;
+  s.runtime.action.actionLoot['101'].amount = 20; s.render();
+  assert.match(statusMasteryRow(s), /20% contributed · 90% with inventory \+ loot/);
+  assert.match(statusMasteryRow(s), /data-mastery-inventory style="width:70%"/);
+  assert.equal(s.page.writes, writes);
   assert.deepEqual(s.calls, []);
 });
