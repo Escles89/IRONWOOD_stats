@@ -5280,7 +5280,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     const items = Object.values(runtime?.catalog || {}).filter(item => shoppingItem(runtime, item?.id) && index.craftableItems.has(item.id) && (item.id === draft.itemId || item.name.toLowerCase().includes(ui.filter.toLowerCase()))).sort((a, b) => a.name.localeCompare(b.name));
     const choices = (index.byItem.get(draft.itemId) || []);
     const invalidated = ui.plan?.itemId === draft.itemId && ui.plan.recipeKey && !choices.some(entry => entry.key === ui.plan.recipeKey);
-    return `<section class="iw-card iw-shopping-card" aria-label="Recipe Calc"><div class="iw-card-header"><span class="iw-shopping-brand">Recipe Calc<sup>™</sup></span><div class="iw-shopping-actions"><button type="button" class="iw-shopping-tool" data-shopping-refresh aria-label="Refresh recipe" title="Refresh recipe" ${!ui.owner || ui.refreshing || quickBusy() || shoppingPending(runtime) ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg>${ui.refreshing ? 'Refreshing…' : ''}</button>${ui.plan ? '<button type="button" class="iw-shopping-tool" data-shopping-edit><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14v6Z"/></svg>Edit</button>' : ''}</div></div><div class="iw-shopping-body">
+    return `<section class="iw-card iw-shopping-card" aria-label="Recipe Calc"><div class="iw-card-header"><span class="iw-shopping-brand">Recipe Calc<sup>™</sup></span><div class="iw-shopping-actions"><button type="button" class="iw-shopping-tool" data-shopping-refresh aria-label="Refresh recipe" title="Refresh recipe" ${!ui.owner || ui.refreshing || quickBusy() || shoppingPending(runtime) ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg>${ui.refreshing ? 'Refreshing…' : ''}</button>${ui.plan ? '<button type="button" class="iw-shopping-tool" data-shopping-edit><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14v6Z"/></svg>Edit</button>' : ''}${ui.plan && !ui.editing ? renderRecipeSendButton() : ''}</div></div><div class="iw-shopping-body">
       ${!ui.owner ? '<p>Character identity unavailable.</p>' : ui.editing ? `<form data-shopping-form data-shopping-owner="${escapeHtml(ui.owner)}">
         <label>Filter items<input type="search" data-shopping-filter value="${escapeHtml(ui.filter)}"></label><label>Finished item<select name="item" required data-shopping-item><option value="">Choose an item</option>${items.map(item => `<option value="${item.id}" ${item.id === draft.itemId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label>
         <label>Target owned quantity<input name="quantity" data-shopping-quantity type="number" min="1" step="1" required value="${escapeHtml(draft.quantity)}"></label>
@@ -5545,8 +5545,9 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     if (!ui.owner || !plan || quickBusy() || recipeHasDraft('preview')) return;
     if (control.dataset.recipeUse !== JSON.stringify([ui.owner, plan])) { ui.message = 'Calculator target changed. Review the preview before using it as a plan.'; render(); return; }
     const snapshot = recipeObservation(plan, 'preview');
+    if (!snapshot || snapshot.unavailable) return;
     for (const node of snapshot.nodes) if (node.chosen && node.id !== plan.target.itemId && !plan.sources[node.id]) plan.sources[node.id] = node.chosen.key;
-    if (plannedPersist(plan)) { ui.editing = false; AppState.ui.recipePlan.view = 'plan'; }
+    if (plannedPersist(plan)) { ui.editing = false; recipeOpenPlanner(control); return; }
     render();
   }
 
@@ -5775,7 +5776,7 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
     if (!snapshot) return '';
     return `<section class="iw-recipe-steps"><div class="iw-recipe-plan-heading"><div><h3>${active ? 'Active recipe plan' : 'Preview recipe plan'}</h3><strong>${escapeHtml(snapshot.name)}</strong><p class="iw-recipe-note">Target owned quantity: ${recipeAmount(plan.target.quantity)}</p></div><div class="iw-recipe-total"><strong>${recipeAmount(snapshot.shortfall)}</strong><span>still to acquire</span></div></div>
       ${snapshot.shortfall === 0 ? '<p>Target satisfied</p>' : `<div class="iw-recipe-list-heading"><span>${snapshot.steps.length} remaining requirements</span><span>Expand a row for details</span></div><ol>${snapshot.steps.map(step => renderRecipeStep(step, snapshot, active)).join('')}</ol>`}
-      ${active ? '' : `<button type="button" class="iw-small-button iw-recipe-primary" data-recipe-use="${escapeHtml(JSON.stringify([plannedObserve().owner, plan]))}" ${snapshot.unavailable || quickBusy() || recipeHasDraft('preview') ? 'disabled' : ''}>Use as plan</button>`}</section>`;
+      </section>`;
   }
 
   function renderRecipeStep(step, snapshot, active) {
@@ -5822,6 +5823,12 @@ Required Notice: Copyright (c) 2026 Ironwood Status contributors
       const text = recipeAmount(amount);
       if (node.textContent !== text) node.textContent = text;
     }
+  }
+
+  function renderRecipeSendButton() {
+    const plan = recipePreviewPlan(), snapshot = recipeObservation(plan, 'preview');
+    if (!plan) return '';
+    return `<button type="button" class="iw-small-button iw-recipe-primary" data-recipe-use="${escapeHtml(JSON.stringify([plannedObserve().owner, plan]))}" ${!snapshot || snapshot.unavailable || quickBusy() || recipeHasDraft('preview') ? 'disabled' : ''}>Send to planner</button>`;
   }
 
   // Source: apps/status/selectors.js

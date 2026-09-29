@@ -4,7 +4,7 @@ Open **Skills → Recipe Calc & planner**, or **Open planner** on Status. The co
 
 The panel has three views: **Active plan**, **Calculator**, and **Single action**. It opens on your active plan when one exists.
 
-In **Calculator**, save a finished item and its **Target owned quantity** in Recipe Calc. The preview subtracts items you already own and expands the remaining gathering and crafting requirements. Choose sources where several actions can supply an item. Select **Use as plan** to replace the active plan. Editing the calculator afterward only changes the preview until you activate it again.
+In **Calculator**, save a finished item and its **Target owned quantity** in Recipe Calc. The preview subtracts items you already own and expands the remaining gathering and crafting requirements. Choose sources where several actions can supply an item. Select **Send to planner** in the Recipe Calc header to replace the active plan and open it directly. The button is available on Status and in the Calculator view after saving the target. Editing the calculator afterward only changes the preview until you activate it again.
 
 Quick Skills shows one **Next** action for the plan. The active plan shows compact requirement rows with Next, Ready, Blocked or Manual badges. Expand a row to see required, owned and missing amounts, batch supplies, quantity controls and source choices; **Choose … next** selects another ready step. Conversions and other manual requirements include an inventory link. Opening that link does not complete the requirement: the resulting balance must be observed.
 

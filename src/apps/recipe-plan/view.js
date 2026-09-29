@@ -21,7 +21,7 @@
     if (!snapshot) return '';
     return `<section class="iw-recipe-steps"><div class="iw-recipe-plan-heading"><div><h3>${active ? 'Active recipe plan' : 'Preview recipe plan'}</h3><strong>${escapeHtml(snapshot.name)}</strong><p class="iw-recipe-note">Target owned quantity: ${recipeAmount(plan.target.quantity)}</p></div><div class="iw-recipe-total"><strong>${recipeAmount(snapshot.shortfall)}</strong><span>still to acquire</span></div></div>
       ${snapshot.shortfall === 0 ? '<p>Target satisfied</p>' : `<div class="iw-recipe-list-heading"><span>${snapshot.steps.length} remaining requirements</span><span>Expand a row for details</span></div><ol>${snapshot.steps.map(step => renderRecipeStep(step, snapshot, active)).join('')}</ol>`}
-      ${active ? '' : `<button type="button" class="iw-small-button iw-recipe-primary" data-recipe-use="${escapeHtml(JSON.stringify([plannedObserve().owner, plan]))}" ${snapshot.unavailable || quickBusy() || recipeHasDraft('preview') ? 'disabled' : ''}>Use as plan</button>`}</section>`;
+      </section>`;
   }
 
   function renderRecipeStep(step, snapshot, active) {
@@ -68,4 +68,10 @@
       const text = recipeAmount(amount);
       if (node.textContent !== text) node.textContent = text;
     }
+  }
+
+  function renderRecipeSendButton() {
+    const plan = recipePreviewPlan(), snapshot = recipeObservation(plan, 'preview');
+    if (!plan) return '';
+    return `<button type="button" class="iw-small-button iw-recipe-primary" data-recipe-use="${escapeHtml(JSON.stringify([plannedObserve().owner, plan]))}" ${!snapshot || snapshot.unavailable || quickBusy() || recipeHasDraft('preview') ? 'disabled' : ''}>Send to planner</button>`;
   }

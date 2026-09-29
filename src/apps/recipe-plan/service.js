@@ -32,8 +32,9 @@
     if (!ui.owner || !plan || quickBusy() || recipeHasDraft('preview')) return;
     if (control.dataset.recipeUse !== JSON.stringify([ui.owner, plan])) { ui.message = 'Calculator target changed. Review the preview before using it as a plan.'; render(); return; }
     const snapshot = recipeObservation(plan, 'preview');
+    if (!snapshot || snapshot.unavailable) return;
     for (const node of snapshot.nodes) if (node.chosen && node.id !== plan.target.itemId && !plan.sources[node.id]) plan.sources[node.id] = node.chosen.key;
-    if (plannedPersist(plan)) { ui.editing = false; AppState.ui.recipePlan.view = 'plan'; }
+    if (plannedPersist(plan)) { ui.editing = false; recipeOpenPlanner(control); return; }
     render();
   }
 

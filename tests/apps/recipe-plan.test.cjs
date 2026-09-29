@@ -370,3 +370,13 @@ test('planner separates the active plan from its calculator and reveals step det
   assert.match(f.panel(), /data-recipe-view="manual"[^>]*aria-pressed="true"/);
   assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
 });
+
+test('Send to planner is available on the calculator and opens the active plan without starting work', () => {
+  const f = setup(); f.open(); f.save();
+  const calculator = f.panel().split('aria-label="Recipe Calc"')[1].split('</section>')[0];
+  assert.match(calculator, /data-recipe-use[^>]*>Send to planner<\/button>/);
+  f.click('data-recipe-use');
+  assert.match(f.panel(), /data-recipe-view="plan"[^>]*aria-pressed="true"/);
+  assert.match(f.panel(), /Active recipe plan/);
+  assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+});
