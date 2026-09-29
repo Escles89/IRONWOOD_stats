@@ -273,6 +273,13 @@
       .iw-status-row em { justify-self:end; color:#aab6bf; font-size:16px; font-style:normal; line-height:24px; text-align:right; }
       .iw-status-row em.complete { color:#45d88a; }
       .iw-status-row em.active { color:#7bc4ee; }
+      button.iw-status-mastery { width:100%; border:0; border-bottom:1px solid #294052; border-radius:0; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+      button.iw-status-mastery:hover { background:#234a6133; }
+      button.iw-status-mastery:focus-visible { outline:2px solid #79a7bc; outline-offset:-2px; }
+      .iw-mastery-status-caption { color:#aab6bf; font-size:12px; }
+      .iw-mastery-coverage { display:flex; height:5px; margin:5px 0 2px; overflow:hidden; background:#070f1866; border-radius:3px; }
+      .iw-mastery-coverage > span:first-child { background:#79a7bc; }
+      .iw-mastery-coverage > span:last-child { background:#79bf98; }
       .iw-status-row .iw-small-button { grid-column:3; align-self:center; justify-self:end; margin:0; }
       .iw-task-icon { position:relative; display:block; grid-column:3; align-self:center; justify-self:end; width:25px; height:25px; margin:0; padding:0; border:1px solid; border-radius:4px; box-sizing:border-box; font-size:17px; font-weight:600; line-height:1; }
       .iw-taming-actions { grid-column:3; display:flex; align-items:center; justify-content:flex-end; gap:7px; min-width:0; }

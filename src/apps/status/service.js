@@ -105,6 +105,7 @@
     const signature = JSON.stringify({
       plannedAction: plannedRenderKey(),
       shopping: shoppingRenderKey(),
+      mastery: masteryStatusProgress(),
       currentRegion: currentActionRegion(action),
       weapon: action?.weapon,
       pendingAttunementShards: (cache.attunement?.selected || []).map(slot => readPendingAttunementShards(slot.skill)),

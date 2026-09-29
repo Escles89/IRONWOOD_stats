@@ -108,6 +108,26 @@
     return ui;
   }
 
+  function masteryStatusProgress() {
+    const ui = AppState.ui.mastery, runtime = quickRuntime(), snapshot = ui.snapshot;
+    const name = snapshot?.name || 'Skill Mastery';
+    if (!ui.owner) return { name: 'Skill Mastery', notice: 'Character unavailable' };
+    if (!ui.selected) return { name, notice: 'Choose a mastery to follow' };
+    if (!runtime?.mastery?.catalog?.[ui.selected] || !snapshot) return { name, notice: 'Progress unavailable' };
+    if (snapshot.complete === true) return { name, contributed: 100, possible: 100, notice: 'Mastery complete' };
+    const rows = snapshot.rows;
+    if (!rows?.length || rows.some(row => row.required === null || row.contributed === null)) return { name, notice: 'Material progress unknown' };
+    const required = rows.reduce((sum, row) => sum + row.required, 0);
+    const contributed = rows.reduce((sum, row) => sum + Math.min(row.required, row.contributed), 0);
+    if (!Number.isFinite(required) || !Number.isFinite(contributed)) return { name, notice: 'Material progress unknown' };
+    const percent = amount => required === 0 ? 100 : Math.min(100, amount / required * 100);
+    if (snapshot.needsReconcile || snapshot.collectionPending || rows.some(row => row.owned === null)) {
+      return { name, contributed: percent(contributed), notice: snapshot.needsReconcile ? 'Inventory needs refresh' : 'Inventory coverage unknown' };
+    }
+    const additional = rows.reduce((sum, row) => sum + Math.min(Math.max(0, row.required - row.contributed), row.owned), 0);
+    return { name, contributed: percent(contributed), possible: percent(contributed + additional) };
+  }
+
   function selectMastery(id) {
     const runtime = quickRuntime(), ui = masteryObserve(runtime);
     if (!ui.owner || !quickId(id) || runtime?.mastery?.catalog?.[id]?.id !== id) return;

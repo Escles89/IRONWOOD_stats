@@ -29,9 +29,9 @@ function setup(storage = new Map(), configure = () => {}) {
   function render() { h.context.render(); assert.deepEqual(errors, []); return nodes.get('iw-global-dialogs')?.innerHTML || ''; }
   const trigger = { closest: selector => selector === '[data-mastery-open]' ? trigger : null, matches: () => false,
     focus() { document.activeElement = trigger; } };
-  function open() {
-    trigger.focus();
-    for (const handler of listeners.click || []) handler({ target: trigger, preventDefault() {} });
+  function open(target = trigger) {
+    target.focus();
+    for (const handler of listeners.click || []) handler({ target, preventDefault() {} });
     return render();
   }
   function escape() {
@@ -373,7 +373,7 @@ test('refresh refuses a different character and never invokes gameplay mutation 
   assert.doesNotMatch(s.page.innerHTML, /iw-mastery-card/);
 });
 
-test('the mastery symbol opens a modal without adding a Status panel; Escape returns focus', () => {
+test('the mastery symbol opens a modal without adding a full Status panel; Escape returns focus', () => {
   const s = setup();
   assert.doesNotMatch(s.page.innerHTML, /data-mastery-select|iw-mastery-card/);
   assert.match(s.render(), /role="dialog" aria-modal="true" aria-labelledby="iw-mastery-title"/);
@@ -474,4 +474,89 @@ test('requirement progress caps covered balances and leaves unknown balances ind
   assert.match(html, /aria-label="Coins requirement"[^>]*Unknown/);
   assert.doesNotMatch(html, /aria-label="Coins requirement"[^>]*aria-valuenow=/);
   assert.doesNotMatch(html, /NaN|Infinity/);
+});
+
+test('Status follows the selected mastery with one contributed and inventory coverage bar', () => {
+  const s = setup(); s.change('1'); s.escape();
+  const row = () => s.page.innerHTML.match(/<button[^>]*data-mastery-status[\s\S]*?<\/button>/)?.[0] || '';
+  assert.match(row(), /Woodcutting/);
+  assert.match(row(), /20% contributed/);
+  assert.match(row(), /70% with inventory/);
+  assert.match(row(), /data-mastery-contributed style="width:20%"/);
+  assert.match(row(), /data-mastery-inventory style="width:50%"/);
+  s.user.inventory['101'].amount = 70; s.render();
+  assert.match(row(), /90% with inventory/);
+  assert.match(row(), /data-mastery-inventory style="width:70%"/);
+  assert.deepEqual(s.calls, []);
+});
+
+function statusMasteryRow(s) {
+  return s.page.innerHTML.match(/<button[^>]*data-mastery-status[\s\S]*?<\/button>/)?.[0] || '';
+}
+
+test('Status caps each mastery material and excludes Current Loot from inventory coverage', () => {
+  const s = setup(new Map(), runtime => {
+    runtime.catalog['102'] = { id: '102', name: 'Oak Log', tier: 2 };
+    runtime.mastery.catalog['1'].items['102'] = '102';
+    runtime.state.user.inventory['101'].amount = 1000;
+  });
+  currentLoot(s, { '102': { amount: 1000 } });
+  s.change('1'); s.escape();
+  assert.match(statusMasteryRow(s), /10% contributed · 50% with inventory/);
+  assert.match(statusMasteryRow(s), /data-mastery-inventory style="width:40%"/);
+  s.runtime.action.actionLoot['102'].amount = 2000; s.render();
+  assert.match(statusMasteryRow(s), /50% with inventory/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('Status retains contributed progress while inventory needs reconciliation, then refresh restores coverage', async () => {
+  const s = setup(); s.change('1'); s.escape();
+  s.user.masteries.skills['1'].items['101'] = 40;
+  s.user.inventory['101'].amount = 30; s.render();
+  assert.match(statusMasteryRow(s), /40% contributed · Inventory needs refresh/);
+  assert.match(statusMasteryRow(s), /data-mastery-inventory style="width:0%"/);
+  s.open(); await s.refresh(); s.escape();
+  assert.match(statusMasteryRow(s), /40% contributed · 70% with inventory/);
+  s.runtime.action.actionLoading = true; s.render();
+  assert.match(statusMasteryRow(s), /Inventory coverage unknown/);
+  s.runtime.action.actionLoading = false;
+  delete s.runtime.state.user.inventory; s.render();
+  assert.match(statusMasteryRow(s), /40% contributed · Inventory coverage unknown/);
+  assert.deepEqual(s.calls, ['read']);
+});
+
+test('Status row opens the same mastery menu as the symbol and returns focus on close', () => {
+  const s = setup(); s.change('1'); s.escape();
+  assert.match(statusMasteryRow(s), /data-mastery-open aria-haspopup="dialog"/);
+  const rowControl = { closest: selector => selector === '[data-mastery-open]' ? rowControl : null,
+    matches: () => false, focus() { s.document.activeElement = rowControl; } };
+  const fromRow = s.open(rowControl);
+  assert.match(fromRow, /role="dialog"/);
+  assert.match(fromRow, /<strong>Woodcutting<\/strong>/);
+  assert.match(fromRow, /data-label="Contributed">20/);
+  s.escape();
+  assert.equal(s.document.activeElement, rowControl);
+  assert.equal(s.open(), fromRow);
+  assert.deepEqual(s.calls, []);
+});
+
+test('Status updates mastery selection, handles completion and hides unavailable or another character’s progress', () => {
+  const s = setup(new Map(), runtime => { runtime.state.user.masteries.skills['2'].complete = false; });
+  assert.match(statusMasteryRow(s), /Choose a mastery to follow/);
+  s.change('1'); s.change('2'); s.escape();
+  assert.match(statusMasteryRow(s), /Mining/);
+  assert.match(statusMasteryRow(s), /0% contributed · 50% with inventory/);
+  delete s.user.masteries.skills['2'].items; s.render();
+  assert.match(statusMasteryRow(s), /Material progress unknown/);
+  assert.doesNotMatch(statusMasteryRow(s), /data-mastery-contributed/);
+  s.user.masteries.skills['2'].complete = true; s.render();
+  assert.match(statusMasteryRow(s), /Mastery complete/);
+  assert.match(statusMasteryRow(s), /data-mastery-contributed style="width:100%"/);
+  delete s.runtime.mastery; s.render();
+  assert.match(statusMasteryRow(s), /Progress unavailable/);
+  assert.doesNotMatch(statusMasteryRow(s), /Mastery complete|data-mastery-contributed/);
+  s.user.displayName = 'Other'; s.render();
+  assert.match(statusMasteryRow(s), /Choose a mastery to follow/);
+  assert.doesNotMatch(statusMasteryRow(s), /Mining|Woodcutting/);
+  assert.deepEqual(s.calls, []);
 });

@@ -1,3 +1,13 @@
+  function renderMasteryStatusRow() {
+    const progress = masteryStatusProgress();
+    const percent = value => `${Math.floor(value * 10) / 10}%`;
+    const label = progress.notice === 'Mastery complete' ? progress.notice : progress.contributed === undefined ? progress.notice
+      : `${percent(progress.contributed)} contributed · ${progress.possible === undefined ? progress.notice : `${percent(progress.possible)} with inventory`}`;
+    return `<button type="button" class="iw-status-row iw-status-mastery" data-mastery-status data-mastery-open aria-haspopup="dialog" title="View mastery requirements. Material progress only; XP and coins are separate.">
+      <img src="/assets/misc/mastery.png" alt=""><span><b>${escapeHtml(progress.name)}${progress.name === 'Skill Mastery' ? '' : ' <span class="iw-mastery-status-caption">mastery</span>'}</b><small>${escapeHtml(label)}</small>
+      ${progress.contributed === undefined ? '' : `<span class="iw-mastery-coverage" role="img" aria-label="Material completion: ${escapeHtml(label)}"><span data-mastery-contributed style="width:${progress.contributed}%"></span><span data-mastery-inventory style="width:${Math.max(0, (progress.possible ?? progress.contributed) - progress.contributed)}%"></span></span>`}</span><em aria-hidden="true">›</em></button>`;
+  }
+
   function renderMasteryModal() {
     const ui = AppState.ui.mastery, runtime = quickRuntime();
     const selectedComplete = ui.snapshot?.complete === true;

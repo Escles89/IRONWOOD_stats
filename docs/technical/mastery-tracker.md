@@ -48,3 +48,15 @@ Validation distinguishes the following evidence:
 - No live collection or material submission was performed. Exactly-once transfer, partial-source failures and character-switch races are harness evidence, not live mutation validation.
 
 Final verification: `npm run build` and `npm run check` passed, including all 312 tests, source/generated syntax checks, deterministic assembly and whitespace validation. Separate Standards and Spec reviews found no remaining findings.
+
+## Compact Status overview (2026-09-29)
+
+The player's latest amendment adds a compact row to the Status list while retaining the existing mastery modal. The whole row opens that same menu, and follows its selected skill. Escape restores focus to the row. The selected mastery does not follow the current action automatically.
+
+The single material bar has a blue contributed segment and a green additional inventory segment. Each material is capped at its own requirement before quantities are summed: surplus of one item cannot cover another item's shortage. The denominator is total required material units. The displayed inventory percentage includes contributions; pending Current Loot is excluded. Percentages are truncated to one decimal so near-complete requirements do not display as 100%. XP and coins remain separate requirements in the menu; material coverage alone never labels the mastery complete.
+
+Unknown requirements or contributions produce an explicit unknown state. Unknown inventory, pending collection/synchronization, or unreconciled contributions suppress the inventory segment while preserving known contributed progress. A successful existing read-only Refresh reconciles contributions and inventory. Native completion is honored even if historical contributions are absent. If the native catalog disappears, retained observations are not presented as current progress. Character changes reset the row to that character's selection.
+
+The Status render signature includes only the derived name, coverage percentages and notice, so selection and inventory changes repaint the row without making pending loot or observation age invalidate the entire dashboard. Assembled Status/selector tests cover these behaviors and opening the shared menu without gameplay requests.
+
+Validation: `npm run check` passed all 419 tests plus syntax, deterministic build and whitespace checks. Separate Standards and Spec reviews reported no findings. Live Status at a 500 px viewport showed Taming at 68.3% contributed and 69.3% with inventory. The menu showed 900,000 total required units, 615,112 contributed and 8,704 additional usable owned units; surplus Carrot, Redwood Log and Infernal Ore did not inflate coverage. Clicking the row opened the existing Taming menu with XP and coins separate. No materials were submitted or gameplay actions requested during this check.
