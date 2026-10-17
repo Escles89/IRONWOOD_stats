@@ -87,7 +87,7 @@
 
   function quickBusy() {
     const ui = AppState.ui;
-    return !!(ui.quickSkills.busy || ui.collectingLoot || ui.syncing || ui.nativeSync?.running || ui.runningChallenge
+    return !!(ui.quickSkills.busy || ui.traits.busy || ui.collectingLoot || ui.syncing || ui.nativeSync?.running || ui.runningChallenge
       || ui.collectingAttunementLoot || ui.collectingTaming || ui.collectingAutomation || ui.nativeCollectionPending || ui.recoveringActionView);
   }
 
@@ -177,6 +177,7 @@
         if (edit) return;
         // A prompt can remain open while materials change. Reopen, never clamp.
         while (target.finite && amount > native.limit()) {
+          if (planned?.plan.runnerAuth) throw new Error('Supplies changed during automatic preparation. Check the plan, then Resume.');
           choice = await quickPromptAmount(target, planned ? preference : ui.data.amounts[quickActionKey(target)], native.limit(), { planned: !!planned, shortage: true, quantityInfo: native.quantityInfo });
           if (!choice) { ui.message = ''; return; }
           quickAssertOwner(owner, native.runtime);
@@ -220,6 +221,7 @@
           let control = await native.startControl(amount);
           if (request.cancelled) return;
           while (target.finite && amount > native.limit()) {
+            if (planned?.plan.runnerAuth) throw new Error('Supplies changed during automatic preparation. Check the plan, then Resume.');
             choice = await quickPromptAmount(target, planned ? preference : ui.data.amounts[quickActionKey(target)], native.limit(), { planned: !!planned, shortage: true, quantityInfo: native.quantityInfo });
             if (!choice) { ui.message = ''; return; }
             quickAssertOwner(owner, native.runtime);
@@ -276,7 +278,7 @@
       if (loot) AppState.ui.collectingLoot = false;
       ui.prompt?.resolve(null);
       ui.prompt = null;
-      if (started) quickClose();
+      if (started && !planned?.plan.runnerAuth) quickClose();
       if (attempted || error) {
         ui.message = error;
         showActionToast({ title: started ? loot ? 'Loot collected — action continued' : `Started ${target.name}` : collected ? 'Loot collected — action did not start' : 'Action not confirmed',
@@ -289,4 +291,5 @@
       syncQuickSkills();
       render();
     }
+    return { started, attempted, error, syncError };
   }

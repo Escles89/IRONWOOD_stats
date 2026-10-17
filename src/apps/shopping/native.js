@@ -130,14 +130,26 @@
     const graph = shoppingGraph(runtime, plan, index), user = runtime.state.user;
     return JSON.stringify([index.revision, plan,
       graph.order.map(node => node.special ? shoppingNumber(user[node.id]) : shoppingOwned(runtime, node.id)),
-      graph.order.some(node => node.key === 'resource:charcoal') ? shoppingConversionChoices(runtime, 'charcoal').map(choice => shoppingOwned(runtime, choice.id)) : [],
+      Object.keys(SHOPPING_SPARE_INPUTS).map(resource => graph.order.some(node => node.key === `resource:${resource}` && !node.sourceId)
+        ? shoppingConversionChoices(runtime, resource).map(choice => shoppingOwned(runtime, choice.id)) : []),
       SHOPPING_SKILLS.map(id => user.skills?.[id]?.exp), shoppingPending(runtime)]);
   }
 
-  const SHOPPING_CONVERSIONS = ['potionMix', 'metalParts'];
+  const SHOPPING_SPARE_INPUTS = { charcoal: { name: 'wood', unit: 'log', label: 'Wood' }, arcanePowder: { name: 'gems', unit: 'gem', label: 'Gem' } };
+  const SHOPPING_CONVERSIONS = ['potionMix', 'metalParts', 'arcanePowder', 'charcoal'];
+  const SHOPPING_BALANCE_ONLY = 'balance';
+
+  function shoppingValidConversion(resource, source) {
+    return SHOPPING_CONVERSIONS.includes(resource) && (quickId(source) || source === SHOPPING_BALANCE_ONLY && Object.hasOwn(SHOPPING_SPARE_INPUTS, resource));
+  }
+
+  function shoppingConversionAllowed(runtime, resource, source) {
+    return SHOPPING_CONVERSIONS.includes(resource) && (!source || source === SHOPPING_BALANCE_ONLY && shoppingValidConversion(resource, source)
+      || shoppingConversionChoices(runtime, resource).some(choice => choice.id === source));
+  }
 
   function shoppingConversionChoices(runtime, resource) {
-    if (resource !== 'charcoal' && !SHOPPING_CONVERSIONS.includes(resource)) return [];
+    if (!SHOPPING_CONVERSIONS.includes(resource)) return [];
     return Object.entries(runtime?.conversionCatalog?.[resource] || {})
       .filter(([id, output]) => shoppingItem(runtime, id) && shoppingQuantity(output))
       .map(([id, output]) => ({ id, output, name: shoppingItem(runtime, id).name }))
@@ -147,9 +159,10 @@
   function shoppingConversionDetail(runtime, node, missing) {
     const choices = shoppingConversionChoices(runtime, node.id);
     const conversion = choices.find(choice => choice.id === node.sourceId);
+    const balanceOnly = node.sourceId === SHOPPING_BALANCE_ONLY;
     const attempts = conversion && missing !== null ? Math.ceil(missing / conversion.output) : null;
     return { name: SHOPPING_RESOURCES[node.id], conversion, choices, rows: [],
-      gaps: node.sourceId && !conversion ? ['Saved conversion input is unavailable. Choose a current input.'] : [],
-      fixed: !node.sourceId || Boolean(conversion), attempts,
+      gaps: node.sourceId && !balanceOnly && !conversion ? ['Saved conversion input is unavailable. Choose a current input.'] : [],
+      fixed: !node.sourceId || balanceOnly || Boolean(conversion), attempts,
       output: attempts === null ? null : shoppingNumber(attempts * conversion.output) };
   }

@@ -8,7 +8,7 @@
         try {
           const saved = JSON.parse(localStorage.getItem(SHOPPING_KEY + owner));
           if (saved?.version === 1 && shoppingRecord(saved.conversions)) {
-            for (const id of SHOPPING_CONVERSIONS) if (quickId(saved.conversions[id])) ui.conversions[id] = saved.conversions[id];
+            for (const id of SHOPPING_CONVERSIONS) if (shoppingValidConversion(id, saved.conversions[id])) ui.conversions[id] = saved.conversions[id];
           }
           if (saved?.version === 1 && quickId(saved.plan?.itemId) && shoppingQuantity(saved.plan.quantity)
             && shoppingValidRecipeChoices(saved.plan.recipes)
@@ -65,7 +65,7 @@
         const resolvedRecipe = recipeKey || (choices.length === 1 ? choices[0].key : '');
         const plan = { itemId, quantity, recipeKey: resolvedRecipe, recipes: { ...previous?.recipes }, sources: { ...previous?.sources }, quantities: previous?.recipeKey === resolvedRecipe ? { ...previous?.quantities } : {} };
         const conversions = ui.draft.conversions || ui.conversions;
-        if (!recipeSaveCalculator(plan, conversions)) { ui.message = plannedObserve().message || 'The plan could not be saved.'; render(); return; }
+        if (!recipeSaveCalculator(plan, conversions, true)) { ui.message = plannedObserve().message || 'The plan could not be saved.'; render(); return; }
         ui.plan = plan;
         ui.conversions = { ...conversions };
         for (const key of Object.keys(AppState.ui.recipePlan.quantityDrafts)) if (JSON.parse(key)[1] === 'preview') delete AppState.ui.recipePlan.quantityDrafts[key];
@@ -144,8 +144,11 @@
 
   function shoppingRenderKey() {
     const ui = AppState.ui.shopping;
+    const runtime = quickRuntime();
+    const inputStock = ui.selectedStep || AppState.ui.recipePlan.open ? SHOPPING_CONVERSIONS.map(resource =>
+      shoppingConversionChoices(runtime, resource).map(choice => [choice.id, choice.output, shoppingConversionStock(runtime, choice.id).owned])) : null;
     return [ui.owner, ui.revision, ui.plan, ui.conversions, ui.editing, ui.draft, ui.filter, ui.selectedStep, ui.expandedStep, ui.refreshing, ui.unavailable, ui.message,
-      location.pathname, ui.plan ? Math.floor(Date.now() / 60000) : null];
+      location.pathname, ui.plan ? Math.floor(Date.now() / 60000) : null, inputStock];
   }
 
   function shoppingValidRecipeChoices(recipes) {
@@ -172,6 +175,7 @@
   }
 
   function shoppingOpenStep(control) {
+    AppState.ui.traits.open = false;
     const ui = shoppingObserve(), key = control.dataset.shoppingStepLink;
     if (!ui.owner || key !== 'defaults' && !ui.snapshot?.nodes.some(node => node.key === key)) return;
     if (!ui.selectedStep) AppState.ui.preferencesTrigger = control;
@@ -207,7 +211,7 @@
     const owner = control.dataset.shoppingOwner, resource = control.dataset.shoppingResource;
     const ui = shoppingObserve(), runtime = quickRuntime();
     if (!ui.owner || ui.owner !== owner || shoppingPending(runtime) || !SHOPPING_CONVERSIONS.includes(resource)) return;
-    if (control.value && !shoppingConversionChoices(runtime, resource).some(choice => choice.id === control.value)) return;
+    if (!shoppingConversionAllowed(runtime, resource, control.value)) return;
     if (ui.editing) {
       ui.draft.conversions = { ...(ui.draft.conversions || ui.conversions) };
       if (control.value) ui.draft.conversions[resource] = control.value;

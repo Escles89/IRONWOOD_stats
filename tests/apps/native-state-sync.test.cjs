@@ -2,6 +2,16 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const harness=require('../harness.cjs');
 
+test('Arcane Powder discovery uses the gem conversion table, rejecting prices, ambiguity and malformed yields', () => {
+  const h = harness();
+  const catalog = { '101': { id: '101', image: 'items/gem-ruby.png' }, '102': { id: '102', image: 'items/gem-onyx.png' } };
+  const conversion = { '101': 50, '102': 400 }, prices = { '101': 100, '102': 800 };
+  assert.equal(h.context.discoverNativeConversions([prices, conversion], catalog).arcanePowder, conversion);
+  for (const exports of [[prices], [conversion, { ...conversion }], [{ ...conversion, '103': 150 }], [{ ...conversion, '102': 0 }]]) {
+    assert.equal(h.context.discoverNativeConversions(exports, catalog).arcanePowder, undefined);
+  }
+});
+
 function setup() {
   const calls=[];
   const h=harness({setTimeout,clearTimeout});

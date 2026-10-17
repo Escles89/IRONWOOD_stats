@@ -73,15 +73,15 @@
         }
       }
     }
-    shoppingApplyWood(runtime, calculated);
+    for (const resource of Object.keys(SHOPPING_SPARE_INPUTS)) shoppingApplySpareInputs(runtime, calculated, resource);
     const nodes = [...calculated.values()];
     // Uncertainty travels back to every parent depending on that production.
     for (const row of [...nodes].reverse()) {
       const uncertain = row.edges.some(edge => !edge.cycle && calculated.get(edge.key)?.uncertain);
-      const verifiedLeaf = row.special && !row.sourceId || !row.recipeKey && !catalog.byItem.has(row.id) && catalog.complete && shoppingItem(runtime, row.id);
+      const verifiedLeaf = row.special && (!row.sourceId || row.sourceId === SHOPPING_BALANCE_ONLY) || !row.recipeKey && !catalog.byItem.has(row.id) && catalog.complete && shoppingItem(runtime, row.id);
       row.unresolved = !row.production && !verifiedLeaf;
       row.uncertain = row.missing !== 0 && (row.required === null || row.owned === null || uncertain
-        || row.woodUncertain || (row.production ? !row.fixed || row.gaps.length > 0 : !verifiedLeaf));
+        || row.spareUncertain || (row.production ? !row.fixed || row.gaps.length > 0 : !verifiedLeaf));
       if (uncertain && row.missing !== 0) row.gaps.push('Uncertain recipe chain: intermediate requirements do not guarantee the target.');
       if (row.uncertain) row.fixed = false;
       const remaining = row.acquire;
@@ -97,15 +97,15 @@
     return result;
   }
 
-  // Reserve every recipe's stock before considering wood for conversion. Only
-  // owned, unallocated logs contribute; projected crafted output never does.
-  function shoppingApplyWood(runtime, calculated) {
-    const charcoal = calculated.get('resource:charcoal');
-    if (!charcoal) return;
-    const choices = shoppingConversionChoices(runtime, 'charcoal').sort((a, b) => b.output - a.output || a.id.localeCompare(b.id));
+  // Reserve every recipe's stock before considering spare inputs for conversion.
+  // Only owned, unallocated items contribute; projected output never does.
+  function shoppingApplySpareInputs(runtime, calculated, resource) {
+    const balance = calculated.get(`resource:${resource}`);
+    if (!balance || balance.sourceId) return;
+    const choices = shoppingConversionChoices(runtime, resource).sort((a, b) => b.output - a.output || a.id.localeCompare(b.id));
     if (!choices.length) return;
-    let remaining = charcoal.missing, output = 0, unknown = false;
-    charcoal.wood = [];
+    let remaining = balance.missing, output = 0, unknown = false;
+    balance.spareInputs = [];
     for (const choice of choices) {
       const key = `item:${choice.id}`, existing = calculated.get(key);
       const owned = shoppingPending(runtime) ? null : shoppingOwned(runtime, choice.id);
@@ -114,27 +114,27 @@
       const used = remaining === null || available === null ? 0 : Math.min(available, Math.ceil(remaining / choice.output));
       const produced = shoppingNumber(used * choice.output);
       unknown ||= available === null || produced === null;
-      charcoal.wood.push({ ...choice, owned, reserved, available, used, produced });
+      balance.spareInputs.push({ ...choice, owned, reserved, available, used, produced });
       if (!used || produced === null) continue;
       output = shoppingNumber(output + produced);
       if (output === null) { unknown = true; break; }
       remaining = Math.max(0, remaining - produced);
-      charcoal.edges.push({ id: choice.id, key, name: choice.name, required: used, perAttempt: 1, wood: true });
+      balance.edges.push({ id: choice.id, key, name: choice.name, required: used, perAttempt: 1, spare: true });
       const row = existing || { id: choice.id, key, name: choice.name, image: shoppingItem(runtime, choice.id)?.image,
         special: false, recipeKey: '', choices: [], gaps: [], edges: [], required: 0, knownRequired: 0, owned, used: 0, missing: 0, acquire: 0, fixed: true };
       row.required += used;
       row.knownRequired += used;
       row.used += used;
-      // Wood is a leaf. Process it before its new Charcoal parent in the
+      // The allocated input is a leaf. Process it before its resource parent in the
       // reverse supply pass, even when another recipe also consumes it.
       calculated.delete(key);
       calculated.set(key, row);
     }
-    charcoal.woodOutput = output;
-    charcoal.woodUncertain = remaining !== 0 && unknown;
-    charcoal.acquire = charcoal.woodUncertain ? null : remaining;
-    charcoal.surplus = output === null || charcoal.missing === null ? null : Math.max(0, output - charcoal.missing);
-    if (charcoal.woodUncertain) charcoal.gaps.push('Some available wood balances are unknown; Charcoal coverage is incomplete.');
+    balance.spareOutput = output;
+    balance.spareUncertain = remaining !== 0 && unknown;
+    balance.acquire = balance.spareUncertain ? null : remaining;
+    balance.surplus = output === null || balance.missing === null ? null : Math.max(0, output - balance.missing);
+    if (balance.spareUncertain) balance.gaps.push(`Some available ${SHOPPING_SPARE_INPUTS[resource].label.toLowerCase()} balances are unknown; ${balance.name} coverage is incomplete.`);
   }
 
   function shoppingCapacity(runtime, plan) {

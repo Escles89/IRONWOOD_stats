@@ -1,19 +1,38 @@
   const recipeAmount = value => value === null || value === undefined ? 'Unknown' : formatNumber(value);
 
+  function recipeRunnerLabel(status) {
+    return ({ waiting: 'Waiting', running: 'Running', starting: 'Starting', collecting: 'Collecting', paused: 'Paused', attention: 'Needs attention', complete: 'Complete' })[status] || 'Paused';
+  }
+
+  function renderRecipeRunnerBadge() {
+    if (plannedObserve().plan?.kind !== 'recipe') return '';
+    const info = recipeRunnerInfo(), label = `Recipe planner · ${recipeRunnerLabel(info.status)} · ${info.reason}`;
+    const animated = info.enabled && ['waiting', 'running', 'starting', 'collecting'].includes(info.status);
+    return `<button type="button" class="iw-recipe-runner-badge" data-recipe-open data-run-state="${info.status}" data-animated="${animated}" aria-haspopup="dialog" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="iw-plan-route" d="M5 18h7V6h7"/><rect class="iw-plan-step" x="2.5" y="15.5" width="5" height="5" rx="1"/><rect class="iw-plan-step" x="9.5" y="9.5" width="5" height="5" rx="1"/><rect class="iw-plan-step" x="16.5" y="3.5" width="5" height="5" rx="1"/></svg></button>`;
+  }
+
+  function renderRecipeRunnerControls() {
+    const info = recipeRunnerInfo();
+    return `<div class="iw-recipe-runner-controls" role="status"><strong>Automatic plan · ${recipeRunnerLabel(info.status)}</strong><p>${escapeHtml(info.reason)}</p><button type="button" class="iw-small-button" data-recipe-run-toggle ${!info.enabled && quickBusy() ? 'disabled' : ''}>${info.enabled ? 'Pause automatic plan' : 'Resume automatic plan'}</button></div>`;
+  }
+
   function renderRecipeSummary(inPlanner = false) {
     const ui = plannedObserve(), plan = ui.plan;
+    const automatic = plan?.kind === 'recipe' && recipeRunnerInfo().enabled;
     const snapshot = plan?.kind === 'recipe' ? recipeObservation(plan) : null;
     const target = snapshot?.next?.target || plannedTargets().find(target => quickSameAction(target, plan));
     const reason = snapshot ? recipeStartReason(snapshot) : !plan ? '' : plannedCurrentState().kind === 'completed' ? 'Collect completed work before starting next.' : plannedCurrentBlockReason() || plannedKnownReason(quickRuntime(), target);
+    const showReason = reason && !(automatic && reason === 'Stop continuous work manually before starting the plan.');
     const pending = snapshot?.running ? shoppingNumber(quickRuntime()?.action?.actionLoot?.[snapshot.running.id]?.amount ?? (shoppingRecord(quickRuntime()?.action?.actionLoot) ? 0 : null)) : null;
     return `<section class="iw-recipe-summary" aria-label="Plan summary">
       ${!inPlanner ? '<button type="button" class="iw-small-button" data-recipe-open aria-label="Open Recipe Calc and planner">Recipe Calc & planner</button>' : '<span class="iw-recipe-eyebrow">Next action</span>'}
+      ${snapshot ? renderRecipeRunnerControls() : ''}
       ${snapshot?.running ? `<p class="iw-recipe-progress">In progress · ${escapeHtml(snapshot.running.target.skillName)} · ${escapeHtml(snapshot.running.target.name)} · Required acquisition: ${recipeAmount(snapshot.running.missing)} · Pending loot: <span data-recipe-pending="${snapshot.running.id}" data-recipe-owner="${escapeHtml(ui.owner)}">${recipeAmount(pending)}</span> (not owned)</p>` : ''}
       <div class="iw-recipe-next"><div><p class="iw-recipe-next-name">${snapshot?.shortfall === 0 ? 'Target satisfied' : target ? `Next · ${escapeHtml(target.skillName)} · ${escapeHtml(target.name)}` : snapshot ? 'No ready action' : 'No active plan'}</p>
       ${target ? `<p class="iw-recipe-note">${target.finite ? `Native quantity: ${recipeAmount(snapshot ? snapshot.next.amount : plan.amount)} · not guaranteed output` : snapshot ? `Required acquisition: ${recipeAmount(snapshot.next.missing)} · continuous gathering` : 'Continuous action'}</p>` : ''}</div>
       ${target ? `<button type="button" class="iw-small-button iw-recipe-primary" ${snapshot ? `data-recipe-start="${escapeHtml(recipeStepToken(ui.owner, plan, snapshot.next))}"` : 'data-planned-start'} aria-label="Start next" ${reason || quickBusy() ? 'disabled' : ''}>Start next →</button>` : ''}</div>
       ${snapshot?.next?.capped ? '<p class="iw-recipe-note">Saved batch reduced to the remaining requirement.</p>' : ''}
-      ${reason ? `<p class="iw-recipe-note">${escapeHtml(reason)}</p>` : ''}${ui.message ? `<p role="status">${escapeHtml(ui.message)}</p>` : ''}
+      ${showReason ? `<p class="iw-recipe-note">${escapeHtml(reason)}</p>` : ''}${ui.message ? `<p role="status">${escapeHtml(ui.message)}</p>` : ''}
       <div class="iw-recipe-tools"><button type="button" class="iw-small-button" data-recipe-refresh ${quickBusy() || !ui.owner ? 'disabled' : ''}>Refresh plan</button>${plan ? `<button type="button" class="iw-small-button" data-planned-clear ${quickBusy() ? 'disabled' : ''}>Clear active plan</button>` : ''}</div></section>`;
   }
 
@@ -50,12 +69,12 @@
   function renderRecipeChoices(step, active) {
     const scope = active ? 'active' : 'preview';
     return `${!step.special && (step.choices?.length > 1 || step.recipeKey && !step.chosen) ? `<label>Choose a source for ${escapeHtml(step.name)}<select data-recipe-source data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}" aria-label="${scope} source for ${escapeHtml(step.name)}"><option value="">Choose a source</option>${step.choices.map(choice => `<option value="${choice.key}" ${choice.key === step.chosen?.key ? 'selected' : ''}>${escapeHtml(choice.skillName)} · ${escapeHtml(choice.recipe.name)}</option>`).join('')}</select></label>` : ''}
-      ${step.special && SHOPPING_CONVERSIONS.includes(step.id) ? `<label>Conversion input for ${escapeHtml(step.name)}<select data-recipe-conversion data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}" aria-label="${scope} conversion input for ${escapeHtml(step.name)}"><option value="">Choose an input</option>${step.choices.map(choice => `<option value="${choice.id}" ${choice.id === step.sourceId ? 'selected' : ''}>${escapeHtml(choice.name)} · ${recipeAmount(choice.output)} each</option>`).join('')}</select></label>` : ''}
+      ${step.special && SHOPPING_CONVERSIONS.includes(step.id) ? `<label>Conversion input for ${escapeHtml(step.name)}<select class="iw-conversion-select" data-stock="${shoppingConversionStock(quickRuntime(), step.sourceId).status}" data-recipe-conversion data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}" aria-label="${scope} conversion input for ${escapeHtml(step.name)}">${renderShoppingConversionOptions(quickRuntime(), step.id, step.sourceId)}</select></label>` : ''}
       ${step.special ? step.gaps.map(gap => `<p>${escapeHtml(gap)}</p>`).join('') : ''}
       ${step.target?.finite ? `<form data-recipe-quantity-form data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}"><label>Native quantity (not guaranteed output)<input name="amount" data-recipe-quantity data-recipe-scope="${scope}" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}" aria-label="${scope} quantity for ${escapeHtml(step.name)}" type="number" min="1" max="1000000" step="1" value="${escapeHtml(AppState.ui.recipePlan.quantityDrafts[recipeQuantityDraftKey(scope, step.id)] ?? step.amount ?? '')}" required></label><button type="submit" class="iw-small-button">Apply quantity</button></form><p class="iw-recipe-note">${step.capped ? 'Saved batch reduced to the remaining requirement. ' : ''}${step.fixed ? 'Base calculation' : 'Uncertain yield; actual output may differ'}</p>` : ''}
       ${active && step.ready ? `<button type="button" class="iw-small-button" data-recipe-select data-recipe-scope="active" data-recipe-owner="${escapeHtml(plannedObserve().owner)}" data-recipe-item="${step.id}">Choose ${escapeHtml(step.name)} next</button>` : ''}
       ${step.conversion ? `<p>Manual conversion: ${recipeAmount(step.attempts)} ${escapeHtml(step.conversion.name)} → ${recipeAmount(step.output)} ${escapeHtml(step.name)} (projected, not owned).</p>` : ''}
-      ${step.wood ? `<p>Spare owned wood can supply ${recipeAmount(step.woodOutput)} Charcoal through manual conversion; ${recipeAmount(step.acquire)} still to acquire.</p>` : ''}
+      ${step.spareInputs ? `<p>Spare owned ${SHOPPING_SPARE_INPUTS[step.id].name} can supply ${recipeAmount(step.spareOutput)} ${escapeHtml(step.name)} through manual conversion; ${recipeAmount(step.acquire)} still to acquire.</p>` : ''}
       ${!step.target ? '<a href="/inventory">Open inventory for manual acquisition or conversion ↗</a>' : ''}`;
   }
 

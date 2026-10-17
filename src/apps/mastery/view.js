@@ -70,6 +70,7 @@
   }
 
   function openMastery(trigger) {
+    AppState.ui.traits.open = false;
     AppState.ui.shopping.selectedStep = null;
     const ui = masteryObserve();
     AppState.ui.preferencesTrigger = trigger;

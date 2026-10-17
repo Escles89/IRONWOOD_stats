@@ -132,3 +132,22 @@ test('finished personal participation gets a completed check even when guild tri
   assert.equal(h.context.guildTrialState(entry, entry.periodEndsAt), 'Unknown');
   assert.equal(h.context.collectGuildTrial(fixture({ ownName: 'Someone else', time: '' })).state, 'Unavailable');
 });
+
+test('a rejected visible Trials read does not throttle the fully mounted page', () => {
+  const h = harness({ location: { pathname: '/guild' }, setTimeout: () => 1, clearTimeout() {} });
+  h.storage.set('iw-stats-player-name-v2', 'Player');
+  h.run('AppState.ui.page = { hidden: true }');
+  const visible = options => {
+    const doc = fixture(options);
+    doc.querySelectorAll = selector => selector === 'guild-page .card > .header > .name'
+      ? [node('Incomplete Trials'), node('Complete Trials')] : [];
+    return doc;
+  };
+  h.context.document = visible({ total: 16 });
+  h.context.captureVisibleCaches();
+  assert.equal(h.run('AppState.ui.visibleCaptureTimes.guildTrial'), undefined);
+  h.time(100100);
+  h.context.document = visible({});
+  h.context.captureVisibleCaches();
+  assert.equal(h.run('getCache().guildTrial.activeName'), 'Defense Trial');
+});

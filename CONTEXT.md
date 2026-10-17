@@ -22,7 +22,15 @@ _Avoid_: Using region as a synonym for the specific location of an encounter.
 ### Character progression
 
 **Trait**:
-A permanent passive bonus unlocked and levelled through Sigils.
+A permanent passive bonus levelled with Trait XP earned through Sigils and skill actions. Its earned bonus remains active even when the Trait is unequipped.
+
+**Equipped Trait**:
+A Trait selected to receive training XP from skill actions while a Sigil grants Trait XP Gain. Unequipped Traits retain their bonuses and may receive a smaller share of training XP through the Unequipped XP upgrade.
+_Avoid_: Active Trait when referring only to an equipped training selection.
+
+**Trait set bonus**:
+A claimable Skill Efficiency bonus earned when every required Trait in a region, or across all regions, reaches a specified level milestone. Meeting its requirements makes the bonus ready to claim; it does not mean the bonus has been claimed.
+_Avoid_: Attunement set bonus, which follows separate progression.
 
 **Sigil**:
 An item used for Trait progression, produced through Imbuing or the House's Engraver.
@@ -110,7 +118,10 @@ _Avoid_: Additional quantity to craft.
 A finished item and the ingredient dependencies needed to reach its target owned quantity through the selected recipes. Owned finished items and intermediates reduce the remaining requirements.
 
 **Recipe plan**:
-A plan of gathering and crafting actions derived from a recipe chain, with remaining requirements determined by owned inventory. Each action is started manually.
+A plan of gathering and crafting actions derived from a recipe chain, with remaining requirements determined by owned inventory. Its actions can be started manually or progressed by an enabled automatic plan run.
+
+**Automatic plan run**:
+The enabled progression of a recipe plan through ready actions, collecting finished work before starting the next step. It ends when the target is satisfied and waits for manual requirements that it cannot perform.
 
 **Missing now**:
 The outstanding amount of a requirement not covered by owned inventory, floored at zero. For Skill Mastery, already contributed items reduce the requirement first; unknown amounts leave the shortfall unknown.
@@ -121,7 +132,7 @@ The amount of a requirement that would remain after collecting the current actio
 ### Quick actions
 
 **Planned next action**:
-A specific action identified as the player's intended next activity, either selected directly or suggested by an active recipe plan, and started manually when ready. Planning it does not make it the current action or the last action.
+A specific action identified as the player's intended next activity, either selected directly or suggested by an active recipe plan. It can be started manually or by an enabled automatic plan run; planning it does not make it the current action or the last action.
 
 **Quick loot**:
 A player-requested collection of the current action's pending loot followed by resuming that same action.
@@ -228,6 +239,19 @@ A selected Attunement activity associated with a skill and region, with its own 
 
 **Regional Tribute**:
 A supply required by Attunement for a particular region: Forest, Mountain or Ocean. A Tribute balance is not the amount of loot available to collect.
+
+**Attunement Shard**:
+A skill-specific resource spent on that skill's Attunement passives. Shards awaiting collection are pending loot, separate from the collected, unspent balance.
+
+**Attunement passive**:
+A skill-specific XP, Loot or Efficiency bonus purchased and levelled with Attunement Shards. Both its first unlock and subsequent levels are passive improvements; higher levels cost more shards.
+_Avoid_: Attunement chance upgrade as a synonym.
+
+**Attunement chance upgrade**:
+An upgrade that increases an Attunement slot's trigger chance, requiring a skill level and Regional Tribute. It is distinct from a passive improvement purchased with shards.
+
+**Attunement set bonus**:
+A bonus whose level is the lowest level of a particular Attunement passive type across all skills in its region, or across all Attunement skills for a completion set. Raising that minimum advances the set bonus.
 
 ### Guild participation and skill bonuses
 

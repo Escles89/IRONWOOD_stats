@@ -31,6 +31,7 @@
       if (recipeDetails) { recipeToggleStep(recipeDetails); return; }
       const recipeOpen = event.target.closest?.('[data-recipe-open]');
       if (recipeOpen) { recipeOpenPlanner(recipeOpen); return; }
+      if (event.target.closest?.('[data-recipe-run-toggle]')) { recipeRunnerToggle(); return; }
       const recipeCollectControl = event.target.closest?.('[data-recipe-collect]');
       if (recipeCollectControl) { recipeCollect(recipeCollectControl); return; }
       const recipeStartControl = event.target.closest?.('[data-recipe-start]');
@@ -91,6 +92,7 @@
       if (stop && !stop.disabled && /Stop\s*&\s*Loot/i.test(clean(stop.textContent))) observeNativeLootClaim();
     }, true);
     document.addEventListener('change', (event) => {
+      if (event.target.matches?.('[data-traits-region]')) { setTraitPreference(event.target.value); return; }
       if (event.target.matches?.('[data-recipe-conversion]')) { recipeChange(event.target, 'conversion'); return; }
       if (event.target.matches?.('[data-recipe-source]')) { recipeChange(event.target, 'source'); return; }
       if (event.target.matches?.('[data-recipe-quantity]')) { recipeChange(event.target, 'quantity'); return; }
@@ -189,6 +191,14 @@
       }
     });
     document.addEventListener('click', (event) => {
+      const traitSwitch = event.target.closest?.('[data-traits-to]');
+      if (traitSwitch) { if (!traitSwitch.disabled) runTraitControl({ type: 'switch', from: traitSwitch.dataset.traitsFrom, to: traitSwitch.dataset.traitsTo }); return; }
+      const traitClaim = event.target.closest?.('[data-traits-claim]');
+      if (traitClaim) { if (!traitClaim.disabled) runTraitControl({ type: 'claim', id: traitClaim.dataset.traitsClaim }); return; }
+      if (event.target.closest?.('[data-traits-retry]')) { runTraitControl({ type: 'retry' }); return; }
+      if (event.target.closest?.('[data-traits-refresh]')) { refreshTraits(); return; }
+      if (event.target.closest?.('[data-traits-native]')) { closePreferences(); location.href = '/traits'; return; }
+      if (event.target.closest?.('[data-traits-open]')) { openTraits(event.target.closest('[data-traits-open]')); return; }
       if (event.target.closest?.('[data-check-script-update]')) { checkAndInstallScriptUpdate(); return; }
       const masteryTrigger = event.target.closest?.('[data-mastery-open]');
       if (masteryTrigger) { openMastery(masteryTrigger); return; }

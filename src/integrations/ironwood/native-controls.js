@@ -52,7 +52,7 @@
 
   const NativeControlAdapter = {
     run(document, command) {
-      if (AppState.ui.quickSkills.busy) return;
+      if (AppState.ui.quickSkills.busy || AppState.ui.traits.busy) return;
       const actions = {
         loot: collectLootAndContinue,
         automations: collectAllAutomationLoot,

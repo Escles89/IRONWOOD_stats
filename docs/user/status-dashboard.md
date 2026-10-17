@@ -64,6 +64,14 @@ Guild indicators are gray when unavailable and dashed gray when participation ne
 
 Linked rows open their native game pages; Daily quest preferences are in Settings. Disabled Claim controls can indicate automation is off, no eligible work is known, or an operation is already processing. Expand a row in the in-game Guide to see its actual icon designs beside these explanations.
 
+## Attunement passive progression
+
+The Attunement row also shows a small upward arrow when a passive improvement is affordable. Its tooltip distinguishes **Passive improvement available** from **Passive improvement available after collection**. This includes first unlocks and further passive levels, independently of the recommended progression target.
+
+On the native Attunement screen, **Passive progression** recommends one target per region. It favors the lowest passive levels, then the fewest additional shards needed, then set-bonus completion. Exact ties favor your currently attuned skill. Each compact target row shows its passive level, an action badge, owned and pending shards, and any set-bonus gain. The thin shard bar uses a solid segment for owned shards and a striped blue segment for pending shards. “Keep attuning” means the current regional skill is already the recommendation; your main action does not need to change.
+
+If the target is affordable, purchase it using the native Passives menu first; the recommendation updates after the game confirms the change. Pending shards require collection first. Defense shares its balance and passive levels across regions, so recommendations are alternatives rather than a promise that the same shards can fund several upgrades. No upgrades or slot changes are performed automatically. Shortfalls are shard counts, not time estimates.
+
 ## Skill Mastery tracker
 
 Click the **mastery symbol** in Current Action to open the Skill Mastery modal. The symbol is also available when idle. Choose one **Skill Mastery** to see its native requirements, contributed items, owned inventory, **Pending loot**, **Missing now** and **Missing after collection**. For 100 required, 20 contributed, 50 owned and 10 pending, 30 are missing now and 20 would remain after collection. Taming comes first in the game’s skill order. The header shows the followed skill’s icon and name under **Skill mastery tracking**. Small native mastery badges show the masteries you have obtained, with the obtained total below. Use the gear beside **Refresh** to choose an unfinished skill from a compact list. Materials use a compact list with native resource icons and six aligned quantity columns. Covered material rows and satisfied XP/coin requirements are gray, leaving shortages prominent. Unknown or inconsistent balances remain unmuted. On phones each row wraps below the item name, keeping all six labelled quantities; the modal scrolls while its close controls remain visible. Escape closes it and returns focus to the symbol. XP and coins have compact progress indicators, exact balances and the amount still needed; having the materials does not mean they have been contributed or that mastery is complete.
@@ -75,6 +83,20 @@ Contribution, inventory and Current Loot observation ages are shown separately. 
 **Open native mastery page** lets you inspect the game's mastery screen. The tracker never submits materials, spends coins or claims mastery. **Pending loot** includes only the current main action’s rewards. House production, Taming expeditions, Attunement and unfinished queues are excluded. Loot remains separate from owned inventory until the game confirms collection.
 
 **Missing after collection** is conditional on collecting that loot. A verified empty source counts as zero; an unavailable or partially observed source does not. With partial evidence, the tracker shows how much known loot covers and labels the remaining calculation incomplete. Historical loot retains its observation age and a “last observed” label, without claiming an exact after-collection total. During collection or synchronization the combined balances remain incomplete, and Refresh waits for collection to finish.
+
+## Traits
+
+The compact **Traits** row in Status follows set-bonus milestones across all traits: level **100**, then **115**, then **130**. Small bars show equipped-trait progress, and an amber **Switch** badge tells you when a training slot needs changing. Select the row to open the Trait training modal with recommendations, region priority, and a compact set table. There is no separate dashboard card. The table distinguishes **Ready to claim** from **Claimed**.
+
+Choose a **Region priority** to train that region's replacements first. All regions still finish the current milestone before the next begins. Your preference is saved for this character and game mode.
+
+An equipped trait below the milestone stays in place. When it reaches the milestone, or a training slot is empty, the modal recommends the lowest-XP eligible unlocked trait. Each suggestion has a manual **Switch to** or **Equip** button. The Status summary warns when a training slot needs changing or a set bonus is ready to claim; select the summary to open the modal. Earned Trait bonuses remain active after unequipping.
+
+Use each set's **Claim** button to claim its bonus. These manual Trait controls work independently of the daily automation setting. Unclaimed sets do not hold up the next training milestone. Once every trait reaches 130, the panel shows training complete and retains outstanding claims.
+
+XP updates during normal actions without collecting loot. During a temporary game sync, the row shows **Updating** with the last observed progress; changes remain disabled until fresh data returns. If no progress has been observed, **Check progress** opens the modal with refresh and help controls. **Trait training paused** explains when no action is running or the equipped Sigil supplies no Trait XP Gain. Locked traits remain unfinished requirements but are never suggested for equipping.
+
+Each change checks current game state first. If unequip succeeds and equip fails, the panel reports the empty slot and offers **Retry equip**. If the outcome cannot be checked, **Refresh** must succeed before another change. Refresh reads Trait state without stopping or collecting the current action; **Open Traits** opens the game's own page.
 
 ## Potions and House production
 

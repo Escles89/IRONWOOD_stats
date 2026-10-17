@@ -155,6 +155,7 @@
 
   function plannedAssertStart(owner, plan, native, amount, transition, collecting = false) {
     quickAssertOwner(owner, native.runtime);
+    if (plan.runnerAuth) recipeRunnerAssert(plan.runnerAuth);
     const main = quickRuntime(), ui = AppState.ui;
     if (ui.quickSkills.request?.cancelled) throw new Error('Start cancelled. Plan kept.');
     if (ui.collectingLoot || ui.syncing || ui.nativeSync?.running || ui.runningChallenge || ui.collectingAttunementLoot
@@ -246,6 +247,7 @@
     const ui = plannedObserve(), runtime = quickRuntime();
     plannedTargets(runtime);
     return [ui.owner, ui.plan, ui.editing, ui.draft, ui.filter, ui.message, ui.observation,
+      ui.plan?.kind === 'recipe' ? recipeRunnerInfo() : null,
       ui.plan?.kind === 'recipe' ? (recipeObservation(ui.plan), AppState.ui.recipePlan.active?.revision) : null,
       AppState.ui.plannedCatalog.revision, quickBusy(), plannedCurrentBlockReason(runtime),
       plannedKnownReason(runtime, plannedTargets(runtime).find(target => quickSameAction(target, ui.plan))),

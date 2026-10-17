@@ -10,7 +10,7 @@
       ${!ui.owner ? '<p>Character identity unavailable.</p>' : ui.editing && (inPlanner || !AppState.ui.recipePlan.open) ? `<form data-shopping-form data-shopping-owner="${escapeHtml(ui.owner)}">
         <label>Filter items<input type="search" data-shopping-filter value="${escapeHtml(ui.filter)}"></label><label>Finished item<select name="item" required data-shopping-item><option value="">Choose an item</option>${items.map(item => `<option value="${item.id}" ${item.id === draft.itemId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label>
         <label>Target owned quantity<input name="quantity" data-shopping-quantity type="number" min="1" step="1" required value="${escapeHtml(draft.quantity)}"></label>
-        ${choices.length > 1 || invalidated ? `<label>Crafting recipe<select name="recipe" data-shopping-recipe><option value="">Choose a recipe</option>${choices.map(entry => `<option value="${entry.key}" ${entry.key === draft.recipeKey ? 'selected' : ''}>${escapeHtml(entry.skillName)} · ${escapeHtml(entry.recipe.name)}</option>`).join('')}</select></label>` : choices.length === 1 ? `<span>Crafted with ${escapeHtml(choices[0].skillName)} · ${escapeHtml(choices[0].recipe.name)}</span>` : ''}<div class="iw-shopping-edit-actions"><button class="iw-small-button" type="submit">Save plan</button><button type="button" class="iw-small-button" data-shopping-step-link="defaults" aria-haspopup="dialog">Inputs</button>${ui.plan ? '<button type="button" class="iw-small-button" data-shopping-cancel>Cancel</button><button type="button" class="iw-shopping-clear" data-shopping-clear>Clear target</button>' : ''}</div></form>` : ''}
+        ${choices.length > 1 || invalidated ? `<label>Crafting recipe<select name="recipe" data-shopping-recipe><option value="">Choose a recipe</option>${choices.map(entry => `<option value="${entry.key}" ${entry.key === draft.recipeKey ? 'selected' : ''}>${escapeHtml(entry.skillName)} · ${escapeHtml(entry.recipe.name)}</option>`).join('')}</select></label>` : choices.length === 1 ? `<span>Crafted with ${escapeHtml(choices[0].skillName)} · ${escapeHtml(choices[0].recipe.name)}</span>` : ''}<div class="iw-shopping-edit-actions"><button class="iw-small-button" type="submit">Save &amp; run plan</button><button type="button" class="iw-small-button" data-shopping-step-link="defaults" aria-haspopup="dialog">Inputs</button>${ui.plan ? '<button type="button" class="iw-small-button" data-shopping-cancel>Cancel</button><button type="button" class="iw-shopping-clear" data-shopping-clear>Clear target</button>' : ''}</div></form>` : ''}
       ${snapshot && (!inPlanner || !ui.editing) ? `${ui.unavailable ? '<p role="status">Showing last observation. Current balances unavailable.</p>' : ''}
         <div class="iw-shopping-plan-layout"><div class="iw-shopping-calculation">${renderShoppingOverview(snapshot, ui)}${renderRecipeOverview()}</div><div class="iw-shopping-tree-scroll" aria-label="Recipe chain">${renderShoppingTree(snapshot)}</div></div>
         <p class="iw-muted iw-shopping-age">Observed ${Math.max(0, Math.floor((Date.now() - snapshot.observedAt) / 60000))} min ago.</p>` : ''}
@@ -40,14 +40,14 @@
       ${node.production ? `<dl class="iw-shopping-metrics"><div><dt>Required</dt><dd>${amount(node.required)}</dd></div><div><dt>Owned</dt><dd>${amount(node.owned)}</dd></div><div><dt>To produce</dt><dd>${amount(node.missing)}</dd></div></dl><p class="iw-shopping-attempts">${node.attempts === null ? 'Attempt count unknown' : `${amount(node.attempts)} ${node.conversion ? 'conversions' : `${node.fixed ? 'base' : 'nominal'} attempts`}`}</p>` : ''}
       ${node.required === null ? `<p>Known required subtotal ${amount(node.knownRequired)}; complete requirement unknown.</p>` : ''}
 
-      ${node.wood ? renderShoppingWood(node) : ''}
+      ${node.spareInputs ? renderShoppingSpareInputs(node) : ''}
       ${node.conversion ? `<p>1 ${escape(node.conversion.name)} → ${amount(node.conversion.output)} ${escape(node.name)}</p>` : ''}
       ${node.special && SHOPPING_CONVERSIONS.includes(node.id) ? renderShoppingConversion(node.id, ui) : ''}
       ${node.chosen ? `<div class="iw-shopping-recipe-bar"><span>${escape(node.chosen.skillName)} · Level ${escape(node.chosen.recipe.level ?? 'unknown')}</span><a data-shopping-native-recipe="${node.chosen.key}" data-shopping-owner="${escape(ui.owner)}" href="/skill/${node.chosen.skillId}/action/${node.chosen.recipe.id}">Open recipe ↗</a></div>` : ''}
       ${node.production ? `<details class="iw-shopping-recipe-details" data-shopping-recipe-details data-shopping-owner="${escape(ui.owner)}" data-shopping-step="${escape(node.key)}" ${ui.expandedStep === node.key ? 'open' : ''}><summary>Recipe details</summary>${node.chosen ? `<p>${escape(node.yieldText)}.</p><p>${escape(node.eligibility)}</p>` : ''}<div class="iw-shopping-extra"><span>Stock used ${amount(node.used)}</span><span>Required output ${amount(node.missing)}</span><span>Projected surplus ${amount(node.surplus)} (not owned inventory)</span></div></details>` : ''}
       ${!node.special && (node.choices.length > 1 || node.recipeKey && !node.chosen) ? `<label>Recipe for ${escape(node.name)}<select data-shopping-chain-recipe data-shopping-owner="${escape(ui.owner)}" data-shopping-recipe-item="${node.id}" ${ui.unavailable ? 'disabled' : ''}><option value="">Choose a current recipe</option>${node.choices.map(entry => `<option value="${entry.key}" ${entry.key === node.recipeKey ? 'selected' : ''}>${escape(entry.skillName)} · ${escape(entry.recipe.name)}</option>`).join('')}</select></label>` : ''}
       ${node.gaps.map(gap => `<p>${escape(gap)}</p>`).join('')}
-      ${node.wood ? '' : `<table><caption>${node.edges.length ? 'Ingredients · balances shared across the plan' : 'Combined requirement'}</caption><thead><tr><th>Ingredient</th>${columns.map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${tableRows.map(row => `<tr><th>${escape(row.name)}<small>${row.special ? 'Resource balance' : 'Inventory'}</small>${row.cycle ? '<small>Cycle: branch stopped</small>' : ''}</th>${[['Per attempt', row.perAttempt], ['Required', row.required], ['Owned', row.total?.owned], ['Stock used', row.total?.used], ['Missing', row.cycle ? row.required : row.total?.missing]].filter(([label]) => columns.includes(label)).map(([label, value]) => `<td data-label="${label}">${amount(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>`}
+      ${node.spareInputs ? '' : `<table><caption>${node.edges.length ? 'Ingredients · balances shared across the plan' : 'Combined requirement'}</caption><thead><tr><th>Ingredient</th>${columns.map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${tableRows.map(row => `<tr><th>${escape(row.name)}<small>${row.special ? 'Resource balance' : 'Inventory'}</small>${row.cycle ? '<small>Cycle: branch stopped</small>' : ''}</th>${[['Per attempt', row.perAttempt], ['Required', row.required], ['Owned', row.total?.owned], ['Stock used', row.total?.used], ['Missing', row.cycle ? row.required : row.total?.missing]].filter(([label]) => columns.includes(label)).map(([label, value]) => `<td data-label="${label}">${amount(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>`}
     </div>`;
   }
 
@@ -63,17 +63,26 @@
 
   function renderShoppingTree(snapshot) {
     const nodes = new Map(snapshot.nodes.map(node => [node.key, node])), seen = new Set();
-    function branch(node, edge = null) {
+    function branch(node, edge = null, inputConnection = null) {
       const reference = seen.has(node.key);
       seen.add(node.key);
       const note = edge?.cycle ? ' · Cycle stopped' : reference ? ' · Shared requirement' : '';
       const label = `${node.name} — ${shoppingSupplyLabel(node)}${note}${node.special ? ' · Resource balance' : ''}`;
       const content = `<button type="button" class="iw-shopping-node" data-shopping-step-link="${escapeHtml(node.key)}" aria-haspopup="dialog" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${renderShoppingIcon(node)}</button>`;
-      const connection = node.supply === 'covered' && node.missing > 0 ? 'craftable' : node.supply;
-      const coveredResource = node.special && SHOPPING_CONVERSIONS.includes(node.id) && node.missing === 0;
-      const children = reference || coveredResource ? [] : node.edges.filter(input => !input.wood).map(input => {
+      // Allocated inputs are individually capped to owned stock. Their lines
+      // must reflect the complete pool's shortfall, including hidden inputs.
+      const poolConnection = node.spareInputs ? node.acquire === null ? 'unknown' : node.acquire > 0 ? 'craftable' : 'covered' : null;
+      const connection = inputConnection || (poolConnection && poolConnection !== 'covered' ? poolConnection
+        : node.supply === 'covered' && node.missing > 0 ? 'craftable' : node.supply);
+      let spareShown = 0;
+      // The allocator orders spare inputs by yield. Limit only their artwork;
+      // keep all inputs in the snapshot, estimates and detailed breakdown.
+      const visibleEdges = node.edges.filter(input => !input.spare || spareShown++ < 2);
+      // Owned stock ends this branch; craftable supplies still need their
+      // inputs shown. Keep the full calculation for totals and shared demand.
+      const children = node.missing === 0 || reference || edge?.cycle ? [] : visibleEdges.map(input => {
         const child = nodes.get(input.key);
-        return child ? branch(child, input) : null;
+        return child ? branch(child, input, input.spare ? poolConnection : null) : null;
       }).filter(Boolean);
       const childWidth = children.reduce((sum, child) => sum + child.width, 0);
       const width = Math.max(edge ? 48 : 56, childWidth) + 24;
@@ -102,20 +111,40 @@
   }
 
   function renderShoppingConversion(resource, ui) {
-    const choices = shoppingConversionChoices(quickRuntime(), resource), selected = (ui.editing ? ui.draft.conversions || ui.conversions : ui.conversions)?.[resource] || '';
-    const invalidated = selected && !choices.some(choice => choice.id === selected);
-    return `<label>${escapeHtml(SHOPPING_RESOURCES[resource])} input<select data-shopping-conversion data-shopping-resource="${resource}" data-shopping-owner="${escapeHtml(ui.owner)}" ${shoppingPending(quickRuntime()) ? 'disabled' : ''}>
-      <option value="" ${!selected ? 'selected' : ''}>Use resource balance only</option>
-      ${invalidated ? `<option value="${selected}" selected>Saved input unavailable</option>` : ''}
-      ${choices.map(choice => `<option value="${choice.id}" ${choice.id === selected ? 'selected' : ''}>${escapeHtml(choice.name)} · ${formatNumber(choice.output)} per item</option>`).join('')}</select></label>${!choices.length ? '<p>Conversion recipes unavailable.</p>' : ''}`;
+    const runtime = quickRuntime(), selected = (ui.editing ? ui.draft.conversions || ui.conversions : ui.conversions)?.[resource] || '';
+    return `<label>${resource === 'charcoal' ? 'Trees / wood for Charcoal' : `${escapeHtml(SHOPPING_RESOURCES[resource])} input`}<select class="iw-conversion-select" data-stock="${shoppingConversionStock(runtime, selected).status}" data-shopping-conversion data-shopping-resource="${resource}" data-shopping-owner="${escapeHtml(ui.owner)}" ${shoppingPending(runtime) ? 'disabled' : ''}>
+      ${renderShoppingConversionOptions(runtime, resource, selected)}</select></label><p class="iw-muted iw-conversion-legend">Green: owned · Red: none owned · Amber: unknown. Excludes pending loot.</p>`;
   }
 
-  function renderShoppingWood(node) {
+  function shoppingConversionStock(runtime, id) {
+    const owned = shoppingPending(runtime) ? null : shoppingOwned(runtime, id);
+    return { owned, status: !id || id === SHOPPING_BALANCE_ONLY ? 'default' : owned === null ? 'unknown' : owned > 0 ? 'owned' : 'empty' };
+  }
+
+  function renderShoppingConversionOptions(runtime, resource, selected = '') {
+    const choices = shoppingConversionChoices(runtime, resource);
+    const balanceChoice = Object.hasOwn(SHOPPING_SPARE_INPUTS, resource);
+    const invalidated = selected && !(balanceChoice && selected === SHOPPING_BALANCE_ONLY) && !choices.some(choice => choice.id === selected);
+    return `<option value="" ${!selected ? 'selected' : ''}>${SHOPPING_SPARE_INPUTS[resource] ? `Use spare owned ${SHOPPING_SPARE_INPUTS[resource].name} automatically` : 'Use resource balance only'}</option>
+      ${balanceChoice ? `<option value="${SHOPPING_BALANCE_ONLY}" ${selected === SHOPPING_BALANCE_ONLY ? 'selected' : ''}>Use resource balance only</option>` : ''}
+      ${invalidated ? `<option value="${escapeHtml(selected)}" data-stock="unknown" selected>Saved input unavailable</option>` : ''}
+      ${choices.map(choice => {
+        const stock = shoppingConversionStock(runtime, choice.id);
+        // Native option menus can ignore CSS colors; retain a colored stock
+        // marker as text, alongside the explicit quantity for accessibility.
+        const marker = stock.status === 'owned' ? '🟢' : stock.status === 'empty' ? '🔴' : '🟡';
+        return `<option value="${choice.id}" data-stock="${stock.status}" ${choice.id === selected ? 'selected' : ''}>${escapeHtml(choice.name)} · ${formatNumber(choice.output)} per item · ${marker} ${stock.owned === null ? 'Owned unknown' : `${formatNumber(stock.owned)} owned`}</option>`;
+      }).join('')}${!choices.length ? '<option disabled>Conversion recipes unavailable</option>' : ''}`;
+  }
+
+  function renderShoppingSpareInputs(node) {
+    const input = SHOPPING_SPARE_INPUTS[node.id], resource = escapeHtml(node.name);
+    const perItem = `${resource} per ${input.unit}`, outputLabel = `${resource} output`;
     const amount = value => value === null ? 'Unknown' : formatNumber(value);
     return `<p>Required ${amount(node.required)} · Owned ${amount(node.owned)}</p>
-      <p>${amount(node.woodOutput)} from wood · ${amount(node.acquire)} still to acquire · Projected surplus ${amount(node.surplus)}</p>
-      <table><caption>Available wood after other recipe requirements. Higher-yield wood is allocated first.</caption><thead><tr><th>Wood</th><th>Charcoal per log</th><th>Available</th><th>To convert</th><th>Charcoal output</th></tr></thead><tbody>
-      ${node.wood.map(row => `<tr><th>${escapeHtml(row.name)}</th><td data-label="Charcoal per log">${amount(row.output)}</td><td data-label="Available">${amount(row.available)}</td><td data-label="To convert">${amount(row.used)}</td><td data-label="Charcoal output">${amount(row.produced)}</td></tr>`).join('')}</tbody></table>`;
+      <p>${amount(node.spareOutput)} from ${input.name} · ${amount(node.acquire)} still to acquire · Projected surplus ${amount(node.surplus)}</p>
+      <table><caption>Available ${input.name} after other recipe requirements. Higher-yield ${input.name} ${input.name === 'wood' ? 'is' : 'are'} allocated first.</caption><thead><tr><th>${input.label}</th><th>${perItem}</th><th>Available</th><th>To convert</th><th>${outputLabel}</th></tr></thead><tbody>
+      ${node.spareInputs.map(row => `<tr><th>${escapeHtml(row.name)}</th><td data-label="${perItem}">${amount(row.output)}</td><td data-label="Available">${amount(row.available)}</td><td data-label="To convert">${amount(row.used)}</td><td data-label="${outputLabel}">${amount(row.produced)}</td></tr>`).join('')}</tbody></table>`;
   }
 
   function renderShoppingOverview(snapshot, ui) {

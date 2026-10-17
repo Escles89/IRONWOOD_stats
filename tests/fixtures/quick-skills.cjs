@@ -71,7 +71,7 @@ function setup(options = {}) {
             if (options.timeout) return { unsubscribe() {} };
             if (options.startFailure) observer.error(Error('Start rejected'));
             else {
-              const action = options.wrongTarget ? { skillId: '14', actionId: '104' } : { skillId, actionId, amount };
+              const action = options.wrongTarget ? { skillId: '14', actionId: '104' } : { skillId, actionId, amount, ...options.startIdentity?.() };
               server = { ...server, action };
               observer.next({ action, challenge: {} }); observer.complete();
             }

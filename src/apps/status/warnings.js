@@ -100,6 +100,6 @@
   }
 
   function renderImportantActionBadges(summary) {
-    if (!summary) return '<span class="iw-action-badges"><span class="iw-active-badge iw-stopped-badge" role="img" title="No action in progress" aria-label="No action in progress"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"></path></svg></span></span>';
+    if (!summary) return `<span class="iw-action-badges"><span class="iw-active-badge iw-stopped-badge" role="img" title="No action in progress" aria-label="No action in progress"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"></path></svg></span>${renderRecipeRunnerBadge()}</span>`;
     return renderActionBadges({ ...summary, importantOnly: true, cache: {}, locationBadges: '' });
   }

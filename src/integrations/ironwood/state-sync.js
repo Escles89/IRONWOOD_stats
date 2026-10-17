@@ -40,6 +40,10 @@
         .find(Type => typeof Type?.prototype?.calcCraftTime === 'function');
       const MasteryPage = routeComponents(router?.config)
         .find(Type => typeof Type?.prototype?.materialsComplete === 'function');
+      const AttunementPage = routeComponents(router?.config)
+        .find(Type => typeof Type === 'function' && Function.prototype.toString.call(Type).includes('this.calcAttunementPassiveCost='));
+      const TraitsPage = routeComponents(router?.config)
+        .find(Type => typeof Type?.prototype?.equipTrait === 'function' && typeof Type.prototype.claimTraitSet === 'function');
       const catalog = exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.image === 'items/challenge-scroll.png'));
       runtime = {
         state: service('syncUser'), firebase: service('getUser'), action: service('handleActionSync'),
@@ -47,6 +51,8 @@
         zone: Zone && injector.get(Zone, null), router,
         outletContexts: router?.navigationTransitions?.rootContexts || service('onChildOutletCreated'),
         mastery: discoverNativeMastery(MasteryPage, modules),
+        traits: discoverNativeTraits(TraitsPage, modules),
+        attunementProgression: discoverNativeAttunement(AttunementPage, modules),
         attunementCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Woodcutting' && item.skillId != null) && Object.values(value).every(item => item?.skillId != null)),
         skillCatalog: exports.find(value => value && typeof value === 'object' && value['8']?.name === 'Defense' && value['1']?.name === 'Woodcutting' && Array.isArray(value['1'].actions)),
         actionCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Copper Rock' && Array.isArray(item.drops))),
@@ -109,6 +115,7 @@
   }
 
   function synchronizeNativeGame({ quickAction = false } = {}) {
+    if (AppState.ui.traits.busy) return Promise.reject(new Error('A Trait change is in progress'));
     if (AppState.ui.quickSkills.busy && !quickAction) return Promise.reject(new Error('A quick action is in progress'));
     if (nativeGameSyncPromise) return nativeGameSyncPromise;
     nativeGameSyncPromise = (async () => {
@@ -159,7 +166,8 @@
     const anchors = {
       charcoal: [['items/wood-pine.png', 1], ['items/wood-ancient.png', 8]],
       metalParts: [['items/sword-copper.png', 2], ['items/armor-iron-body.png', 6]],
-      potionMix: [['items/potion-basic-health.png', 6], ['items/potion-super-combat-efficiency.png', 34]]
+      potionMix: [['items/potion-basic-health.png', 6], ['items/potion-super-combat-efficiency.png', 34]],
+      arcanePowder: [['items/gem-ruby.png', 50], ['items/gem-onyx.png', 400]]
     };
     const items = Object.values(catalog || {}), result = {};
     for (const [resource, examples] of Object.entries(anchors)) {

@@ -4,7 +4,7 @@
     return plan?.kind === 'recipe' && quickId(plan.target?.itemId) && shoppingQuantity(plan.target.quantity)
       && typeof plan.target.recipeKey === 'string' && /^(?:\d{1,10}:\d{1,10})?$/.test(plan.target.recipeKey)
       && shoppingValidRecipeChoices(plan.target.recipes) && shoppingRecord(plan.sources) && shoppingValidRecipeChoices(plan.sources)
-      && shoppingRecord(plan.conversions) && Object.entries(plan.conversions).every(([id, source]) => SHOPPING_CONVERSIONS.includes(id) && quickId(source))
+      && shoppingRecord(plan.conversions) && Object.entries(plan.conversions).every(([id, source]) => shoppingValidConversion(id, source))
       && recipeValidQuantities(plan.quantities);
   }
 

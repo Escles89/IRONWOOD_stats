@@ -784,7 +784,7 @@
       header-component #iw-header-bar > .coins { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; min-width:0; margin:0; padding:4px 8px; border:0; border-radius:0; background:transparent; color:#fff; font-size:16px; font-variant-numeric:tabular-nums; white-space:nowrap; }
       header-component #iw-header-bar > .coins img { width:16px; height:16px; margin:0; flex-shrink:0; }
       header-component #iw-header-bar #iw-header-action-badges { flex-shrink:0; margin:0; padding:0 6px 0 0; border:0; border-right:1px solid #294052; border-radius:0; background:transparent; }
-      header-component #iw-header-bar #iw-header-action-badges .iw-action-badges > .iw-active-badge { width:22px; height:22px; }
+      header-component #iw-header-bar #iw-header-action-badges .iw-action-badges > :is(.iw-active-badge, .iw-recipe-runner-badge) { width:22px; height:22px; }
       header-component #iw-header-bar #iw-header-action-badges .iw-active-badge .iw-spin { width:15px; height:15px; margin:-7.5px 0 0 -7.5px; }
       header-component #iw-header-bar #iw-header-tools { position:absolute; left:calc(100% + 6px); top:50%; transform:translateY(-50%); display:flex; flex-direction:column; align-items:center; gap:0; width:24px; margin:0; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
       header-component #iw-header-bar #iw-header-tools button { width:24px; min-width:24px; height:24px; min-height:24px; padding:2px; color:rgba(218,233,240,.45); background:transparent; border:0; border-radius:0; box-shadow:none; transition:color .15s; }
@@ -1168,6 +1168,31 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
       .iw-shopping-body form { display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin-bottom:12px; }
       .iw-shopping-body label { display:flex; flex:1 1 180px; flex-direction:column; gap:4px; min-width:0; }
       .iw-shopping-body input, .iw-shopping-body select { box-sizing:border-box; width:100%; min-width:0; min-height:36px; padding:6px; background:#171e28; color:#eee; border:1px solid #485263; border-radius:5px; font:inherit; }
+      .iw-conversion-select[data-stock="owned"], .iw-conversion-select option[data-stock="owned"] { color:#79bf98; }
+      .iw-conversion-select[data-stock="empty"], .iw-conversion-select option[data-stock="empty"] { color:#f27683; }
+      .iw-conversion-select[data-stock="unknown"], .iw-conversion-select option[data-stock="unknown"] { color:#dbb96d; }
+      select.iw-conversion-select[data-stock="owned"] { border-color:#79bf98; }
+      select.iw-conversion-select[data-stock="empty"] { border-color:#f27683; }
+      select.iw-conversion-select[data-stock="unknown"] { border-color:#dbb96d; }
+      .iw-conversion-select option { background:#171e28; color:#eee; }
+      .iw-conversion-legend { margin:0 0 10px; font-size:11px; }
+      .iw-recipe-runner-badge { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; width:25px; height:25px; padding:2px; border:1px solid #738699; border-radius:4px; background:rgba(135,149,162,.045); color:#a5b3c1; cursor:pointer; flex-shrink:0; }
+      .iw-recipe-runner-badge svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+      .iw-recipe-runner-badge[data-run-state="running"], .iw-recipe-runner-badge[data-run-state="starting"], .iw-recipe-runner-badge[data-run-state="collecting"], .iw-recipe-runner-badge[data-run-state="complete"] { color:#78efa9; border-color:#38dd89; background:rgba(56,221,137,.08); box-shadow:0 0 7px rgba(42,220,130,.16); }
+      .iw-recipe-runner-badge[data-run-state="waiting"] { color:#79b8ef; border-color:#79b8ef; background:rgba(68,171,221,.08); box-shadow:0 0 7px rgba(79,183,229,.16); }
+      .iw-recipe-runner-badge[data-run-state="attention"] { color:#dbb96d; border-color:#dbb96d; }
+      .iw-action-card .iw-recipe-runner-badge svg { width:22px; height:22px; }
+      header-component #iw-header-bar .iw-recipe-runner-badge svg { width:15px; height:15px; }
+      .iw-plan-route { opacity:.4; }
+      .iw-plan-step { fill:currentColor; stroke:none; }
+      .iw-recipe-runner-badge[data-animated="true"] .iw-plan-step { animation:iw-plan-steps 1.8s ease-in-out infinite; }
+      .iw-recipe-runner-badge[data-animated="true"] .iw-plan-step:nth-of-type(2) { animation-delay:-1.2s; }
+      .iw-recipe-runner-badge[data-animated="true"] .iw-plan-step:nth-of-type(3) { animation-delay:-.6s; }
+      @keyframes iw-plan-steps { 0%,65%,100% { opacity:.25; } 20%,40% { opacity:1; } }
+      @media (prefers-reduced-motion:reduce) { .iw-recipe-runner-badge[data-animated="true"] .iw-plan-step { animation:none; } }
+      .iw-recipe-runner-badge:focus-visible { outline:2px solid #b7d1e7; outline-offset:2px; }
+      .iw-recipe-runner-controls { padding:10px; border:1px solid #485263; border-radius:6px; margin:8px 0; }
+      .iw-recipe-runner-controls p { margin:5px 0 8px; font-size:12px; }
       .iw-shopping-body summary { cursor:pointer; padding:8px 0; font-weight:600; }
       .iw-shopping-body table { width:100%; border-collapse:collapse; margin:8px 0; }
       .iw-shopping-body th, .iw-shopping-body td { padding:7px; border-bottom:1px solid #394150; text-align:right; }
@@ -1390,3 +1415,78 @@ button.iw-mastery-badge:focus-visible { outline: 2px solid #8ad6ff; outline-offs
 .iw-shopping-card .iw-shopping-branches { margin-top: 14px; padding-top: 14px; }
 .iw-shopping-card .iw-shopping-branches::after { top: -17px; }
 .iw-shopping-card svg.iw-shopping-connections { top: -14px; height: 31px; }
+
+/* Attunement recommendations retain the native card shell and compact row rhythm. */
+#iw-attunement-progression .iw-attunement-target { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 12px; padding: 16px; cursor: default; }
+#iw-attunement-progression .iw-attunement-art { width: 30px; height: 34px; object-fit: contain; margin-top: 3px; }
+#iw-attunement-progression .iw-attunement-main { min-width: 0; line-height: 1.4; }
+#iw-attunement-progression .iw-attunement-top { display: flex; justify-content: space-between; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+#iw-attunement-progression .iw-attunement-top strong { display: block; font-size: 16px; font-weight: 500; color: #edf3f6; }
+#iw-attunement-progression .iw-attunement-region { display: block; font-size: 10px; line-height: 1.5; letter-spacing: .07em; text-transform: uppercase; color: #94a8b5; margin-bottom: 2px; }
+#iw-attunement-progression .iw-attunement-state { display: inline-flex; align-items: center; flex-shrink: 0; padding: 3px 8px; border: 1px solid #8da7b32b; border-radius: 4px; font-size: 10px; line-height: 1.5; color: #b9c9d2; background: #8da7b30a; }
+#iw-attunement-progression .iw-attunement-state.is-current { color: #9ec6b7; border-color: #7eb29b35; background: #7eb29b0c; }
+#iw-attunement-progression .iw-attunement-state.is-next { color: #a8cce2; border-color: #86b5d540; background: #86b5d510; }
+#iw-attunement-progression .iw-attunement-state.is-ready { color: #c6e6b8; border-color: #abd09150; background: #abd09114; }
+#iw-attunement-progression .iw-attunement-state.is-collect { color: #e6cca1; border-color: #d5b47745; background: #d5b47710; }
+#iw-attunement-progression .iw-attunement-meta, #iw-attunement-progression .iw-attunement-balance { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; font-size: 12px; color: #a4b5c0; font-variant-numeric: tabular-nums; }
+#iw-attunement-progression .iw-attunement-meta { margin-top: 10px; }
+#iw-attunement-progression .iw-attunement-meta b, #iw-attunement-progression .iw-attunement-balance b { color: #d6e1e7; font-weight: 400; }
+#iw-attunement-progression .iw-attunement-meta b { margin-left: 5px; }
+#iw-attunement-progression .iw-attunement-track { display: flex; height: 4px; overflow: hidden; background: #839cac20; border-radius: 2px; margin: 8px 0 6px; }
+#iw-attunement-progression .iw-attunement-owned { background: #8caf9a; }
+#iw-attunement-progression .iw-attunement-pending { background: repeating-linear-gradient(120deg, #85b5d0 0 3px, #577d95 3px 5px); }
+#iw-attunement-progression .iw-attunement-balance { font-size: 11px; color: #8fa4b1; }
+#iw-attunement-progression .iw-attunement-pending-label { color: #9dc0d6; }
+#iw-attunement-progression .iw-attunement-set { display: flex; gap: 6px; color: #b7d3ad; font-size: 11px; margin-top: 9px; }
+#iw-attunement-progression .iw-attunement-shared { color: #a4b5c0; font-size: 11px; margin-top: 8px; }
+#iw-attunement-progression .iw-attunement-footer { padding: 10px 16px; border-top: 1px solid #8da7b320; font-size: 10px; color: #8fa4b1; line-height: 1.5; }
+#iw-attunement-progression .iw-attunement-footer span { padding: 0 4px; }
+#iw-attunement-progression .iw-attunement-empty { padding: 16px; color: #a4b5c0; font-size: 12px; }
+#iw-attunement-progression .iw-attunement-empty strong, #iw-attunement-progression .iw-attunement-empty span { display: block; }
+.iw-attunement-available { flex-shrink: 0; }
+
+.iw-traits-tools { display: flex; gap: 6px; }
+.iw-traits-body { padding: 12px 18px; overflow: auto; min-height: 0; }
+.iw-traits-preference { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; }
+.iw-traits-preference select { min-width: 0; max-width: 65%; color: #e6f0f5; background: #17394e; border: 1px solid #35566a; border-radius: 4px; padding: 6px 8px; font: inherit; }
+.iw-traits-note, .iw-traits-message { margin: 8px 0; font-size: 12px; line-height: 18px; color: #aabecb; }
+.iw-traits-message { color: #d7e6ee; overflow-wrap: anywhere; }
+.iw-traits-warning { color: #f2c477 !important; font-size: 12px; line-height: 18px; }
+.iw-traits-slot { padding: 9px 0; border-top: 1px solid #294052; }
+.iw-traits-name { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.iw-traits-name img { width: 28px; height: 28px; object-fit: contain; }
+.iw-traits-name small { display: block; color: #aabecb; font-size: 12px; font-variant-numeric: tabular-nums; }
+.iw-traits-slot progress { display: block; appearance: none; width: 100%; height: 6px; margin: 8px 0; border: 0; border-radius: 3px; background: #1e3c4e; overflow: hidden; }
+.iw-traits-slot progress::-webkit-progress-bar { background: #1e3c4e; }
+.iw-traits-slot progress::-webkit-progress-value { background: #57b8b4; }
+.iw-traits-slot progress::-moz-progress-bar { background: #57b8b4; }
+.iw-traits-switch { margin-top: 6px; white-space: normal; text-align: left; }
+.iw-traits-sets { margin-top: 12px; font-size: 12px; }
+.iw-traits-set-row { display: grid; grid-template-columns: minmax(64px,.9fr) repeat(3,minmax(0,1fr)); align-items: center; gap: 6px; padding: 8px 0; border-top: 1px solid #294052; }
+.iw-traits-set-row > span { text-align: center; }
+.iw-traits-set-row small { display: block; color: #aabecb; font-size: 10px; line-height: 15px; }
+.iw-traits-claimed { color: #8da99e; }
+button[data-traits-summary] { width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; cursor: pointer; }
+
+.iw-status-list .iw-status-row.iw-traits-summary { grid-template-columns: 30px minmax(0,1fr) auto 8px; gap: 8px; min-height: 52px; padding: 7px 10px; border: 0; border-bottom: 1px solid #294052; }
+.iw-traits-summary > img { width: 26px; height: 26px; }
+.iw-traits-summary:hover { background: #17364a; }
+.iw-traits-summary:focus-visible { outline: 2px solid #8ad6ff; outline-offset: -2px; }
+.iw-traits-summary-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.iw-traits-summary-heading small { font-size: 11px; color: #8fa7b7; }
+.iw-traits-summary .iw-traits-mini-bars { display: flex; gap: 4px; margin-top: 3px; height: 3px; }
+.iw-traits-mini-bars > span { flex: 1; overflow: hidden; background: #294353; border-radius: 2px; }
+.iw-traits-mini-bars i { display: block; height: 100%; background: #66acae; }
+.iw-traits-summary .iw-traits-state { padding: 4px 7px; border-radius: 5px; background: #203847; color: #acc4ce; font-size: 11px; white-space: nowrap; }
+.iw-traits-summary .iw-traits-state.iw-traits-warning { background: #51402a; font-weight: 600; }
+.iw-traits-summary .iw-traits-chevron { color: #7f9bab; font-size: 20px; }
+.iw-modal-panel.iw-traits-modal { width: min(520px,100%); }
+.iw-traits-modal h2 { display: flex; align-items: center; gap: 9px; }
+.iw-traits-modal h2 img { width: 26px; height: 26px; }
+.iw-traits-modal .iw-options-heading { padding: 12px 16px; }
+.iw-traits-modal .iw-traits-close { font-size: 20px; line-height: 20px; padding: 3px 9px; }
+.iw-traits-modal footer { justify-content: space-between; }
+@media (max-width: 480px) {
+  .iw-traits-body { padding: 10px 12px; }
+  .iw-traits-summary-heading { flex-wrap: wrap; gap: 0 6px; }
+}

@@ -65,7 +65,8 @@ test('natural Attunement capture preserves other regions and ignores missing bal
   let amount='12.1K / 100';
   const text=textContent=>({textContent});
   const tribute={querySelector:selector=>text(selector==='.name'?'Forest Tribute':amount)};
-  const slots={querySelector:()=>text('Slots'),querySelectorAll:()=>[]};
+  const slot={querySelector:selector=>selector===':scope > .name'?{childNodes:[text('Forest')]}:selector==='.name .secondary'?text('Woodcutting'):null};
+  const slots={querySelector:()=>text('Slots'),querySelectorAll:()=>[slot]};
   const requirements={querySelector:()=>text('Requirements'),querySelectorAll:()=>[tribute]};
   const root={querySelectorAll:()=>[slots,requirements]};
   const h=harness({document:{querySelector:()=>root}});

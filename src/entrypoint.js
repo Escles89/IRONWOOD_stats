@@ -9,11 +9,15 @@
     installInterfaceControls();
     installEventDelegation();
     syncQuickSkills();
+    syncAttunementProgression();
     checkScriptUpdate();
     window.addEventListener('popstate', () => location.pathname === STATS_PATH ? showStats({ push: false }) : hideStats());
     new MutationObserver((records) => {
       // Dashboard updates are output, not new native data to capture.
-      if (records.every(record => AppState.ui.page?.contains(record.target) || record.target.closest?.('#iw-quick-controls, #iw-quick-skills-panel') || document.querySelector('#iw-global-dialogs')?.contains(record.target) || document.querySelector('#iw-action-toasts')?.contains(record.target))) return;
+      if (records.every(record => {
+        const target = record.target.nodeType === 3 ? record.target.parentElement : record.target;
+        return AppState.ui.page?.contains(record.target) || target?.closest?.('#iw-quick-controls, #iw-quick-skills-panel, #iw-attunement-progression') || document.querySelector('#iw-global-dialogs')?.contains(record.target) || document.querySelector('#iw-action-toasts')?.contains(record.target);
+      })) return;
       installNativeQuantityPrecision();
       installNavButton(); installInterfaceControls(); createPage(); captureVisibleCaches();
       installUpdateIndicator();
@@ -21,7 +25,7 @@
       syncHeaderActionBadges();
       syncQuickSkills();
     })
-      .observe(document.body, { childList: true, subtree: true });
+      .observe(document.body, { childList: true, characterData: true, subtree: true });
     if (restoreStatusAtStartup) restoreStatusOnLoad();
     setTimeout(captureVisibleCaches, 1500);
     AppState.ui.startupSyncAt = Date.now() + 2500;
@@ -30,6 +34,7 @@
     window.setInterval(scheduleStatusRender, 250);
     window.setInterval(checkScriptUpdate, 60000);
     window.setInterval(checkDailyAutomations, 60000);
+    window.setInterval(recipeRunnerTick, 2000);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialise, { once: true });

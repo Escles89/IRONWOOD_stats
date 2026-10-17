@@ -2,6 +2,75 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const setupQuick = require('../fixtures/quick-skills.cjs');
 
+test('both balance-only choices save with the plan, cancel cleanly, and can return to mixed inputs', () => {
+  const f = setup();
+  Object.assign(f.rt.actionCatalog['103'], { charcoal: 2, arcanePowder: 50 });
+  Object.assign(f.rt.state.user, { charcoal: 0, arcanePowder: 0 });
+  f.rt.conversionCatalog = { charcoal: { '202': 1 }, arcanePowder: { '203': 50 } };
+  f.rt.state.user.inventory['203'].amount = 1;
+  const saved = () => JSON.parse(f.h.storage.get('iw-status-planned-action-v1:["Player",false]')).plan;
+  f.open(); f.save('31'); f.click('data-shopping-edit');
+  for (const resource of ['charcoal', 'arcanePowder']) {
+    f.emit('change', 'data-shopping-conversion', 'balance', { shoppingOwner: '["Player",false]', shoppingResource: resource });
+  }
+  assert.deepEqual(saved().conversions, {});
+  f.save('31');
+  assert.deepEqual(saved().conversions, { charcoal: 'balance', arcanePowder: 'balance' });
+  assert.match(f.panel(), /Requires Charcoal, Arcane Powder in owned inventory/);
+  assert.doesNotMatch(f.panel(), /Saved input unavailable|Spare owned (wood|gems) can supply/);
+  f.click('data-shopping-edit');
+  f.emit('change', 'data-shopping-conversion', '', { shoppingOwner: '["Player",false]', shoppingResource: 'arcanePowder' });
+  f.click('data-shopping-cancel');
+  assert.equal(saved().conversions.arcanePowder, 'balance');
+  for (const resource of ['charcoal', 'arcanePowder']) {
+    f.emit('change', 'data-recipe-conversion', '', { recipeScope: 'active', recipeItem: resource });
+  }
+  assert.deepEqual(saved().conversions, {});
+  assert.match(f.panel(), /Spare owned gems can supply 50 Arcane Powder/);
+  f.emit('change', 'data-recipe-conversion', 'balance', { recipeScope: 'active', recipeItem: 'arcanePowder' });
+  assert.equal(saved().conversions.arcanePowder, 'balance');
+  assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+});
+
+test('mixed gem projections cover calculator demand while crafting still waits for actual powder', () => {
+  const f = setup();
+  Object.assign(f.rt.catalog, { '206': { id: '206', name: 'Ruby' }, '207': { id: '207', name: 'Onyx' } });
+  Object.assign(f.rt.state.user.inventory, { '206': { amount: 2 }, '207': { amount: 1 } });
+  f.rt.actionCatalog['103'].arcanePowder = 500;
+  f.rt.state.user.arcanePowder = 0;
+  f.rt.conversionCatalog = { arcanePowder: { '206': 50, '207': 400 } };
+  f.open(); f.save('31');
+  assert.match(f.panel(), /Spare owned gems can supply 500 Arcane Powder through manual conversion/);
+  assert.match(f.panel(), /Requires Arcane Powder in owned inventory/);
+  assert.match(f.panel(), /No ready action/);
+  f.rt.state.user.arcanePowder = 500;
+  f.render();
+  assert.match(f.panel(), /Next · Smithing · Iron Sword/);
+  assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+});
+
+test('gem and wood inputs save together and derive gathering steps without treating conversion output as owned', () => {
+  const f = setup();
+  Object.assign(f.rt.catalog, { '206': { id: '206', name: 'Ruby', image: 'items/gem-ruby.png' }, '207': { id: '207', name: 'Pine Log', image: 'items/wood-pine.png' } });
+  f.rt.actionCatalog['106'] = { id: '106', name: 'Pine Tree', drops: [{ id: '207', chance: 1000 }] };
+  f.rt.skillCatalog['1'].actions.push({ id: '106' });
+  Object.assign(f.rt.actionCatalog['103'], { arcanePowder: 120, charcoal: 2 });
+  Object.assign(f.rt.state.user, { arcanePowder: 0, charcoal: 0 });
+  f.rt.conversionCatalog = { arcanePowder: { '206': 50 }, charcoal: { '207': 1 } };
+  f.open(); f.save('31'); f.click('data-shopping-edit');
+  for (const [resource, item] of [['arcanePowder', '206'], ['charcoal', '207']]) {
+    f.emit('change', 'data-shopping-conversion', item, { shoppingOwner: '["Player",false]', shoppingResource: resource });
+  }
+  f.save('31');
+  const saved = JSON.parse(f.h.storage.get('iw-status-planned-action-v1:["Player",false]')).plan;
+  assert.deepEqual(saved.conversions, { arcanePowder: '206', charcoal: '207' });
+  assert.match(f.panel(), /Next · Woodcutting · Pine Tree/);
+  assert.match(f.panel(), /Manual conversion: 3 Ruby → 150 Arcane Powder/);
+  assert.match(f.panel(), /Requires Charcoal, Arcane Powder in owned inventory/);
+  assert.match(f.panel(), /value="206" data-stock="empty" selected/);
+  assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+});
+
 function setup(options = {}) {
   let f;
   f = setupQuick({ ...options, remoteUser: user => options.remoteUser?.(user) || structuredClone(f.main.state.user) });
@@ -33,6 +102,220 @@ function setup(options = {}) {
   }
   return { ...f, emit, open, save, rt };
 }
+
+function setupRunner(options = {}) {
+  let f, sequence = 0;
+  f = setup({ ...options, startIdentity: () => ({ startDate: new Date(1800000000000 + sequence++ * 1000).toISOString(), seed: sequence }),
+    collectionUser: () => {
+      const user = structuredClone(f.rt.state.user);
+      for (const [id, item] of Object.entries(f.rt.action.actionLoot)) user.inventory[id] = { amount: (user.inventory[id]?.amount || 0) + item.amount };
+      user.action = null;
+      return user;
+    } });
+  f.h.context.navigator = { locks: options.locks || { request: async (name, settings, task) => task({ name }) } };
+  f.h.context.automationEnabled = () => true;
+  const record = () => JSON.parse(f.h.storage.get('iw-status-recipe-run-v1:["Player",false]') || 'null');
+  return { ...f, record, tick: () => f.h.context.recipeRunnerTick(), badge: () => f.h.context.renderRecipeRunnerBadge() };
+}
+
+test('Save activates automatic gathering, collection and successive crafting until the target is satisfied', async () => {
+  const f = setupRunner(); f.open(); f.save();
+  assert.equal(f.record().enabled, true);
+  assert.match(f.badge(), /Recipe planner · Waiting/);
+  await f.tick();
+  assert.equal(f.record().status, 'running', f.record().reason);
+  assert.deepEqual(f.calls.filter(call => call[0] === 'start').map(call => call.slice(1, 4)), [['2', '101', undefined]]);
+  assert.match(f.badge(), /Recipe planner · Running/);
+  f.rt.action.actionLoot = { '203': { amount: 79 } };
+  await f.tick();
+  assert.equal(f.calls.filter(call => call[0] === 'stop').length, 0);
+  f.rt.action.actionLoot['203'].amount = 80;
+  await f.tick();
+  assert.equal(f.calls.filter(call => call[0] === 'stop').length, 1);
+  assert.equal(f.calls.filter(call => call[0] === 'start').length, 1);
+  await f.tick();
+  assert.deepEqual(f.calls.filter(call => call[0] === 'start').at(-1).slice(1, 4), ['3', '102', 40]);
+  f.rt.action.actionLoot = { '202': { amount: 39 } };
+  await f.tick();
+  assert.equal(f.calls.filter(call => call[0] === 'stop').length, 1);
+  f.rt.action.actionLoot['202'].amount = 40;
+  await f.tick(); await f.tick();
+  assert.deepEqual(f.calls.filter(call => call[0] === 'start').at(-1).slice(1, 4), ['4', '103', 70]);
+  f.rt.action.actionLoot = { '201': { amount: 70 } };
+  await f.tick(); await f.tick();
+  assert.equal(f.record().status, 'complete', f.record().reason);
+  assert.equal(f.record().enabled, false);
+  assert.match(f.badge(), /Recipe planner · Complete/);
+  const count = f.calls.length;
+  f.rt.state.user.inventory['201'].amount = 0;
+  await f.tick();
+  assert.equal(f.calls.length, count); // Spending later never restarts a completed run.
+});
+
+test('Pause is available during native preparation and revokes the pending automatic start', async () => {
+  let f, paused = false;
+  f = setupRunner({ beforeSync: () => {
+    if (f?.record()?.status === 'starting' && !paused) { paused = true; f.h.context.recipeRunnerPause(); }
+  } });
+  f.open(); f.save(); await f.tick();
+  assert.equal(paused, true);
+  assert.equal(f.record().enabled, false);
+  assert.equal(f.calls.some(call => call[0] === 'start'), false);
+  assert.match(f.badge(), /Recipe planner · Paused/);
+  f.click('data-recipe-run-toggle'); await f.tick();
+  assert.equal(f.record().status, 'running', f.record().reason);
+});
+
+test('automatic progression waits for unrelated work, pauses on manual action changes, and follows an explicitly saved matching action', async () => {
+  const f = setupRunner(); f.open(); f.save();
+  f.rt.state.user.action = { skillId: '13', actionId: '105', startDate: '2026-10-17T01:00:00Z' };
+  await f.tick();
+  assert.equal(f.record().status, 'waiting');
+  assert.equal(f.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+  f.rt.state.user.action = null;
+  await f.tick();
+  assert.equal(f.record().status, 'running', f.record().reason);
+  f.rt.state.user.action = { skillId: '13', actionId: '105', startDate: '2026-10-17T02:00:00Z' };
+  await f.tick();
+  assert.equal(f.record().enabled, false);
+  assert.match(f.record().reason, /changed outside/);
+  f.rt.state.user.action = { skillId: '2', actionId: '101', startDate: '2026-10-17T03:00:00Z' };
+  f.save();
+  assert.equal(f.record().status, 'running');
+  f.rt.action.actionLoot = { '203': { amount: 80 } };
+  await f.tick();
+  assert.equal(f.calls.filter(call => call[0] === 'stop').length, 1);
+});
+
+test('automatic runs coordinate duplicate ticks and another tab through an exclusive browser lock', async () => {
+  let release, acquired = false;
+  const locks = { request: async (name, settings, task) => {
+    assert.equal(settings.ifAvailable, true);
+    assert.match(name, /recipe-run.*Player/);
+    acquired = true;
+    await new Promise(resolve => { release = resolve; });
+    return task({ name });
+  } };
+  const f = setupRunner({ locks }); f.open(); f.save();
+  const first = f.tick();
+  await f.until(() => acquired);
+  await f.tick();
+  assert.equal(f.calls.some(call => call[0] === 'start'), false);
+  release(); await first;
+  assert.equal(f.calls.filter(call => call[0] === 'start').length, 1);
+  const g = setupRunner({ locks: { request: async (name, options, task) => task(null) } });
+  g.open(); g.save(); await g.tick();
+  assert.equal(g.calls.some(call => ['start', 'stop', 'sync'].includes(call[0])), false);
+});
+
+test('manual requirements wait without repeated reads and changed inventory makes the plan ready', async () => {
+  const f = setupRunner();
+  f.rt.actionCatalog['103'].arcanePowder = 1; f.rt.state.user.arcanePowder = 0;
+  f.open(); f.save('31'); await f.tick();
+  assert.equal(f.record().status, 'attention');
+  assert.equal(f.record().enabled, true);
+  const reads = f.calls.filter(call => call[0] === 'sync').length;
+  await f.tick(); await f.tick();
+  assert.equal(f.calls.filter(call => call[0] === 'sync').length, reads);
+  f.rt.state.user.arcanePowder = 1;
+  await f.tick();
+  assert.equal(f.record().status, 'running', f.record().reason);
+});
+
+test('unconfirmed native starts and collections pause without automatic retries', async () => {
+  for (const failure of ['startFailure', 'stopFailure']) {
+    const f = setupRunner({ [failure]: true }); f.open(); f.save();
+    await f.tick();
+    if (failure === 'stopFailure') { f.rt.action.actionLoot = { '203': { amount: 80 } }; await f.tick(); }
+    assert.equal(f.record().enabled, false, f.record().reason);
+    assert.equal(f.record().status, 'attention');
+    const count = f.calls.length;
+    await f.tick();
+    assert.equal(f.calls.length, count);
+  }
+});
+
+test('disabled automation, hidden tabs, changed plans and unavailable storage cannot dispatch automatic work', async () => {
+  const f = setupRunner(); f.open(); f.save();
+  f.document.hidden = true; await f.tick();
+  assert.equal(f.calls.some(call => ['start', 'stop', 'sync'].includes(call[0])), false);
+  f.document.hidden = false; f.h.context.automationEnabled = () => false;
+  await f.tick(); assert.equal(f.record().enabled, false);
+  f.h.context.automationEnabled = () => true;
+  f.h.context.recipeRunnerEnable();
+  const key = 'iw-status-planned-action-v1:["Player",false]';
+  const changed = JSON.parse(f.h.storage.get(key)); changed.plan.target.quantity = 200;
+  f.h.storage.set(key, JSON.stringify(changed));
+  await f.tick();
+  assert.equal(f.calls.some(call => call[0] === 'start'), false);
+  assert.match(f.record().reason, /saved plan changed/);
+  f.save();
+  f.h.context.localStorage.setItem = () => { throw Error('Storage full'); };
+  await f.tick();
+  assert.equal(f.calls.some(call => call[0] === 'start'), false);
+});
+
+test('reload resumes a tracked batch, but an interrupted request needs reconciliation before retrying', async () => {
+  const f = setupRunner(); f.open(); f.save(); await f.tick();
+  const g = setupRunner({ storage: f.h.storage });
+  g.rt.state.user = structuredClone(f.rt.state.user);
+  g.rt.action.actionLoot = { '203': { amount: 80 } };
+  await g.tick();
+  assert.equal(g.calls.filter(call => call[0] === 'stop').length, 1);
+  assert.equal(g.record().status, 'waiting', g.record().reason);
+  const key = 'iw-status-recipe-run-v1:["Player",false]';
+  g.h.storage.set(key, JSON.stringify({ ...g.record(), status: 'starting' }));
+  const reloaded = setupRunner({ storage: g.h.storage });
+  await reloaded.tick();
+  assert.equal(reloaded.record().enabled, false);
+  assert.match(reloaded.record().reason, /unconfirmed outcome/);
+  assert.equal(reloaded.calls.some(call => ['start', 'stop'].includes(call[0])), false);
+});
+
+test('native self-collection advances only after fresh inventory progress is confirmed', async () => {
+  const f = setupRunner(); f.open(); f.save(); await f.tick();
+  f.rt.state.user.action = null;
+  f.rt.action.actionLoot = {};
+  f.rt.state.user.inventory['203'].amount = 80;
+  await f.tick();
+  assert.equal(f.record().batch, null);
+  await f.tick();
+  assert.deepEqual(f.calls.filter(call => call[0] === 'start').at(-1).slice(1, 4), ['3', '102', 40]);
+  assert.equal(f.calls.some(call => call[0] === 'stop'), false);
+  f.rt.state.user.action = null;
+  await f.tick();
+  assert.equal(f.record().enabled, false);
+  assert.match(f.record().reason, /without confirmed inventory progress/);
+});
+
+test('automatic collection is revoked if Pause occurs during its fresh server check', async () => {
+  let f, paused = false;
+  f = setupRunner({ beforeSync: () => {
+    if (f?.record()?.status === 'collecting' && !paused) { paused = true; f.h.context.recipeRunnerPause(); }
+  } });
+  f.open(); f.save(); await f.tick();
+  f.rt.action.actionLoot = { '203': { amount: 80 } };
+  await f.tick();
+  assert.equal(paused, true);
+  assert.equal(f.calls.some(call => call[0] === 'stop'), false);
+  assert.equal(f.record().status, 'paused');
+});
+
+test('plan icon opens the planner and shows waiting, paused and attention states, including idle', async () => {
+  const f = setupRunner(); f.open(); f.save();
+  assert.match(f.h.context.renderImportantActionBadges(null), /iw-recipe-runner-badge/);
+  assert.match(f.h.context.renderActionBadges({ action: { skillName: 'Mining' }, cache: {} }), /Recipe planner · Waiting/);
+  f.click('data-recipe-run-toggle');
+  assert.equal(f.record().enabled, false);
+  assert.match(f.badge(), /Recipe planner · Paused/);
+  const button = { closest: selector => selector === '[data-recipe-open]' ? button : null };
+  for (const handler of f.listeners.click) handler({ target: button, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
+  assert.match(f.panel(), /Resume automatic plan/);
+  assert.equal(f.h.run('AppState.ui.recipePlan.open'), true);
+  f.h.context.navigator = {};
+  f.click('data-recipe-run-toggle'); await f.tick();
+  assert.match(f.badge(), /Needs attention/);
+});
 
 test('saving the calculator replaces the active plan and derives only the remaining chain', () => {
   const f = setup(); f.savePlan('2', '101'); f.open(); f.save();

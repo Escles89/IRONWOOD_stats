@@ -27,14 +27,16 @@
     document.querySelector('#iw-quick-skills-panel [data-quick-close]')?.focus();
   }
 
-  function recipeSaveCalculator(calculator, conversions) {
+  function recipeSaveCalculator(calculator, conversions, activate = false) {
     const ui = plannedObserve();
     if (!ui.owner || quickBusy()) return false;
     const plan = { kind: 'recipe', target: { itemId: calculator.itemId, quantity: calculator.quantity, recipeKey: calculator.recipeKey, recipes: { ...calculator.recipes } }, conversions: { ...conversions }, sources: { ...calculator.sources }, quantities: { ...calculator.quantities }, selected: null };
     const snapshot = recipeObservation(plan, 'preview');
     if (!snapshot) return false;
     for (const node of snapshot.nodes) if (node.chosen && node.id !== plan.target.itemId && !plan.sources[node.id]) plan.sources[node.id] = node.chosen.key;
-    return plannedPersist(plan);
+    if (!plannedPersist(plan)) return false;
+    if (activate) recipeRunnerEnable();
+    return true;
   }
 
   function recipeEditCalculator(trigger) {
@@ -54,7 +56,7 @@
     if (!step) return;
     const updated = JSON.parse(JSON.stringify(plan));
     if (field === 'conversion') {
-      if (!SHOPPING_CONVERSIONS.includes(step.id) || control.value && !shoppingConversionChoices(quickRuntime(), step.id).some(choice => choice.id === control.value)) return;
+      if (!shoppingConversionAllowed(quickRuntime(), step.id, control.value)) return;
       if (control.value) updated.conversions[step.id] = control.value;
       else delete updated.conversions[step.id];
     } else if (field === 'source') {
@@ -107,16 +109,17 @@
     return snapshot.next;
   }
 
-  function recipeStart(control) {
+  function recipeStart(control, runnerAuth = null) {
     const ui = plannedObserve(), plan = ui.plan, snapshot = plan?.kind === 'recipe' ? recipeObservation(plan) : null;
     if (quickBusy() || !snapshot) return;
+    if (!runnerAuth) recipeRunnerPause('Paused for a manual start.');
     try {
       const step = recipeValidateSnapshot(quickRuntime(), plan, control.dataset.recipeStart);
       const reason = recipeStartReason(snapshot);
       if (reason) throw new Error(reason);
       ui.message = '';
       const target = { ...step.target, recipePlan: plan, recipeToken: control.dataset.recipeStart };
-      return quickResume(target.skillId, { planned: { plan: { ...target, amount: step.amount, recipe: plan, token: control.dataset.recipeStart }, target } });
+      return quickResume(target.skillId, { planned: { plan: { ...target, amount: step.amount, recipe: plan, token: control.dataset.recipeStart, runnerAuth }, target } });
     } catch (error) { ui.message = error.message; render(); }
   }
 
@@ -124,10 +127,11 @@
     return JSON.stringify([quickOwner(quickRuntime()), plannedActionIdentity(quickRuntime()?.state.user.action)]);
   }
 
-  async function recipeCollect(control) {
+  async function recipeCollect(control, runnerAuth = null) {
     const runtime = quickRuntime(), ui = plannedObserve(), owner = ui.owner;
     const target = quickRunningTarget(runtime), current = plannedCurrentState(runtime);
     if (!owner || quickBusy() || !target || !['continuous', 'completed'].includes(current.kind)) return;
+    if (!runnerAuth) recipeRunnerPause('Paused for manual collection.');
     if (control.dataset.recipeCollect !== recipeCollectionToken()) { ui.message = 'Current work changed. Review it before collecting.'; render(); return; }
     const source = plannedActionIdentity(runtime.state.user.action);
     AppState.ui.quickSkills.busy = true;
@@ -138,6 +142,10 @@
     let confirmed = false, rewards = [], detailsKnown = false, failure = '';
     const assertCurrent = collecting => {
       quickAssertOwner(owner, runtime);
+      if (runnerAuth) {
+        recipeRunnerAssert(runnerAuth);
+        if (!recipeRunnerCollectionDue(runtime, runnerAuth.batch, collecting)) throw new Error('The planned work is no longer due for collection.');
+      }
       if (request.cancelled || plannedActionIdentity(runtime.state.user.action) !== source)
         throw new Error('Current work changed or collection was cancelled. No further action requested.');
       const state = plannedCurrentState(runtime, collecting);
@@ -178,13 +186,14 @@
     finally {
       AppState.ui.quickSkills.busy = false;
       AppState.ui.quickSkills.request = null;
-      if (ui.owner === owner) { ui.observation = null; ui.message = confirmed ? 'Collection confirmed. Plan recalculated from owned inventory; start the next action when ready.' : failure || 'Collection unconfirmed. Plan kept.'; }
+      if (ui.owner === owner) { ui.observation = null; ui.message = confirmed ? runnerAuth ? 'Collection confirmed. Automatic plan will check the next step.' : 'Collection confirmed. Plan recalculated from owned inventory; start the next action when ready.' : failure || 'Collection unconfirmed. Plan kept.'; }
       showActionToast({ title: confirmed ? 'Collected current work' : 'Collection not confirmed', kind: confirmed && !failure ? 'success' : 'warning',
         metrics: rewards.map(reward => ({ label: reward.name, image: reward.image, icon: reward.icon, value: formatNumber(reward.amount) })),
         detail: confirmed && !detailsKnown ? 'Reward details unavailable.' : '', warning: failure });
       AppState.ui.lastSignature = '';
       render();
     }
+    return { confirmed, attempted: request.attempted, failure };
   }
 
   async function recipeRefresh() {

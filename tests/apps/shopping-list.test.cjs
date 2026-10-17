@@ -649,6 +649,161 @@ function woodFixture(runtime) {
   runtime.actionCatalog['30'].charcoal = 12;
 }
 
+test('selected wood reserves shared recipe stock, shows its icon, persists, and replaces automatic allocation', () => {
+  const s = setup(new Map(), woodFixture);
+  s.save('101', '1');
+  s.emit('change', '[data-shopping-conversion]', '107', null, { shoppingResource: 'charcoal' });
+  // Two Ancient Logs for 11 Charcoal plus one for the recipe; only two owned.
+  assert.match(s.render(), /1 Ancient Log/);
+  assert.match(s.render(), /data-shopping-node="item:107"/);
+  assert.doesNotMatch(s.render(), /data-shopping-node="item:106"/);
+  assert.match(s.detail('resource:charcoal'), /2 conversions/);
+  assert.match(s.modal(), /1 Ancient Log → 8 Charcoal/);
+  assert.match(s.modal(), /Projected surplus 5/);
+  assert.doesNotMatch(s.modal(), /from wood ·/);
+  const reload = setup(s.storage, woodFixture);
+  assert.match(reload.render(), /1 Ancient Log/);
+  reload.emit('change', '[data-shopping-conversion]', '', null, { shoppingResource: 'charcoal' });
+  assert.match(reload.detail('resource:charcoal'), /11 from wood · 0 still to acquire/);
+  assert.match(reload.render(), /data-shopping-node="item:106"/);
+  assert.match(reload.render(), /src="\/assets\/items\/wood-pine.png"/);
+  assert.deepEqual(s.calls, []);
+});
+
+function powderFixture(runtime) {
+  woodFixture(runtime);
+  Object.assign(runtime.conversionCatalog, { arcanePowder: { '108': 50, '109': 400 } });
+  Object.assign(runtime.catalog, { '108': { id: '108', name: 'Ruby', image: 'items/gem-ruby.png' }, '109': { id: '109', name: 'Onyx', image: 'items/gem-onyx.png' } });
+  runtime.actionCatalog['30'].arcanePowder = 120;
+  runtime.state.user.arcanePowder = 10;
+  runtime.state.user.inventory['108'] = { amount: 2 };
+}
+
+for (const [resource, name, input, shortage] of [['charcoal', 'Charcoal', 'wood', 11], ['arcanePowder', 'Arcane Powder', 'gems', 110]]) {
+  test(`${name} balance-only mode ignores spare inputs, survives reload, and switches back to automatic`, () => {
+    const s = setup(new Map(), powderFixture);
+    s.save('101', '1');
+    s.detail(`resource:${resource}`);
+    assert.match(s.modal(), new RegExp(`Use spare owned ${input} automatically`));
+    assert.match(s.modal(), /Use resource balance only/);
+    s.emit('change', '[data-shopping-conversion]', 'balance', null, { shoppingResource: resource });
+    assert.match(s.modal(), /value="balance" selected>Use resource balance only/);
+    assert.doesNotMatch(s.modal(), /Saved input unavailable|from (wood|gems) ·/);
+    assert.match(s.render(), new RegExp(`${shortage} ${name}`));
+    const snapshot = s.h.run('AppState.ui.shopping.snapshot');
+    const node = snapshot.nodes.find(row => row.key === `resource:${resource}`);
+    assert.equal(node.acquire, shortage);
+    assert.equal(node.uncertain, false);
+    assert.equal(node.edges.length, 0);
+    const reload = setup(s.storage, powderFixture);
+    assert.match(reload.detail(`resource:${resource}`), /value="balance" selected>Use resource balance only/);
+    assert.match(reload.render(), new RegExp(`${shortage} ${name}`));
+    reload.emit('change', '[data-shopping-conversion]', '', null, { shoppingResource: resource });
+    assert.match(reload.modal(), new RegExp(`from ${input} ·`));
+    assert.equal(s.calls.length, 0);
+  });
+}
+
+test('automatic Arcane Powder combines spare gem types, reserves recipe stock, and observes changed balances', () => {
+  const s = setup(new Map(), runtime => {
+    powderFixture(runtime);
+    runtime.actionCatalog['30'].materials = [{ id: '109', amount: 1 }];
+    runtime.actionCatalog['30'].arcanePowder = 510;
+    runtime.state.user.inventory['109'] = { amount: 2 };
+  });
+  s.save('101', '1');
+  // One Onyx is reserved for the recipe; the other plus two Rubies supply 500.
+  assert.match(s.detail('resource:arcanePowder'), /500 from gems · 0 still to acquire/);
+  assert.match(s.modal(), /Use spare owned gems automatically/);
+  assert.match(s.modal(), /Arcane Powder per gem/);
+  assert.match(s.render(), /Materials covered/);
+  for (const id of ['108', '109']) assert.match(s.render(), new RegExp(`data-shopping-node="item:${id}"`));
+  assert.match(s.render(), /src="\/assets\/items\/gem-ruby.png"/);
+  s.user.inventory['109'].amount = 1;
+  assert.match(s.detail('resource:arcanePowder'), /100 from gems · 400 still to acquire/);
+  s.user.inventory['108'].amount = 1;
+  // Ruby is only an automatic input, so its balance must invalidate the snapshot.
+  assert.match(s.render(), /450 Arcane Powder/);
+  const reload = setup(s.storage, powderFixture);
+  assert.match(reload.detail('resource:arcanePowder'), /100 from gems · 10 still to acquire/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('automatic powder rounds gems, excludes pending loot, and retains unknown supply', () => {
+  const s = setup(new Map(), runtime => {
+    powderFixture(runtime);
+    runtime.actionCatalog['30'].arcanePowder = 480;
+    runtime.state.user.inventory['109'] = { amount: 1 };
+  });
+  s.save('101', '1');
+  assert.match(s.detail('resource:arcanePowder'), /500 from gems · 0 still to acquire · Projected surplus 30/);
+  s.user.inventory['109'].amount = null;
+  assert.match(s.render(), /100 from gems · Unknown still to acquire/);
+  assert.match(s.modal(), /Some available gem balances are unknown; Arcane Powder coverage is incomplete/);
+  assert.match(s.render(), /Incomplete plan/);
+  delete s.user.inventory['109'];
+  s.user.loot = { '109': { amount: 100 } };
+  assert.match(s.render(), /370 Arcane Powder/);
+  s.user.arcanePowder = 480;
+  assert.match(s.render(), /0 from gems · 0 still to acquire/);
+  assert.doesNotMatch(s.render(), /data-shopping-node="item:108"/);
+});
+
+test('a selected powder gem overrides the mixed pool and clearing it restores automatic allocation', () => {
+  const s = setup(new Map(), runtime => {
+    powderFixture(runtime);
+    runtime.state.user.inventory['109'] = { amount: 1 };
+  });
+  s.save('101', '1');
+  assert.match(s.detail('resource:arcanePowder'), /400 from gems · 0 still to acquire/);
+  s.emit('change', '[data-shopping-conversion]', '108', null, { shoppingResource: 'arcanePowder' });
+  assert.match(s.render(), /1 Ruby/);
+  assert.doesNotMatch(s.render(), /from gems ·|data-shopping-node="item:109"/);
+  s.emit('change', '[data-shopping-conversion]', '', null, { shoppingResource: 'arcanePowder' });
+  assert.match(s.render(), /400 from gems · 0 still to acquire/);
+  assert.match(s.render(), /data-shopping-node="item:109"/);
+});
+
+test('Arcane Powder inputs round gem requirements, render icons, and survive reload and source removal', () => {
+  const s = setup(new Map(), powderFixture);
+  s.save('101', '1');
+  s.emit('change', '[data-shopping-conversion]', '108', null, { shoppingResource: 'arcanePowder' });
+  assert.match(s.render(), /1 Ruby/);
+  assert.match(s.render(), /data-shopping-node="item:108"/);
+  assert.match(s.render(), /src="\/assets\/items\/gem-ruby.png"/);
+  assert.match(s.detail('resource:arcanePowder'), /3 conversions/);
+  assert.match(s.modal(), /Projected surplus 40/);
+  const reload = setup(s.storage, powderFixture);
+  assert.match(reload.render(), /1 Ruby/);
+  reload.runtime.conversionCatalog = { ...reload.runtime.conversionCatalog, arcanePowder: { '109': 400 } };
+  assert.match(reload.detail('resource:arcanePowder'), /Saved input unavailable/);
+  assert.match(reload.render(), /Incomplete plan/);
+  reload.emit('change', '[data-shopping-conversion]', '', null, { shoppingResource: 'arcanePowder' });
+  assert.match(reload.render(), /110 Arcane Powder/);
+  assert.doesNotMatch(reload.render(), /data-shopping-node="item:108"/);
+  assert.deepEqual(s.calls, []);
+});
+
+test('input dropdown colors and counts track unselected stock changes and unknown balances', () => {
+  const s = setup(new Map(), powderFixture);
+  s.save('101', '1');
+  s.detail('defaults');
+  assert.match(s.modal(), /Arcane Powder input/);
+  assert.match(s.modal(), /Trees \/ wood for Charcoal/);
+  assert.match(s.modal(), /value="108" data-stock="owned"[^>]*>Ruby · 50 per item · 🟢 2 owned/);
+  assert.match(s.modal(), /value="109" data-stock="empty"[^>]*>Onyx · 400 per item · 🔴 0 owned/);
+  s.user.inventory['109'] = { amount: 4 };
+  s.render();
+  assert.match(s.modal(), /value="109" data-stock="owned"[^>]*>Onyx · 400 per item · 🟢 4 owned/);
+  s.user.inventory['108'].amount = null;
+  s.render();
+  assert.match(s.modal(), /value="108" data-stock="unknown"[^>]*>Ruby · 50 per item · 🟡 Owned unknown/);
+  s.runtime.action.actionLoading = true;
+  s.render();
+  assert.match(s.modal(), /data-shopping-resource="arcanePowder"[^>]*disabled/);
+  assert.doesNotMatch(s.modal(), /data-stock="owned"/);
+});
+
 test('Charcoal uses all spare wood types after reserving recipe stock and observes changing wood balances', () => {
   const s = setup(new Map(), woodFixture);
   s.save('101', '1');
@@ -763,7 +918,7 @@ test('capacity exposes uncertain limits and preserves a proven lower bound from 
   assert.match(s.render(), /Can make now<\/dt><dd>Unknown<\/dd>/);
 });
 
-test('covered Metal Parts and Potion Mix hide conversion branches until their balances are needed', () => {
+test('covered resource balances hide conversion chains and restore them when stock falls short', () => {
   const s = setup(new Map(), conversionFixture);
   s.save('101', '3');
   s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
@@ -773,6 +928,9 @@ test('covered Metal Parts and Potion Mix hide conversion branches until their ba
   s.user.metalParts = 12;
   s.user.potionMix = 15;
   const covered = s.render();
+  const parts = s.h.run('AppState.ui.shopping.snapshot').nodes.find(node => node.key === 'resource:metalParts');
+  assert.equal(parts.missing, 0);
+  assert.equal(parts.edges[0].required, 0);
   assert.match(covered, /data-shopping-node="resource:metalParts"/);
   assert.match(covered, /data-shopping-node="resource:potionMix"/);
   assert.doesNotMatch(covered, /data-shopping-node="item:103"/);
@@ -802,7 +960,61 @@ test('connections distinguish owned stock from ingredients that still need craft
   s.user.inventory['102'].amount = 2;
   assert.doesNotMatch(s.render(), /<path data-supply="craftable"/);
   assert.match(s.render(), /Iron Ore — Covered by owned stock/);
+  assert.doesNotMatch(s.render(), /data-shopping-node="item:103"/);
+  s.user.inventory['102'].amount = null;
+  assert.match(s.render(), /data-shopping-node="item:103"/);
+  s.user.inventory['101'].amount = 31;
+  assert.doesNotMatch(s.render(), /data-shopping-node="item:102"/);
 });
+
+for (const resource of ['charcoal', 'arcanePowder']) {
+  test(`${resource} shows two highest available input icons while hidden stock controls estimates and line colors`, () => {
+    const s = setup(new Map(), runtime => {
+      runtime.actionCatalog['30'].materials = [];
+      delete runtime.actionCatalog['30'].charcoal;
+      runtime.actionCatalog['30'][resource] = 15;
+      runtime.state.user[resource] = 2;
+      runtime.state.user.inventory = {};
+      runtime.conversionCatalog = { [resource]: {} };
+      for (const [id, yieldAmount, owned] of [['106', 8, 1], ['107', 4, 1], ['108', 1, 1], ['109', 16, 0]]) {
+        runtime.catalog[id] = { id, name: `Input ${id}`, image: `items/input-${id}.png` };
+        runtime.conversionCatalog[resource][id] = yieldAmount;
+        runtime.state.user.inventory[id] = { amount: owned };
+      }
+    });
+    s.save('101', '2');
+    const snapshot = () => s.h.run('AppState.ui.shopping.snapshot');
+    const tree = () => s.h.context.renderShoppingTree(snapshot());
+    const pool = () => snapshot().nodes.find(node => node.key === `resource:${resource}`);
+    assert.equal(pool().spareOutput, 13);
+    assert.equal(pool().acquire, 15);
+    assert.equal(pool().edges.length, 3);
+    assert.equal(snapshot().capacity.amount, 1);
+    for (const id of ['106', '107']) assert.match(tree(), new RegExp(`data-shopping-node="item:${id}" data-supply="covered" data-connection="craftable"`));
+    for (const id of ['108', '109']) assert.doesNotMatch(tree(), new RegExp(`data-shopping-node="item:${id}"`));
+    assert.doesNotMatch(tree(), /<path data-supply="covered"|class="iw-shopping-flow"/);
+    assert.match(tree(), /<path data-supply="craftable"/);
+    s.detail(`resource:${resource}`);
+    assert.match(s.modal(), /Input 108/); // The full breakdown stays available.
+    // Only hidden stock changes. The same two icons now represent a covered pool.
+    s.user.inventory['108'].amount = 16;
+    s.render();
+    assert.equal(pool().spareOutput, 28);
+    assert.equal(pool().acquire, 0);
+    assert.equal(snapshot().capacity.amount, 2);
+    for (const id of ['106', '107']) assert.match(tree(), new RegExp(`data-shopping-node="item:${id}" data-supply="covered" data-connection="covered"`));
+    assert.doesNotMatch(tree(), /data-shopping-node="item:108"/);
+    assert.match(tree(), /<path data-supply="covered"/);
+    // Hidden uncertainty must also reach the displayed connections.
+    s.user.inventory['108'].amount = null;
+    s.render();
+    assert.equal(pool().acquire, null);
+    assert.equal(snapshot().capacity.exact, false);
+    assert.match(tree(), /data-shopping-node="item:106" data-supply="covered" data-connection="unknown"/);
+    assert.doesNotMatch(tree(), /<path data-supply="covered"/);
+    assert.deepEqual(s.calls, []);
+  });
+}
 
 test('Cannot make yet shows the uncovered target remainder without inventing uncertain capacity', () => {
   const s = setup();

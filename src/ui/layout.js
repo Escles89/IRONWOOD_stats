@@ -96,12 +96,13 @@
   }
 
   function showStats({ push = true } = {}) {
-    captureVisibleCaches();
+    captureVisibleCaches({ force: true });
     const wrapper = routeWrapper();
     if (!wrapper || !AppState.ui.page) return;
     if (location.pathname !== STATS_PATH) AppState.ui.previousUrl = `${location.pathname}${location.search}${location.hash}`;
     hideStatusRouteElements();
     AppState.ui.page.hidden = false;
+    AppState.ui.visibleCaptureRoute = null;
     AppState.ui.navButton?.classList.add('active-link');
     setStatusHeader(true);
     if (push && location.pathname !== STATS_PATH) history.pushState({ iwStats: true }, '', STATS_PATH);
