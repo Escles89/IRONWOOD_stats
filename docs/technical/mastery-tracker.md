@@ -1,10 +1,14 @@
 # Skill Mastery tracker
 
+Current behavior is described in the feature sections below; dated validation entries are a chronological implementation record and may describe earlier layouts or capabilities. Use the [player guide](../user/README.md) for current controls and placement.
+
 Issue: [#2](https://github.com/Escles89/IRONWOOD_stats/issues/2). The Current Loot extension is implemented in [#3](https://github.com/Escles89/IRONWOOD_stats/issues/3). During implementation the player replaced the persistent Status card with a modal opened by the mastery symbol, with a compact material list and completed masteries hidden from the selector. These changes supersede the original ticket’s panel placement and completed-selection presentation.
 
 The feature lives in `apps/mastery/`. Runtime discovery uses the existing Angular router's Mastery component type and its named `MASTERY_DATA`, `MASTERY_COST`, `MASTERY_EXP` and `calcMasteryItems` bindings. Module/export identifiers are resolved from the current loaded client, without constructing components, hard-coding costs or calling gameplay endpoints. Unsupported or ambiguous bindings leave the feature visibly unavailable.
 
 Mastery catalog item keys and values must agree with the native item ID; requirement calculation uses that item's native tier. Contributions come from `user.masteries.skills[id].items`, owned balances from `user.inventory`, and XP/coins from their separate native fields. Missing entries in an available inventory dictionary mean zero; absent dictionaries and malformed quantities remain unknown. Completed masteries may no longer retain contribution counts. A sparse `complete` flag on an existing progress record means incomplete, as on the native page; a missing skill entry within a valid mastery progress dictionary also means incomplete. Missing or malformed dictionaries and malformed explicit records remain unknown. This completion rule does not turn unavailable contribution quantities into zero.
+
+The Current Action mastery badge and Mastery Contract row open the current native action’s skill with a temporary modal selection. The Status mastery row and idle badge open the persisted tracked selection. Both observed skills keep separate snapshots and change signatures, so refreshing the displayed requirements does not change the tracked skill or its Status progress. Selecting a skill with the gear explicitly updates the tracked selection and clears the temporary view.
 
 Selections and validated observations use `iw-status-mastery-v1:` scoped to the existing validated character/mode identity. They are independent of gameplay cache eviction. Changes are observed from the native runtime during normal rendering; they never open hidden routes or trigger daily work. Source ages advance only when the relevant quantities change or an explicit read confirms them.
 

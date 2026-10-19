@@ -1,12 +1,14 @@
 # Player feature ideas
 
-These are proposals based on the current repository, not implemented features or a committed roadmap. The focus is player value: fewer things to remember, clearer decisions and a better sense of progress. Example messages below are illustrative.
+This document retains the September 2026 design discussions and a provisional backlog. Several shortlisted features are now implemented; the current guides below describe their behavior. Remaining ideas are proposals, not a committed roadmap. Example messages in the historical discussions are illustrative.
 
-## Latest shortlist: three specifications
+As of 19 October 2026, the project includes [Skills and quick actions](user/quick-skills.md), [mastery tracking](user/status-dashboard.md#skill-mastery-tracker), [Recipe Calc](user/shopping-list.md), [planned actions](user/planned-next-action.md) and [recipe plans with optional automatic progression](user/recipe-plan.md). It also includes [Trait tracking and Attunement recommendations](user/status-dashboard.md). The original separate-feature and persistent-mastery-card proposals below have been superseded.
 
-The follow-up design interview produced three specifications, confirmed by the player on 2026-09-26 and ready for implementation. They are independent features in the first iteration, all shown on Status; connecting them is a longer-term goal.
+## Historical shortlist: three specifications (26 September 2026)
 
-The approved breakdown is published as GitHub issues [#2–#3 (mastery)](https://github.com/Escles89/IRONWOOD_stats/issues/2), [#4–#5 (shopping list)](https://github.com/Escles89/IRONWOOD_stats/issues/4) and [#6–#7 (planned next action)](https://github.com/Escles89/IRONWOOD_stats/issues/6). Each specification links both tickets and their blockers. Issues #2 and #4 can start immediately; #6 depends on the existing Quick Skills issue #1.
+The follow-up design interview produced three specifications, confirmed by the player on 2026-09-26. At that point they were proposed as independent Status features; Recipe Calc and planned actions have since been connected.
+
+The approved breakdown is published as GitHub issues [#2–#3 (mastery)](https://github.com/Escles89/IRONWOOD_stats/issues/2), [#4–#5 (shopping list)](https://github.com/Escles89/IRONWOOD_stats/issues/4) and [#6–#7 (planned next action)](https://github.com/Escles89/IRONWOOD_stats/issues/6). Each specification links both tickets and their blockers. The original dependency order started with #2 and #4, with #6 depending on Quick Skills #1. These links record implementation scope, not a current tracker-status report.
 
 ### Skill Mastery materials tracker
 

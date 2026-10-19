@@ -1,6 +1,8 @@
 # Finished-item shopping list
 
-Status: Direct-recipe slice (#4) and recursive expansion (#5) implemented on 2026-09-26. See `../technical/shopping-list.md` for implementation and validation evidence.
+Status: Direct-recipe slice (#4) and recursive expansion (#5) implemented on 2026-09-26. See [technical integration](../technical/shopping-list.md) for implementation and validation evidence.
+
+Current amendment (19 October 2026): this calculator is now **Recipe Calc**, connected to [recipe plans](../user/recipe-plan.md). Save & run plan saves the target and enables optional automatic progression; the calculator itself still separates owned stock from pending loot and projected production. Full-chain coverage, conversion inputs and current tree colors are documented in [Recipe Calc](../user/shopping-list.md). The independent, informational-only feature scope below records the original slices.
 
 ## Implementation tickets
 

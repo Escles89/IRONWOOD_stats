@@ -10,6 +10,7 @@
   function quickIcon(name) {
     const paths = {
       skills: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+      stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
       resume: '<path d="m9 5 10 7-10 7V5Z"/><path d="M4 5v14"/>',
       page: '<path d="M14 4h6v6m0-6L10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/>',
       edit: '<path d="m14 5 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14v6Z"/>',
@@ -50,9 +51,9 @@
     const shell = content => `<section class="iw-modal-panel iw-guide-panel iw-quick-panel${prompt ? ' iw-quick-amount-panel' : ''}" role="dialog" aria-modal="true" aria-labelledby="iw-quick-title">${content}</section>`;
     if (prompt) {
       const info = prompt.quantityInfo?.(Number(prompt.value)) || { owned: null, time: '—' };
-      const valid = quickAmount(Number(prompt.value)) && Number(prompt.value) <= prompt.limit;
+      const valid = prompt.max ? prompt.edit || quickAmount(prompt.limit) : quickAmount(Number(prompt.value)) && Number(prompt.value) <= prompt.limit;
       const targetAmount = Number(prompt.value) - info.owned;
-      const targetValid = Number.isFinite(info.owned) && quickAmount(targetAmount) && targetAmount <= prompt.limit;
+      const targetValid = !prompt.max && Number.isFinite(info.owned) && quickAmount(targetAmount) && targetAmount <= prompt.limit;
       const skill = quickSkills(runtime).find(skill => skill.id === prompt.target.skillId);
       const metadata = runtime?.actionCatalog?.[prompt.target.actionId];
       const itemImage = metadata?.image || runtime?.catalog?.[metadata?.drops?.[0]?.id]?.image;
@@ -63,21 +64,27 @@
         <div><span>Craftable</span><b>${formatNumber(prompt.limit)}</b></div>
         <div><span>Estimated Time</span><b data-quick-time>${escapeHtml(info.time)}</b></div>
       </div>
-      ${prompt.shortage ? '<p class="iw-quick-shortage">Your configured amount exceeds the available supply. Choose an amount for this run.</p>' : ''}
-      <form data-quick-amount-form><input id="iw-quick-amount" name="amount" type="number" min="1" step="1" inputmode="numeric" aria-label="${prompt.planned ? 'Native quantity (not guaranteed output)' : 'Quantity'}" placeholder="Quantity" required value="${escapeHtml(prompt.value)}">
+      ${prompt.shortage ? `<p class="iw-quick-shortage">Your configured amount exceeds the available supply. ${prompt.edit ? 'Save a smaller amount or choose Always use max.' : 'Choose an amount for this run.'}</p>` : ''}
+      <form data-quick-amount-form><input id="iw-quick-amount" name="amount" type="number" min="1" step="1" inputmode="numeric" aria-label="${prompt.planned ? 'Native quantity (not guaranteed output)' : 'Quantity'}" placeholder="Quantity" required value="${escapeHtml(prompt.value)}" ${prompt.max ? 'disabled' : ''}>
         <div class="iw-quick-craft-buttons"><button type="submit" class="iw-small-button" data-quick-craft ${valid ? '' : 'disabled'}>${prompt.edit ? 'Save amount' : 'Craft'}</button><button type="button" class="iw-small-button iw-quick-craft-all" data-quick-amount-choice="all" ${prompt.limit < 1 ? 'disabled' : ''}>${prompt.edit ? 'Use max' : 'Craft All'}</button><button type="button" class="iw-small-button" data-quick-amount-choice="target" title="${prompt.edit ? 'Save the quantity needed' : 'Craft enough'} to reach the entered inventory total" ${targetValid ? '' : 'disabled'}>Target</button></div>
         <p data-quick-amount-error role="alert"></p>
         <div class="iw-quick-quantity-options">
-          ${prompt.planned ? '<p>Native quantity, not guaranteed output. This choice applies to this start; the saved plan stays unchanged unless the start succeeds.</p><input type="checkbox" name="reuse" hidden>' : `<label class="iw-quick-check"><input type="checkbox" name="reuse" ${prompt.reuse ? 'checked' : ''}><span>Reuse this configured amount</span></label>
-          ${prompt.shortage ? `<label class="iw-quick-check"><input type="checkbox" name="save" ${prompt.save ? 'checked' : ''}><span>Replace my configured amount</span></label>` : ''}
+          ${prompt.planned ? '<p>Native quantity, not guaranteed output. This choice applies to this start; the saved plan stays unchanged unless the start succeeds.</p><input type="checkbox" name="reuse" hidden>' : `<label class="iw-quick-check"><input type="checkbox" name="reuse" ${prompt.reuse ? 'checked' : ''} ${prompt.max ? 'disabled' : ''}><span>Reuse this configured amount</span></label>
+          <label class="iw-quick-check"><input type="checkbox" name="max" ${prompt.max ? 'checked' : ''}><span>Always use max</span></label>
+          <small>Always use max recalculates the craftable amount each time you start this recipe.</small>
+          ${prompt.shortage && !prompt.edit ? `<label class="iw-quick-check"><input type="checkbox" name="save" ${prompt.save || prompt.max ? 'checked' : ''} ${prompt.max ? 'disabled' : ''}><span>Save this as my new configured amount</span></label><small>Leave unchecked to keep your saved amount and use this smaller batch only once.</small>` : ''}
           <small>${prompt.edit ? 'Saving does not start the action.' : 'Reuse skips this prompt next time you start this recipe.'}</small>`}
         </div>
       </form></div>`);
     }
     if (AppState.ui.recipePlan.open) return shell(`${quickModalHeading('Recipe Calc & planner', 'Save a target to run ready steps automatically, or pause to start them yourself.', '/assets/icon.png', 'Close planner')}<div class="iw-quick-body iw-recipe-planner">${renderRecipePlanner()}</div>`);
-    return shell(`${quickModalHeading('Skills', 'Your last actions, ready when you are.', '/assets/icon.png', 'Close Skills')}
-      <div class="iw-quick-body"><p class="iw-quick-message${ui.message ? ' has-message' : ''}" role="status">${escapeHtml(ui.message || 'Start a remembered action, or open a skill to choose something new.')}</p>
-      ${renderRecipeSummary()}<ul class="iw-quick-grid">${quickSkills(runtime).map(skill => {
+    return shell(`${quickModalHeading('Skills', 'Your last actions, ready when you are.', '/assets/icon.png', 'Close Skills')}${renderQuickSkillList(runtime)}<footer><span class="iw-quick-footer-note">Click a skill card to choose a different action.</span><button type="button" class="iw-small-button iw-options-done" data-quick-close>Done</button></footer>`);
+  }
+
+  function renderQuickSkillList(runtime, { plannerPanel = true } = {}) {
+    const ui = AppState.ui.quickSkills, busy = quickBusy();
+    const skills = quickSkills(runtime).filter(skill => skill.id !== '15');
+    const row = skill => {
         const target = ui.data?.last[skill.id];
         const current = quickSameAction(runtime?.state.user?.action, target);
         const region = currentActionRegion({ skillName: skill.name }, runtime);
@@ -86,10 +93,15 @@
         const unavailable = !ui.owner ? 'Character unavailable' : !target ? skill.id === '15' ? 'Manage expeditions' : 'No last action yet' : !metadata ? 'Action unavailable' : '';
         const amount = target && ui.data.amounts[quickActionKey(target)];
         const progress = quickSkillProgress(runtime, skill, target);
-        return `<li class="iw-quick-skill${current ? ' is-current' : ''}${target ? ' has-action' : ''}" data-quick-page="${escapeHtml(skill.id)}" aria-disabled="${busy || !skill.button}"><img class="iw-quick-skill-image" src="${escapeHtml(skillIcon(skill.name))}" alt=""><div class="iw-quick-label"><strong><a class="iw-quick-card-link" href="/skill/${escapeHtml(skill.id)}" aria-label="Open ${escapeHtml(skill.name)} page" ${busy || !skill.button ? 'tabindex="-1" aria-disabled="true"' : ''}>${escapeHtml(skill.name)}</a>${progress?.level || skill.level ? `<span class="iw-quick-level">Lv. ${escapeHtml(progress?.level || skill.level)}</span>` : ''}<span class="iw-quick-regions">${regions.map(region => renderRegionIcon(region)).join('')}</span></strong><small class="iw-quick-action-label">${target && metadata?.image ? `<img src="/assets/${escapeHtml(metadata.image)}" alt="">` : ''}<span>${escapeHtml(target?.name || unavailable)}</span></small>${amount ? `<small class="iw-quick-amount-note">${formatNumber(amount.amount)} configured${amount.reuse ? ' · reuse on' : ''}</small>` : ''}</div><div class="iw-quick-buttons">
-          ${target && skill.id !== '15' ? `<button type="button" class="iw-small-button ${current ? 'iw-quick-current' : 'iw-quick-primary'}" data-quick-resume="${escapeHtml(skill.id)}" aria-label="${current ? 'Current' : 'Start'} ${escapeHtml(skill.name)}: ${escapeHtml(target.name)}" ${busy || current || unavailable ? 'disabled' : ''} title="${escapeHtml(unavailable || (current ? 'Already running' : `Start ${target.name}`))}">${quickIcon(current ? 'check' : 'resume')}${current ? 'Current' : 'Start'}</button>${target.finite ? `<button type="button" class="iw-small-button iw-quick-row-icon" data-quick-edit="${escapeHtml(skill.id)}" aria-label="Edit amount for ${escapeHtml(target.name)}" title="Edit amount" ${busy || !ui.owner || !metadata ? 'disabled' : ''}>${quickIcon('edit')}</button>` : ''}` : ''}
+        return `<li class="iw-quick-skill${current ? ' is-current' : ''}${target ? ' has-action' : ''}" data-quick-page="${escapeHtml(skill.id)}" aria-disabled="${busy || !skill.button}"><img class="iw-quick-skill-image" src="${escapeHtml(skillIcon(skill.name))}" alt=""><div class="iw-quick-label"><strong><a class="iw-quick-card-link" href="/skill/${escapeHtml(skill.id)}" aria-label="Open ${escapeHtml(skill.name)} page" ${busy || !skill.button ? 'tabindex="-1" aria-disabled="true"' : ''}>${escapeHtml(skill.name)}</a>${progress?.level || skill.level ? `<span class="iw-quick-level">Lv. ${escapeHtml(progress?.level || skill.level)}</span>` : ''}<span class="iw-quick-regions">${regions.map(region => renderRegionIcon(region)).join('')}</span></strong><small class="iw-quick-action-label">${target && metadata?.image ? `<img src="/assets/${escapeHtml(metadata.image)}" alt="">` : ''}<span>${escapeHtml(target?.name || unavailable)}</span></small>${current ? '<small class="iw-quick-amount-note">Current action</small>' : ''}${amount ? `<small class="iw-quick-amount-note">${amount.max ? 'Always use max' : `${formatNumber(amount.amount)} configured${amount.reuse ? ' · reuse on' : ''}`}</small>` : ''}</div>${renderSkillRank(skill, runtime)}<div class="iw-quick-buttons">
+          ${target && skill.id !== '15' ? `${current ? `<button type="button" class="iw-small-button iw-quick-stop" data-quick-stop aria-label="Stop &amp; Loot ${escapeHtml(skill.name)}: ${escapeHtml(target.name)}" title="Stop this action and collect its pending loot" ${busy || unavailable ? 'disabled' : ''}>${quickIcon('stop')}Stop &amp; Loot</button>` : `<button type="button" class="iw-small-button iw-quick-primary" data-quick-resume="${escapeHtml(skill.id)}" aria-label="${current ? 'Current' : 'Start'} ${escapeHtml(skill.name)}: ${escapeHtml(target.name)}" ${busy || current || unavailable ? 'disabled' : ''} title="${escapeHtml(unavailable || (current ? 'Already running' : `Start ${target.name}`))}">${quickIcon('resume')}Start</button>`}${target.finite ? `<button type="button" class="iw-small-button iw-quick-row-icon" data-quick-edit="${escapeHtml(skill.id)}" aria-label="Edit amount for ${escapeHtml(target.name)}" title="Edit amount" ${busy || !ui.owner || !metadata ? 'disabled' : ''}>${quickIcon('edit')}</button>` : ''}` : ''}
           </div>${renderQuickSkillProgress(progress, skill, target, current)}</li>`;
-      }).join('')}</ul></div><footer><span class="iw-quick-footer-note">Click a skill card to choose a different action.</span><button type="button" class="iw-small-button iw-options-done" data-quick-close>Done</button></footer>`);
+    };
+    const active = skills.filter(skill => quickSameAction(runtime?.state.user?.action, ui.data?.last[skill.id]));
+    const remaining = skills.filter(skill => !active.includes(skill));
+    return `<div class="iw-quick-body"><div class="iw-quick-overview">${active.length ? `<ul class="iw-quick-grid iw-quick-active">${active.map(row).join('')}</ul>` : ''}${renderRecipeSummary(false, true)}</div>
+      <p class="iw-quick-message${ui.message ? ' has-message' : ''}" role="status">${escapeHtml(ui.message || 'Start a remembered action, or open a skill to choose something new.')}</p>
+      <ul class="iw-quick-grid">${remaining.map(row).join('')}</ul>${renderSkillRanksNote(runtime)}${plannerPanel ? renderSkillsPlannerPanel() : ''}</div>`;
   }
 
   function quickControlsMount() {
@@ -112,6 +124,8 @@
 
   function syncQuickSkills() {
     const runtime = quickObserve(), ui = AppState.ui.quickSkills;
+    if ((ui.open || skillsPageVisible()) && !ui.prompt && !AppState.ui.recipePlan.open) void refreshSkillRanks(runtime);
+    syncSkillsPage(runtime);
     if (!document.createElement) return;
     let controls = document.querySelector('#iw-quick-controls');
     const mount = quickControlsMount();
@@ -138,7 +152,10 @@
       }
     }
     let host = document.querySelector('#iw-quick-skills-panel');
-    if (!ui.open && !ui.prompt) { host?.remove(); ui.signature = ''; return; }
+    if ((!ui.open && !ui.prompt) || (skillsPageVisible() && !ui.prompt && !AppState.ui.recipePlan.open)) {
+      if (skillsPageVisible()) ui.open = false;
+      host?.remove(); ui.signature = ''; return;
+    }
     if (!host) {
       host = document.createElement('div');
       host.id = 'iw-quick-skills-panel';
@@ -148,6 +165,10 @@
     }
     const markup = renderQuickPanel(runtime);
     if (ui.signature !== markup) {
+      // Replacing the pressed node between pointerdown/keydown and click makes
+      // the browser lose the activation (or deliver it to the backdrop).
+      if (ui.interaction?.owner === ui.owner && ui.interaction.until > Date.now()) return;
+      ui.interaction = null;
       const focused = host.contains(document.activeElement) ? document.activeElement : null;
       const focusLabel = focused?.getAttribute('aria-label');
       const focusAttributes = ['data-shopping-filter', 'data-shopping-item', 'data-shopping-recipe', 'data-shopping-quantity', 'data-planned-field'];
@@ -181,6 +202,7 @@
 
   function quickClose() {
     const ui = AppState.ui.quickSkills;
+    ui.interaction = null;
     if (ui.request && !ui.request.attempted) ui.request.cancelled = true;
     ui.prompt?.resolve(null);
     ui.prompt = null;
@@ -191,11 +213,30 @@
     (ui.trigger?.isConnected ? ui.trigger : document.querySelector('[data-quick-skills]'))?.focus();
   }
 
+  function holdQuickInteraction(event) {
+    if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+    if (event.type === 'pointerdown' && event.button !== 0) return;
+    const control = event.target.closest?.('#iw-quick-skills-panel button, #iw-quick-skills-panel a, #iw-skills-page button, #iw-skills-page a');
+    if (!control || control.disabled) return;
+    const ui = AppState.ui.quickSkills;
+    ui.interaction = { owner: ui.owner, until: Date.now() + 30000 };
+  }
+
+  function releaseQuickInteraction(event) {
+    const ui = AppState.ui.quickSkills;
+    if (!ui.interaction) return;
+    // Keep the node through the click following release. A cancelled gesture,
+    // or release with no click, must not leave the panel frozen.
+    if (event.type === 'pointercancel' || event.type === 'click') ui.interaction = null;
+    else ui.interaction.until = Date.now() + 1000;
+  }
+
   function quickPromptAmount(target, preference, limit, { edit = false, shortage = false, quantityInfo, planned = false } = {}) {
     return new Promise(resolve => {
       const ui = AppState.ui.quickSkills;
       ui.open = true;
-      ui.prompt = { resolve, target, limit, edit, shortage, quantityInfo, planned, value: preference?.amount || '', reuse: preference?.reuse !== false };
+      const max = !planned && (!preference || preference.max === true);
+      ui.prompt = { resolve, target, limit, edit, shortage, quantityInfo, planned, max, value: max ? limit : preference?.amount || '', reuse: max || preference?.reuse !== false };
       syncQuickSkills();
       document.querySelector('#iw-quick-amount')?.focus();
     });
@@ -205,13 +246,27 @@
     const ui = AppState.ui.quickSkills, prompt = ui.prompt;
     if (!prompt) return;
     prompt.value = form.elements.amount.value;
-    prompt.reuse = form.elements.reuse.checked;
+    const wasMax = prompt.max;
+    prompt.max = !prompt.planned && form.elements.max?.checked === true;
+    if (prompt.max) {
+      if (!wasMax) prompt.fixedValue = prompt.value;
+      prompt.value = prompt.limit;
+    } else if (wasMax) prompt.value = prompt.fixedValue ?? prompt.value;
+    form.elements.amount.value = String(prompt.value);
+    form.elements.amount.disabled = prompt.max;
+    prompt.reuse = prompt.max || form.elements.reuse.checked;
+    form.elements.reuse.checked = prompt.reuse;
+    form.elements.reuse.disabled = prompt.max;
+    if (form.elements.save) {
+      if (prompt.max) form.elements.save.checked = true;
+      form.elements.save.disabled = prompt.max;
+    }
     prompt.save = form.elements.save?.checked === true;
     const amount = Number(prompt.value), info = prompt.quantityInfo?.(amount) || { owned: null, time: '—' };
     form.closest('.iw-quick-amount-body').querySelector('[data-quick-time]').textContent = info.time;
-    form.querySelector('[data-quick-craft]').disabled = !quickAmount(amount) || amount > prompt.limit;
+    form.querySelector('[data-quick-craft]').disabled = prompt.max ? !prompt.edit && !quickAmount(prompt.limit) : !quickAmount(amount) || amount > prompt.limit;
     const target = amount - info.owned;
-    form.querySelector('[data-quick-amount-choice="target"]').disabled = !Number.isFinite(info.owned) || !quickAmount(target) || target > prompt.limit;
+    form.querySelector('[data-quick-amount-choice="target"]').disabled = prompt.max || !Number.isFinite(info.owned) || !quickAmount(target) || target > prompt.limit;
     form.querySelector('[data-quick-amount-error]').textContent = '';
     // Keep periodic rendering from replacing the field while the player types.
     ui.signature = renderQuickPanel(quickRuntime());
@@ -221,13 +276,14 @@
     const ui = AppState.ui.quickSkills, prompt = ui.prompt;
     if (!prompt) return;
     const entered = Number(form.elements.amount.value);
+    const max = !prompt.planned && form.elements.max?.checked === true;
     const owned = prompt.quantityInfo?.(entered)?.owned;
-    const amount = mode === 'all' ? prompt.limit : mode === 'target' && Number.isFinite(owned) ? entered - owned : mode === 'target' ? NaN : entered;
-    if (!quickAmount(amount) || amount > prompt.limit) {
+    const amount = max || mode === 'all' ? prompt.limit : mode === 'target' && Number.isFinite(owned) ? entered - owned : mode === 'target' ? NaN : entered;
+    if (!(max && prompt.edit) && (!quickAmount(amount) || amount > prompt.limit)) {
       form.querySelector('[data-quick-amount-error]').textContent = mode === 'target' ? `Enter an inventory target above what you own and within the craftable supply.` : `Enter a whole number between 1 and ${formatNumber(prompt.limit)}.`;
       return;
     }
-    const result = { amount, reuse: form.elements.reuse.checked, save: !prompt.shortage || form.elements.save?.checked === true };
+    const result = { amount, reuse: max || form.elements.reuse.checked, save: prompt.edit || max || !prompt.shortage || form.elements.save?.checked === true, ...(max ? { max: true } : {}) };
     ui.prompt = null;
     prompt.resolve(result);
     syncQuickSkills();

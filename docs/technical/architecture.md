@@ -12,11 +12,14 @@ The repository uses Django-inspired feature directories, not the Django framewor
 | `apps/status/` | Panel derivation, badges, dashboard composition, lightweight updates and CSS |
 | `apps/combat/` | Revive parsing, normalized fighter transitions, effect timestamps and fighter markup |
 | `apps/automations/` | Native structure capture/claims, fixed-interval projections, automation table |
-| `apps/inventory/` | Inventory, equipped potions, mastery capture and potion table |
+| `apps/inventory/` | Inventory, equipped potions, mastery capture and Equipment Consumables tab |
+| `apps/quick-skills/` | Owner-scoped history/amounts, Skills modal and virtual page, rank cache and manual start/stop workflows |
+| `apps/shopping/`, `apps/planned-action/`, `apps/recipe-plan/` | Recipe calculations, saved manual/recipe targets, guarded native steps and automatic runner |
+| `apps/mastery/`, `apps/traits/` | Mastery observations and coverage; Trait milestones, recommendations and manual changes |
 | Other feature apps | Quest, adventure, challenge, attunement, guild and taming capture/action workflows |
 | `ui/` | Shared preferences, route/header/sidebar layout and delegated input handling |
 | `entrypoint.js` | Startup, mutation observation and live render scheduling |
 
-Feature functions retain their existing native readiness and confirmation loops. The initial refactor preserves these workflows instead of changing selectors or production formulas. Runtime mutable values belong to AppState. Shared named functions remain private to the generated closure; module boundaries are conventions checked by review and tests.
+Feature functions retain their existing native readiness and confirmation loops. Status and Skills are virtual routes over the mounted native game; shared dialogs live outside route content. Equipment Consumables enhances native rows and controls in place. See [integrations](integrations.md) and [Skills](quick-skills.md) for the runtime and navigation contracts. Runtime mutable values belong to AppState. Shared named functions remain private to the generated closure; module boundaries are conventions checked by review and tests.
 
 The root userscript is generated and remains checked in. The loader and installation format are unchanged. Edit source modules, never the publication file directly.

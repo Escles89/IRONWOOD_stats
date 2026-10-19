@@ -2,6 +2,8 @@
 
 Status: Idle-only slice (#6) and completed finite batch handling (#7) implemented on 2026-09-27. Live read-only checks cover an unfinished finite batch; a completed-batch live start has not been exercised. See the technical integration document for validation limits.
 
+Current amendment (19 October 2026): the original manual action also appears in the combined planner’s Single action view. One owner-scoped record holds either a manual action or a recipe plan; saving either replaces the other. Recipe plans have separate optional automatic progression, while a single-action plan remains manual. The Status card retains completed-batch Start; Skills Start next requires separate collection. See [current behavior](../user/planned-next-action.md) and [recipe plans](../user/recipe-plan.md). The independent-feature scope below records the original slices.
+
 ## Implementation tickets
 
 - [#6: Save and manually start a planned action while idle](https://github.com/Escles89/IRONWOOD_stats/issues/6) — Blocked by #1.

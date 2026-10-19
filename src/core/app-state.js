@@ -13,7 +13,7 @@
         lastReviveObservedMs: 0
       },
       cache: { schemaVersion: 2, records: {} },
-      derived: { automationRows: [], displayedPotions: [], countdowns: {} },
+      derived: { automationRows: [], countdowns: {} },
       ui: { activeRoute: '/', pendingActions: new Map(), events: new Map(),
         previousUrl: '/',
         hiddenRouteElements: [],
@@ -30,6 +30,8 @@
         renderFrame: null,
         lootDeltaNotices: new Map(),
         consumableDeltaNotices: new Map(),
+        consumableSupplyRates: { signature: '', samples: new Map() },
+        consumableOverview: null,
         materialDeltaNotices: new Map(),
         combatEffects: new Map(),
         combatEffectLockUntil: 0,
@@ -48,10 +50,10 @@
         recipeRunner: { checking: false, blockedId: null },
         plannedCatalog: { entries: new WeakMap(), revision: 0 },
         plannedAction: { owner: null, plan: null, editing: false, draft: { skillId: '', actionId: '', amount: '' }, filter: '', message: '', observation: null },
-        quickSkills: { owner: null, data: null, open: false, busy: false, prompt: null, trigger: null, message: '', signature: '' },
+        quickSkills: { owner: null, data: null, open: false, busy: false, prompt: null, trigger: null, message: '', signature: '', interaction: null },
         shoppingCatalog: { cache: new WeakMap(), revision: 0, graph: null },
         shopping: { owner: null, conversions: {}, plan: null, snapshot: null, signature: '', message: '', editing: true, draft: { itemId: '', quantity: '100', recipeKey: '' }, filter: '', selectedStep: null, expandedStep: null },
-        mastery: { owner: null, selected: '', snapshot: null, snapshots: {}, signature: '', message: '', refreshing: false, open: false, choosing: false },
+        mastery: { owner: null, selected: '', snapshot: null, snapshots: {}, signatures: {}, viewing: '', message: '', refreshing: false, open: false, choosing: false },
         traits: { owner: null, preference: '', model: null, busy: false, message: '', retry: null, needsRefresh: false, open: false },
         pendingLootClaim: null,
         visibleCaptureRoute: null,
@@ -70,6 +72,8 @@
         syncing: false,
         manualCacheRefresh: false,
         page: null,
+        skillsPage: null,
+        skillsNavButton: null,
         navButton: null
       }
     };

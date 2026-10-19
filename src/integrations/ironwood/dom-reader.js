@@ -15,7 +15,7 @@
   function readRebuildingAction(document) {
     const previous = AppState.live.lastNativeAction;
     const shortcut = document.querySelector('nav-component action-component button.button, nav-component combat-component button.button');
-    const route = location.pathname === STATS_PATH ? AppState.ui.previousUrl : location.pathname;
+    const route = (location.pathname === STATS_PATH || location.pathname === SKILLS_PATH) ? AppState.ui.previousUrl : location.pathname;
     const name = clean(shortcut?.querySelector('.details > .name')?.textContent);
     const skill = clean(shortcut?.querySelector('.details > .skill')?.textContent);
     if (!previous || !name || name !== previous.name || skill !== previous.skillName || route !== AppState.live.lastNativeActionRoute) {
@@ -85,6 +85,7 @@
     const skillLevel = clean(tracker?.querySelector('.header .level')?.textContent);
     const progressText = clean(tracker?.querySelector('.percent')?.textContent);
     const progressPercent = progressText ? numberFrom(progressText) : null;
+    const xpPair = clean(tracker?.querySelector('.exp')?.textContent).match(/^([\d,]+)\s*\/\s*([\d,]+)\s*XP$/i);
     // Use Ironwood's native Estimates table. Pancake's estimator can lag behind
     // the current action and is therefore deliberately excluded here.
     const xpHourRow = nativeXpHourRow(document);
@@ -150,13 +151,15 @@
       skillName,
       skillLevel,
       skillProgress: Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, progressPercent)) : null,
+      skillXp: xpPair ? numberFrom(xpPair[1]) : null,
+      skillXpRequired: xpPair ? numberFrom(xpPair[2]) : null,
       levelRemaining: Number.isFinite(progressPercent) ? Math.max(0, 100 - progressPercent) : null,
       xpPerHour: xpPerHour || null,
       reviveRemainingMs: reviveRemainingMs > 0 ? reviveRemainingMs : 0,
       combatants: transitionCombatants(combatants, AppState.live.lastCombatAction?.combatants || [])
     };
     AppState.live.lastNativeAction = result;
-    AppState.live.lastNativeActionRoute = location.pathname === STATS_PATH ? AppState.ui.previousUrl : location.pathname;
+    AppState.live.lastNativeActionRoute = (location.pathname === STATS_PATH || location.pathname === SKILLS_PATH) ? AppState.ui.previousUrl : location.pathname;
     AppState.live.actionRebuildStartedAt = 0;
     if (isCombat) { AppState.live.lastCombatAction = result; AppState.live.lastCombatSeenAt = Date.now(); }
     return result;

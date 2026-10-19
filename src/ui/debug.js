@@ -52,7 +52,6 @@
     const tracked = { action: AppState.live.action, loot: AppState.live.loot, materials: AppState.live.materials,
       consumables: AppState.live.consumables, finiteQueue: AppState.live.finiteQueue, mastery: AppState.live.masteryProgress,
       countdowns: AppState.derived.countdowns, bonuses: AppState.derived.panels,
-      potions: AppState.derived.displayedPotions,
       automations: (getCache().automations?.structures || []).map(item => projectedAutomation(item, getCache().automations.checkedAt)) };
     const runtime = { route: location.pathname, syncing: ui.syncing, pendingSources: [...ui.pendingActions.keys()], automationTask: ui.automationTask,
       nativeGameSync: { ...ui.nativeSync, trigger: 'Once after a challenge or Attunement batch that attempted a game action' },

@@ -88,7 +88,7 @@
   function hideStatusRouteElements() {
     const wrapper = routeWrapper();
     if (!wrapper || !AppState.ui.page) return;
-    AppState.ui.hiddenRouteElements = [...wrapper.children].filter((element) => element !== AppState.ui.page && element.tagName !== 'ROUTER-OUTLET');
+    AppState.ui.hiddenRouteElements = [...wrapper.children].filter((element) => element !== AppState.ui.page && element !== AppState.ui.skillsPage && element.tagName !== 'ROUTER-OUTLET');
     AppState.ui.hiddenRouteElements.forEach((element) => {
       element.dataset.iwStatsDisplay ??= element.style.display;
       element.style.display = 'none';
@@ -96,10 +96,12 @@
   }
 
   function showStats({ push = true } = {}) {
+    installPortalHistoryGuard();
+    hideSkillsPage();
     captureVisibleCaches({ force: true });
     const wrapper = routeWrapper();
     if (!wrapper || !AppState.ui.page) return;
-    if (location.pathname !== STATS_PATH) AppState.ui.previousUrl = `${location.pathname}${location.search}${location.hash}`;
+    if (location.pathname !== STATS_PATH && location.pathname !== SKILLS_PATH) AppState.ui.previousUrl = `${location.pathname}${location.search}${location.hash}`;
     hideStatusRouteElements();
     AppState.ui.page.hidden = false;
     AppState.ui.visibleCaptureRoute = null;
@@ -216,8 +218,9 @@
   }
 
   function leaveStats() {
+    hideSkillsPage();
     hideStats();
-    if (location.pathname === STATS_PATH) history.replaceState(null, '', AppState.ui.previousUrl || '/');
+    if (location.pathname === STATS_PATH || location.pathname === SKILLS_PATH) history.replaceState(null, '', AppState.ui.previousUrl || '/');
   }
 
   function statusNavActivity() {
@@ -251,6 +254,7 @@
     if (document.getElementById(NAV_ID)) {
       AppState.ui.navButton = document.getElementById(NAV_ID);
       syncStatusNavIcon();
+      installSkillsNav();
       return;
     }
     const inventory = [...document.querySelectorAll('nav-component .scroll > button')]
@@ -267,11 +271,14 @@
     AppState.ui.navButton.addEventListener('click', () => showStatusFromCurrentAction());
     inventory.before(AppState.ui.navButton);
     syncStatusNavIcon();
+    installSkillsNav();
   }
 
   function createPage() {
     const wrapper = routeWrapper();
-    if (!wrapper || document.getElementById(PAGE_ID)) return;
+    if (!wrapper) return;
+    createSkillsPage();
+    if (document.getElementById(PAGE_ID)) return;
     AppState.ui.page = document.createElement('iw-stats-page');
     AppState.ui.page.id = PAGE_ID;
     AppState.ui.page.hidden = true;

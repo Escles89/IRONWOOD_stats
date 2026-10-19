@@ -19,7 +19,7 @@ function nativeFixture() {
     ':scope > .header > .level, :scope > .details > .level': element('Lv. 100'),
     ':scope > .body img': { src: '/tree.png' }
   });
-  const tracker = element('', { '.header .name': element('Woodcutting'), '.header .level': element('Lv. 123'), '.percent': element('70%') });
+  const tracker = element('', { '.header .name': element('Woodcutting'), '.header .level': element('Lv. 123'), '.percent': element('70%'), '.exp': element('2,800,000 / 4,000,000 XP') });
   const xp = element('XP 54,000 / hour', {}, {}, { children: [element('XP'), element('54,000')], closest: () => null });
   return element('', {
     'skill-page action-component > .card': action, 'skill-page tracker-component .skill': tracker
@@ -36,6 +36,8 @@ test('source adapter captures native action, loot, consumables and route into ce
   assert.equal(live.action.actionId, '1005');
   assert.equal(live.action.progress, 42);
   assert.equal(live.action.skillProgress, 70);
+  assert.equal(live.action.skillXp, 2800000);
+  assert.equal(live.action.skillXpRequired, 4000000);
   assert.equal(live.action.xpPerHour, 54000);
   assert.equal(live.loot[0].amount, 1234);
   assert.equal(live.consumables[0].name, 'Elite Key');
@@ -53,6 +55,21 @@ test('native inventory normalizes compact quantity and image keys in the new cac
   assert.equal(h.run(`CacheStore.get('inventory').items[0].amount`), 1200);
   assert.equal(h.run(`CacheStore.isFresh('inventory')`), true);
 });
+
+test('native XP capture distinguishes zero progress from absent or abbreviated totals', () => {
+  const document = nativeFixture();
+  const h = harness({ document });
+  const xp = document.querySelector('skill-page tracker-component .skill').querySelector('.exp');
+  for (const text of ['', '3.1M / 4.1M XP', 'Max level']) {
+    xp.textContent = text;
+    const action = h.context.readCurrentAction();
+    assert.equal(action.skillXp, null);
+    assert.equal(action.skillXpRequired, null);
+  }
+  xp.textContent = '0 / 1,000 XP';
+  assert.equal(h.context.readCurrentAction().skillXp, 0);
+  assert.equal(h.context.readCurrentAction().skillXpRequired, 1000);
+});
 test('active dashboard composes feature panels and then uses lightweight updates', () => {
   const errors = [];
   const document = nativeFixture();
@@ -60,7 +77,10 @@ test('active dashboard composes feature panels and then uses lightweight updates
   h.run(`AppState.ui.page = { hidden: false, innerHTML: '', style: { setProperty() {} }, querySelector() { return null; } }; StatusRenderer.render(AppState);`);
   assert.deepEqual(errors, []);
   assert.match(h.run('AppState.ui.page.innerHTML'), /Ancient Tree/);
-  assert.equal(h.run('AppState.derived.displayedPotions.length'), 5);
+  assert.match(h.run('AppState.ui.page.innerHTML'), /iw-action-progress-icon/);
+  assert.match(h.run('AppState.ui.page.innerHTML'), /2\.8M \/ 4M XP/);
+  assert.doesNotMatch(h.run('AppState.ui.page.innerHTML'), /iw-progress-stack|iw-skill-progress/);
+  assert.doesNotMatch(h.run('AppState.ui.page.innerHTML'), /iw-potion-card/);
   h.run(`globalThis.liveUpdates = 0; StatusRenderer.updateLive = () => { liveUpdates++; }; StatusRenderer.render(AppState)`);
   assert.equal(h.run('liveUpdates'), 1);
 });
@@ -70,6 +90,8 @@ test('combat view renders effect timelines, consumables and elite ordering toget
   const markup = h.run('AppState.ui.page.innerHTML');
   assert.doesNotMatch(markup, /Status could not render/);
   assert.match(markup, /Elite Treant/);
+  assert.doesNotMatch(markup, /iw-action-progress-icon|data-live-xp-bar/);
+  assert.match(markup, /data-live-level-progress/);
   assert.match(markup, /--iw-heal-delay:-500ms/);
   assert.match(markup, /--iw-death-delay:-250ms/);
 });

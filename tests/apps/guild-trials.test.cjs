@@ -109,7 +109,8 @@ test('Current Action badge follows skill switches and expiry while the Status ro
   h.run(`action = { name: 'Tree', skillName: 'Woodcutting', isCombat: false, combatants: [] }; StatusRenderer.render(AppState)`);
   html = h.run('AppState.ui.page.innerHTML');
   assert.doesNotMatch(html, /class="iw-guild-trial-badge"/);
-  assert.match(html, /Defense Trial · .*remaining/);
+  assert.match(html, /data-live-guild-trial-detail>Defense Trial<\/small>/);
+  assert.match(html, /aria-label="Participation time remaining"[^>]*aria-valuetext="2m remaining"/);
   assert.match(html, /data-guild-trial-state="Active"/);
   h.run(`action.skillName = 'Defense'; StatusRenderer.render(AppState)`);
   assert.match(h.run('AppState.ui.page.innerHTML'), /class="iw-guild-trial-badge"/);
@@ -150,4 +151,13 @@ test('a rejected visible Trials read does not throttle the fully mounted page', 
   h.context.document = visible({});
   h.context.captureVisibleCaches();
   assert.equal(h.run('getCache().guildTrial.activeName'), 'Defense Trial');
+});
+
+test('trial countdown duration is captured from the native participation information', () => {
+  const h = harness();
+  const doc = fixture();
+  doc.querySelector('guild-page').textContent = 'Choose a skill to participate in for 24 hours during the trial';
+  h.storage.set('iw-stats-player-name-v2', 'Player');
+  const entry = h.context.collectGuildTrial(doc);
+  assert.equal(entry.participationDurationMs, 24 * 3600000);
 });

@@ -1,4 +1,9 @@
   function installEventDelegation() {
+    document.addEventListener('pointerdown', holdQuickInteraction, true);
+    document.addEventListener('keydown', holdQuickInteraction, true);
+    document.addEventListener('pointerup', releaseQuickInteraction, true);
+    document.addEventListener('keyup', releaseQuickInteraction, true);
+    document.addEventListener('pointercancel', releaseQuickInteraction, true);
     document.addEventListener('submit', event => {
       if (AppState.ui.quickSkills.busy && !AppState.ui.quickSkills.request?.nativeDispatch && event.target.closest?.('skill-page')) {
         event.preventDefault();
@@ -25,6 +30,7 @@
       if (event.target.matches?.('[data-debug-section]')) { AppState.ui.debugUpdatedAt = 0; scheduleStatusRender(); }
     }, true);
     document.addEventListener('click', event => {
+      releaseQuickInteraction(event);
       const recipeView = event.target.closest?.('[data-recipe-view]');
       if (recipeView) { recipeSwitchView(recipeView); return; }
       const recipeDetails = event.target.closest?.('[data-recipe-details]');
@@ -63,13 +69,14 @@
         if (!amountChoice.disabled) quickSubmitAmount(amountChoice.closest('form'), amountChoice.dataset.quickAmountChoice);
         return;
       }
-      const quickControl = event.target.closest?.('[data-quick-skills], [data-quick-loot], [data-quick-resume], [data-quick-page], [data-quick-edit], [data-quick-close], [data-quick-cancel]');
+      const quickControl = event.target.closest?.('[data-quick-skills], [data-quick-loot], [data-quick-stop], [data-quick-resume], [data-quick-page], [data-quick-edit], [data-quick-close], [data-quick-cancel]');
       if (quickControl) {
         event.preventDefault();
         if (quickControl.disabled) return;
         const data = quickControl.dataset;
         if ('quickSkills' in data) quickOpen(quickControl);
         else if ('quickLoot' in data) quickResume(null, { loot: true });
+        else if ('quickStop' in data) quickResume(null, { stopOnly: true });
         else if ('quickPage' in data) quickOpenPage(data.quickPage);
         else if ('quickResume' in data) quickResume(data.quickResume);
         else if ('quickEdit' in data) quickResume(data.quickEdit, { edit: true });
@@ -78,14 +85,6 @@
       }
       const toastDismiss = event.target.closest?.('[data-toast-dismiss]');
       if (toastDismiss) { dismissActionToast(toastDismiss.dataset.toastDismiss); return; }
-      const potionTypeButton = event.target.closest?.('[data-potion-type-remove]');
-      if (potionTypeButton) {
-        localStorage.setItem(POTION_TYPES_KEY, JSON.stringify(getPotionTypes().filter(type => type !== potionTypeButton.dataset.potionTypeRemove)));
-        AppState.ui.lastSignature = '';
-        render();
-        document.querySelector('[data-potion-type-add]')?.focus();
-        return;
-      }
       const collect = event.target.closest?.('taming-page button, home-page automate-component > .action-buttons > button, attunement-page button');
       if (collect && !collect.disabled && /^(Collect(?: Loot)?|Claim(?: Expedition)?)$/i.test(clean(collect.textContent))) observeNativeCollection(collect);
       const stop = event.target.closest?.('skill-page button.action-stop');
@@ -112,16 +111,6 @@
         installInterfaceControls();
         AppState.ui.lastSignature = '';
         render();
-        return;
-      }
-      if (event.target.matches?.('[data-potion-type-add]')) {
-        const value = event.target.value;
-        if (value !== 'all' && !POTION_TYPES.includes(value)) return;
-        event.target.value = '';
-        localStorage.setItem(POTION_TYPES_KEY, JSON.stringify(value === 'all' ? POTION_TYPES : [...new Set([...getPotionTypes(), value])]));
-        AppState.ui.lastSignature = '';
-        render();
-        document.querySelector('[data-potion-type-add]')?.focus();
         return;
       }
       if (event.target.matches?.('[data-automation-toggle]')) {
@@ -200,6 +189,8 @@
       if (event.target.closest?.('[data-traits-native]')) { closePreferences(); location.href = '/traits'; return; }
       if (event.target.closest?.('[data-traits-open]')) { openTraits(event.target.closest('[data-traits-open]')); return; }
       if (event.target.closest?.('[data-check-script-update]')) { checkAndInstallScriptUpdate(); return; }
+      const consumableTrigger = event.target.closest?.('[data-consumable-open]');
+      if (consumableTrigger) { openConsumableOverview(consumableTrigger.dataset.consumableOpen, consumableTrigger); return; }
       const masteryTrigger = event.target.closest?.('[data-mastery-open]');
       if (masteryTrigger) { openMastery(masteryTrigger); return; }
       if (event.target.closest?.('[data-mastery-native]')) { closePreferences(); return; }
@@ -232,6 +223,14 @@
       if (event.target.closest?.('[data-run-challenge]')) { event.stopPropagation(); NativeControlAdapter.run(document, { type: 'challenge' }); return; }
       const automationLink = event.target.closest?.('[data-open-automation]');
       if (automationLink && AppState.ui.page?.contains(automationLink)) { openAutomationFromStatus(automationLink.dataset.openAutomation); return; }
+      const actionPanel = event.target.closest?.('[data-action-skills]');
+      if (actionPanel && AppState.ui.page?.contains(actionPanel)
+        && !event.defaultPrevented && !(event.button > 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)
+        && !event.target.closest?.('a, button, input, select, textarea, summary, [role="button"], [role="link"], [contenteditable], [data-route]')
+        && document.getSelection?.()?.isCollapsed !== false) {
+        quickOpen(actionPanel);
+        return;
+      }
       const launch = event.target.closest?.('[data-route]');
       if (!launch || !AppState.ui.page?.contains(launch)) return;
       location.href = launch.dataset.route;
@@ -239,6 +238,11 @@
     document.addEventListener('keydown', (event) => {
       if (handleQuickSkillKey(event)) return;
       if (handlePreferencesKey(event)) return;
+      if (event.target.matches?.('[data-action-skills]') && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault();
+        if (!event.repeat) event.target.click();
+        return;
+      }
       if (event.target.closest?.('button')) return;
       const launch = event.target.closest?.('.iw-status-link[data-route], [data-open-automation]');
       if (!launch || (event.key !== 'Enter' && event.key !== ' ')) return;
@@ -246,7 +250,7 @@
       launch.click();
     });
     document.addEventListener('click', (event) => {
-      if (!AppState.ui.page || AppState.ui.page.hidden || event.target.closest(`#${NAV_ID}`)) return;
+      if ((!skillsPageVisible() && (!AppState.ui.page || AppState.ui.page.hidden)) || event.target.closest(`#${NAV_ID}, #${SKILLS_NAV_ID}`)) return;
       if (event.target.closest('nav-component button')) leaveStats();
     }, true);
   }

@@ -78,8 +78,8 @@
       AppState.ui.visibleCaptureRoute = path;
       AppState.ui.visibleCaptureTimes = {};
     }
-    if (force || !AppState.ui.page?.hidden || path === STATS_PATH) cancelVisibleCacheCapture();
-    if (!AppState.ui.page?.hidden || path === STATS_PATH) return;
+    if (force || !AppState.ui.page?.hidden || path === STATS_PATH || path === SKILLS_PATH) cancelVisibleCacheCapture();
+    if (!AppState.ui.page?.hidden || path === STATS_PATH || path === SKILLS_PATH) return;
     const capture = (key, ready, fn) => {
       if (!ready || visibleCaptureThrottled(key, 2000, force)) return;
       if (fn()) AppState.ui.visibleCaptureTimes[key] = Date.now();

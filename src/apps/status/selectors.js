@@ -52,3 +52,24 @@
       return TRAIT_REGIONS.some(item => item.name === region) ? region : '';
     } catch (_) { return ''; }
   }
+
+  function statusCountdowns(kind, cache, now = Date.now()) {
+    const timers = [];
+    const add = (label, endsAt, duration, approximate = false) => {
+      if (!Number.isFinite(endsAt) || endsAt <= now) return;
+      const remaining = endsAt - now;
+      const percent = Number.isFinite(duration) && duration > 0 ? Math.min(100, remaining / duration * 100) : null;
+      timers.push({ label, remaining, percent, approximate });
+    };
+    if (kind === 'guildEvent') {
+      const entry = cache.guildEvent, state = guildEventState(entry, now);
+      if (state === 'Participating') add('Participation', entry.stateEndsAt, entry.participationDurationMs);
+      if (['Participating', 'Available', 'Completed'].includes(state)) add('Event ends', entry.eventEndsAt, entry.eventDurationMs);
+      if (state === 'Cooldown') add('Next event', entry.stateEndsAt, entry.cooldownDurationMs);
+    } else if (kind === 'guildTrial') {
+      const entry = cache.guildTrial, state = guildTrialState(entry, now);
+      if (state === 'Active') add('Participation', entry.stateEndsAt, entry.participationDurationMs, entry.approximateTimer);
+      if (state !== 'Unknown') add('Trials reset', entry?.periodEndsAt, entry?.periodDurationMs);
+    }
+    return timers;
+  }

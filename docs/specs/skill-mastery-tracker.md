@@ -1,6 +1,6 @@
 # Skill Mastery materials tracker
 
-Status: Design confirmed by the player on 2026-09-26. The first slice is implemented in #2. During implementation the player amended the presentation: open a modal by clicking the mastery symbol, with no persistent panel on Status, a compact material list, and completed masteries hidden from the selector. The pending-loot slice remains #3.
+Status: Design confirmed by the player on 2026-09-26. The first slice is implemented in #2. During implementation the player amended the presentation: open a modal by clicking the mastery symbol, with no persistent panel on Status, a compact material list, and completed masteries hidden from the selector. The Current Loot slice from #3 is also implemented. Current Action shortcuts temporarily open the running skill, while the compact Status Mastery row opens the persisted tracked skill. Choosing with the gear changes the tracked selection. The six-column modal and total-material coverage bar are documented in the [current guide](../user/status-dashboard.md#skill-mastery-tracker) and [integration evidence](../technical/mastery-tracker.md). These refinements supersede conflicting original placement/selection wording below.
 
 ## Implementation tickets
 

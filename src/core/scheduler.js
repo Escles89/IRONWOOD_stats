@@ -122,6 +122,7 @@
   }
 
   function scheduleStatusRender() {
+    if (!document.hidden) syncEquipmentConsumables();
     if (!document.hidden) syncAttunementProgression();
     if (!document.hidden) syncQuickSkills();
     if (!document.hidden) syncStatusNavIcon();

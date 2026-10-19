@@ -2,11 +2,11 @@
 
 `SourceAdapter.capture(document)` reads the mounted skill interface: current action, combatants, loot, consumables, materials, mastery and finite queue. The DOM readers accept a document so tests can supply representative native fixtures. Native XP/hour excludes the Pancake estimator; the hidden native Estimates tab can be selected to expose its value.
 
-`withPage(path, selector, task)` creates a same-origin frame, waits for the source selector, calls the task and removes the frame in a finally block. Feature services add specific readiness loops before recording values or performing actions. No direct private game API is used.
+`withPage(path, selector, task)` creates a same-origin frame, waits for the source selector, calls the task and removes the frame in a finally block. Feature services add specific readiness loops before recording values or performing actions. The adapter does not construct private endpoint requests. Some features discover the existing Angular services and call native read methods, including user synchronization and leaderboard reads, or observe the single existing mutation response for receipts.
 
 Passive capture runs for visible source pages and retains the existing readiness/throttle rules. House capture merges the visible structure without rewriting other structure timestamps. Equipped items retain their existing separate storage key as well as the normalized cache record.
 
-`NativeControlAdapter.run(document, command)` routes loot, automations, attunement, taming, challenge and craft commands. Game-changing Status actions enforce the automation toggle and their own busy guards. Craft All uses the explicitly clicked dialog control and stays independent of that toggle.
+`NativeControlAdapter.run(document, command)` routes loot, automations, attunement, taming, challenge and craft commands. Status loot claims, challenge runs, daily work and automatic recipe progression enforce the automation toggle and their own busy guards. Manual Skills Start/Stop & Loot, planned-action controls, Trait switches/set claims and Craft All are explicit user actions independent of that toggle. They retain their identity, readiness and shared-work guards.
 
 Automation collection opens House once, clicks native `automate-component > .action-buttons > button` Collect controls, and waits for the loot decrease. A disabled pending button alone is not confirmation. Errors stop the batch and remain visible; successful rows render progressively. Quest, challenge, map, taming and attunement workflows retain their bounded confirmation loops.
 
@@ -21,3 +21,11 @@ The synchronized inventory is mapped through Ironwood's native item catalog, upd
 Attunement collection keeps its busy guard until post-batch synchronization completes. Partial runs synchronize too, and their confirmed slot totals remain separate from synchronization errors. A missing/loading XP row is not a zero; selection must finish before Collect is clicked. Native state application explicitly re-enters Angular after the asynchronous response so mounted pages receive their updates without navigation or reload.
 
 Attunement reward reporting observes the existing native `lootAttunement` response in the collection frame. It forwards the original observable through a single subscription, records XP, loot and points, and restores the method after each slot. It never creates another collection request to obtain a receipt. Item names and images come from the native catalog; categories come from the selected skill and Tribute requirement. Synchronization accepts both epoch timestamps and Ironwood’s ISO date strings, preserving the original value for the native loop handlers.
+
+## Equipment Consumables
+
+`apps/inventory/consumables.js` adds the native Equipment tab, keeps actual item buttons and locks, and separates equipped items from category reserve tables. Reused Angular cards are cleaned when switching to Runes or Tomes. Status consumable rows open a read-only category overview in the global dialog; Mastery Contract opens the current skill’s mastery instead. The old Status potion panel and potion-type preference UI are removed.
+
+Timed supply estimates combine unopened equipped quantity with the opened item's remaining charges. Native timed charges are in tenths of a second; duration modifiers use known tome and mastery-passive metadata. Missing modifier metadata stays unavailable. Food and keys derive a rate only after at least two observed decreases spanning 15 seconds; refills, inactive use, observation gaps over 10 seconds and action/equipment/owner changes reset samples. Stored reserves never extend equipped timers. Paused, empty, estimating and unavailable states remain distinct.
+
+The visible-page scheduler enhances only mounted Equipment content. Native inventory/catalog data supplies known reserves; absent observations remain unknown, while a verified empty balance shows No reserve. `consumables-tab.test.cjs` covers tab transitions, native control preservation, reserve categories, estimates and category dialogs.

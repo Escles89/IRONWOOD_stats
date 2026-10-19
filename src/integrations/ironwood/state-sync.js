@@ -66,7 +66,9 @@
         regionCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Forest' && Array.isArray(item.skills) && item.tributeId != null)),
         skillRegion: exports.find(value => typeof value === 'function' && ['.Defense', '.weaponType', '.equipment['].every(marker => Function.prototype.toString.call(value).includes(marker)) && Function.prototype.toString.call(value).length < 600),
         notificationComponent: exports.find(value => typeof value?.prototype?.createNotifications === 'function'),
-        catalog, conversionCatalog: discoverNativeConversions(exports, catalog)
+        catalog, conversionCatalog: discoverNativeConversions(exports, catalog),
+        equipmentCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.image === 'misc/equipment-food.png')),
+        masteryPassiveCatalog: exports.find(value => value && typeof value === 'object' && Object.values(value).some(item => item?.name === 'Runic Wisdom Effect'))
       };
     }]);
     if (!runtime?.state || !runtime.firebase || !runtime.action || !runtime.automations || !runtime.expedition || !runtime.zone) {

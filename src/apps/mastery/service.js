@@ -50,7 +50,7 @@
   function masteryObserve(runtime = quickRuntime(), authoritative = false) {
     const ui = AppState.ui.mastery, owner = quickOwner(runtime);
     if (ui.owner !== owner) {
-      Object.assign(ui, { owner, selected: '', snapshot: null, snapshots: {}, signature: '', message: '', choosing: false });
+      Object.assign(ui, { owner, selected: '', snapshot: null, snapshots: {}, signatures: {}, viewing: '', message: '', choosing: false });
       if (owner) {
         try {
           const saved = JSON.parse(localStorage.getItem(MASTERY_SELECTION_KEY + owner));
@@ -65,17 +65,25 @@
       }
     }
     if (!owner) return ui;
-    const definition = runtime?.mastery, native = definition?.catalog?.[ui.selected];
+    ui.snapshot = observeMasterySkill(runtime, authoritative, ui.selected);
+    if (ui.open && ui.viewing && ui.viewing !== ui.selected) observeMasterySkill(runtime, authoritative, ui.viewing);
+    return ui;
+  }
+
+  function observeMasterySkill(runtime, authoritative, skillId) {
+    const ui = AppState.ui.mastery;
+    const definition = runtime?.mastery, native = definition?.catalog?.[skillId];
     if (!native) {
-      if (ui.snapshot) ui.snapshot.loot = retainMasteryLoot(ui.snapshot.loot);
-      ui.signature = '';
-      return ui;
+      const previous = ui.snapshots[skillId];
+      if (previous) previous.loot = retainMasteryLoot(previous.loot);
+      delete ui.signatures[skillId];
+      return previous || null;
     }
-    const user = runtime.state.user, progress = user.masteries?.skills?.[ui.selected];
+    const user = runtime.state.user, progress = user.masteries?.skills?.[skillId];
     const rows = masteryRecord(native.items) ? Object.entries(native.items).sort(([left], [right]) => (runtime.catalog?.[left]?.tier ?? Infinity) - (runtime.catalog?.[right]?.tier ?? Infinity)).map(([id, value]) => {
       const item = runtime.catalog?.[id], valid = quickId(id) && id === value && item && (!item.id || item.id === id);
       let required = null;
-      try { if (valid && Number.isFinite(item.tier)) required = masteryNumber(definition.required(ui.selected, item.tier)); } catch {}
+      try { if (valid && Number.isFinite(item.tier)) required = masteryNumber(definition.required(skillId, item.tier)); } catch {}
       return { id, identityKnown: Boolean(valid), name: valid && typeof item.name === 'string' ? item.name : `Unknown item (${id})`, required,
         image: valid ? masteryImage(`/assets/${item.image}`) : '',
         contributed: valid && masteryRecord(progress?.items) ? masteryNumber(Object.hasOwn(progress.items, id) ? progress.items[id] : 0) : null,
@@ -83,29 +91,28 @@
     }) : null;
     const collectionPending = masteryCollectionPending(runtime, authoritative);
     let loot = readMasteryCurrentLoot(runtime, collectionPending);
-    const previousLoot = ui.snapshots[ui.selected]?.loot;
+    const previousLoot = ui.snapshots[skillId]?.loot;
     if (previousLoot && loot.actionKey && loot.actionKey === previousLoot.actionKey) {
       if (loot.observedAt === null) loot = { ...previousLoot, complete: false, retained: true };
       else if (!authoritative && !previousLoot.retained && JSON.stringify([loot.items, loot.complete]) === JSON.stringify([previousLoot.items, previousLoot.complete])) loot.observedAt = previousLoot.observedAt;
     }
-    const snapshot = { skillId: ui.selected, name: native.name, rows, loot, collectionPending,
-      complete: masteryCompletion(user.masteries?.skills, ui.selected),
-      xp: masteryNumber(user.skills?.[ui.selected]?.exp), xpRequired: masteryNumber(definition.exp),
+    const snapshot = { skillId, name: native.name, rows, loot, collectionPending,
+      complete: masteryCompletion(user.masteries?.skills, skillId),
+      xp: masteryNumber(user.skills?.[skillId]?.exp), xpRequired: masteryNumber(definition.exp),
       coins: masteryNumber(user.coins), coinsRequired: masteryNumber(definition.cost) };
     const signature = JSON.stringify(snapshot);
-    if (signature !== ui.signature || authoritative) {
-      const previous = ui.snapshots[ui.selected];
+    if (signature !== ui.signatures[skillId] || authoritative) {
+      const previous = ui.snapshots[skillId];
       const contributionsChanged = previous?.skillId === snapshot.skillId && JSON.stringify(previous.rows?.map(row => [row.id, row.contributed])) !== JSON.stringify(rows?.map(row => [row.id, row.contributed]));
       const inventoryChanged = !previous || JSON.stringify(previous.rows?.map(row => [row.id, row.owned])) !== JSON.stringify(rows?.map(row => [row.id, row.owned]));
-      ui.signature = signature;
-      ui.snapshot = { ...snapshot, observedAt: Date.now(),
+      ui.signatures[skillId] = signature;
+      ui.snapshots[skillId] = { ...snapshot, observedAt: Date.now(),
         contributionsAt: !previous || contributionsChanged || authoritative ? Date.now() : previous.contributionsAt,
         inventoryAt: inventoryChanged || authoritative ? Date.now() : previous.inventoryAt,
         needsReconcile: !authoritative && Boolean(previous?.needsReconcile || contributionsChanged) };
-      ui.snapshots[ui.selected] = ui.snapshot;
       persistMastery();
     }
-    return ui;
+    return ui.snapshots[skillId] || null;
   }
 
   function masteryStatusProgress() {
@@ -114,6 +121,11 @@
     if (!ui.owner) return { name: 'Skill Mastery', notice: 'Character unavailable' };
     if (!ui.selected) return { name, notice: 'Choose a mastery to follow' };
     if (!runtime?.mastery?.catalog?.[ui.selected] || !snapshot) return { name, notice: 'Progress unavailable' };
+    return masteryMaterialProgress(snapshot);
+  }
+
+  function masteryMaterialProgress(snapshot) {
+    const name = snapshot.name;
     if (snapshot.complete === true) return { name, contributed: 100, possible: 100, notice: 'Mastery complete' };
     const rows = snapshot.rows;
     if (!rows?.length || rows.some(row => row.required === null || row.contributed === null)) return { name, notice: 'Material progress unknown' };
@@ -139,7 +151,8 @@
     ui.selected = id;
     ui.choosing = false;
     ui.snapshot = ui.snapshots[id] || null;
-    ui.signature = '';
+    delete ui.signatures[id];
+    ui.viewing = '';
     persistMastery();
     render();
     document.querySelector('[data-mastery-settings]')?.focus();

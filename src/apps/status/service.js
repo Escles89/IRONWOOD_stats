@@ -71,13 +71,7 @@
     const materialWarning = materialAlert.state;
     const materialWarningText = materialAlert.text;
     const liveEquippedDivine = divineConsumables(document);
-    let equippedDivine = [];
-    try { equippedDivine = JSON.parse(localStorage.getItem(EQUIPPED_KEY) || '[]'); } catch { equippedDivine = []; }
-    if (!Array.isArray(equippedDivine)) equippedDivine = [];
-    equippedDivine = equippedDivine.filter((item) => item && typeof item.image === 'string' && item.image);
-    if (liveEquippedDivine.length) {
-      equippedDivine = storeEquippedDivine(liveEquippedDivine);
-    }
+    if (liveEquippedDivine.length) storeEquippedDivine(liveEquippedDivine);
     const cache = projectStatusCache(getCache());
     const resourceWarnings = statusResourceWarnings(cache, warningPrefs);
     const adventureActive = cache.adventure?.schema === 11 && cache.adventure.state === 'Active'
@@ -97,7 +91,6 @@
     const craftingSkill = CRAFTING_SKILLS.has(action?.skillName);
     const challengePrefs = getChallengePrefs();
     const headerIcons = headerIconsEnabled();
-    const potionTypes = getPotionTypes();
     const tamingEggs = tamingEggReadiness(cache.taming);
     const adventureIdleAvailable = cache.adventure?.state === 'Idle' && Number(cache.adventure?.mapsStored) > 0;
     Object.assign(AppState.derived, { eliteCombat,
@@ -118,7 +111,7 @@
       materials: materials.map((item) => ({ name: item.name, image: item.image })),
       combatDropStarted: AppState.ui.combatDropNotice?.started, combatUseStarted: AppState.ui.combatUseNotice?.started,
       masteryAchieved,
-      warningPrefs, resourceWarnings, tamingEggs, finiteQueue, trialState, eventState, day: dayKey(), materialWarning, materialWarningText, adventureActive, adventureActionActive, adventureIdleAvailable, guildEventActionActive, guildTrialActionActive, cacheRevision: AppState.ui.cacheRevision, prefs, challengePrefs, automationOn, cacheLookupsOn, potionTypes, headerIcons, questModalOpen: AppState.ui.questModalOpen, automationTask: AppState.ui.automationTask, tamingClaimNoticeUntil: AppState.ui.tamingClaimNoticeUntil
+      warningPrefs, resourceWarnings, tamingEggs, finiteQueue, trialState, eventState, day: dayKey(), materialWarning, materialWarningText, adventureActive, adventureActionActive, adventureIdleAvailable, guildEventActionActive, guildTrialActionActive, cacheRevision: AppState.ui.cacheRevision, prefs, challengePrefs, automationOn, cacheLookupsOn, headerIcons, questModalOpen: AppState.ui.questModalOpen, automationTask: AppState.ui.automationTask, tamingClaimNoticeUntil: AppState.ui.tamingClaimNoticeUntil
     });
     if (signature === AppState.ui.lastSignature) { updateMasteryStatusRow(masteryStatus); StatusRenderer.updateLive(AppState); syncHeaderActionBadges(); updateDebugPanel(); return; }
     AppState.ui.lastSignature = signature;
@@ -167,8 +160,6 @@
     const adventureSupplement = [
       mapRunDetail
     ].filter(Boolean).join(' · ');
-    const cachedInventory = (Array.isArray(cache.inventory?.items) ? cache.inventory.items : [])
-      .filter((item) => item && typeof item.image === 'string' && item.image);
     const cachedAllItems = Array.isArray(cache.inventory?.allItems) ? cache.inventory.allItems : [];
     const inventoryByKey = new Map(cachedAllItems.map((item) => [item.key, item]));
     let consumableRows = consumables.map((item, liveIndex) => {
@@ -200,60 +191,23 @@
       });
     });
     consumableRows.sort((a, b) => Number(a.storedOnly) - Number(b.storedOnly));
-    const canonicalDivinePotions = [
-      ['potion-divine-gather-yield.png', 'Divine Gather Yield Potion'],
-      ['potion-divine-preservation.png', 'Divine Multi Craft Potion'],
-      ['potion-divine-combat-loot.png', 'Divine Combat Loot Potion'],
-      ['potion-divine-craft-efficiency.png', 'Divine Craft XP Potion'],
-      ['potion-divine-combat-efficiency.png', 'Divine Combat XP Potion']
-    ];
-    const potionMap = new Map();
-    if (potionTypes.includes('Divine')) canonicalDivinePotions.forEach(([key, name]) => potionMap.set(key, {
-      key, name, image: `/assets/items/${key}`, equipped: null, stored: null, tier: 'Divine'
-    }));
-    for (const item of [...cachedInventory, ...cachedAllItems]) {
-      const tier = potionType(item);
-      if (!potionTypes.includes(tier)) continue;
-      const key = item.key || item.image.split('/').pop()?.split('?')[0];
-      const existing = potionMap.get(key);
-      potionMap.set(key, { ...existing, key, tier,
-        name: item.name || existing?.name || `${titleFromSlug(key.replace(/\.[^.]+$/, '').replace(/^potion-/, ''))} Potion`,
-        image: item.image || `/assets/items/${key}`, equipped: null, stored: item.amount, storedApproximate: quantityIsApproximate(item) });
-    }
-    for (const item of [...equippedDivine, ...consumables]) {
-      const tier = potionType(item);
-      if (!potionTypes.includes(tier)) continue;
-      const key = item.image.split('/').pop()?.split('?')[0];
-      const existing = potionMap.get(key);
-      potionMap.set(key, { ...existing, key, tier, name: item.name, image: item.image,
-        equippedApproximate: quantityIsApproximate(item),
-        equipped: typeof item.amount === 'number' ? item.amount : parseCompact(item.amount), stored: existing?.stored ?? null });
-    }
-    const canonicalPotionOrder = new Map(canonicalDivinePotions.map(([key], index) => [key, index]));
-    const displayedPotions = [...potionMap.values()].filter(item => item.tier === 'Divine' || item.stored > 0 || item.equipped > 0).sort((a, b) => {
-      const tierOrder = POTION_TYPES.indexOf(b.tier) - POTION_TYPES.indexOf(a.tier);
-      if (tierOrder) return tierOrder;
-      const equippedOrder = Number(Boolean(b.equipped)) - Number(Boolean(a.equipped));
-      if (equippedOrder) return equippedOrder;
-      const canonicalOrder = (canonicalPotionOrder.get(a.key) ?? 99) - (canonicalPotionOrder.get(b.key) ?? 99);
-      if (canonicalOrder) return canonicalOrder;
-      return a.name.localeCompare(b.name);
-    });
     const inventoryCounts = new Map((Array.isArray(cache.inventory?.allItems) ? cache.inventory.allItems : [])
       .filter((item) => item?.key).map((item) => [item.key, item]));
     const totalItems = lootItemCount(loot);
     const compactCraftingLoot = Boolean(craftingSkill && finiteQueue);
     const craftedLoot = loot[0];
     const craftedInventory = craftedLoot
-      ? inventoryCounts.get(craftedLoot.image.split('/').pop()?.split('?')[0]) : null;
-    Object.assign(AppState.derived, { automationRows, displayedPotions, consumableRows, eliteCombat,
+      ? inventoryCounts.get(craftedLoot.image.split('/').pop()?.split('?')[0])
+        ?? (Array.isArray(cache.inventory?.allItems) && !cache.inventory.needsReconcile ? { amount: 0 } : null)
+      : null;
+    Object.assign(AppState.derived, { automationRows, consumableRows, eliteCombat,
       countdowns: { revive: action?.reviveRemainingMs || 0, queue: queueRemainingMs },
       panels: { adventureActive, adventureActionActive, guildTrialActionActive, guildEventActionActive, masteryAchieved } });
     const { locationBadges, displayActionName } = selectLocationBadges(action, consumables, eliteCombat);
 
     const actionBadges = renderActionBadges({ action, masteryAchieved, adventureActionActive, guildEventActionActive, guildTrialActionActive, cache, locationBadges, materialWarning, materialWarningText, queueWarning, finiteQueue });
     AppState.ui.headerBadgeMarkup = actionBadges;
-    updateStatusMarkup(renderStatusMarkup({ actionBadges, headerIcons, combatDeath, noticeNow, queueWarning, materialWarning, materialWarningText, cache, adventureActive, adventureActionActive, guildEventActionActive, guildTrialActionActive, prefs, automationOn, cacheLookupsOn, masteryAchieved, automationRows, questSkills, challengePrefs, dailyQuestComplete, taskIndicator, adventureIndicator, guildTrialIndicator, guildEventIndicator, attunementSkills, attunementDetails, challengeError, challengeIndicator, tamingDetails, tamingIndicator, resourceWarnings, adventureSupplement, potionTypes, consumableRows, displayedPotions, inventoryCounts, totalItems, compactCraftingLoot, craftedInventory, action, loot, consumables, materials, masteryProgress, finiteQueue, locationBadges, displayActionName }));
+    updateStatusMarkup(renderStatusMarkup({ actionBadges, headerIcons, combatDeath, noticeNow, queueWarning, materialWarning, materialWarningText, cache, adventureActive, adventureActionActive, guildEventActionActive, guildTrialActionActive, prefs, automationOn, cacheLookupsOn, masteryAchieved, automationRows, questSkills, challengePrefs, dailyQuestComplete, taskIndicator, adventureIndicator, guildTrialIndicator, guildEventIndicator, attunementSkills, attunementDetails, challengeError, challengeIndicator, tamingDetails, tamingIndicator, resourceWarnings, adventureSupplement, consumableRows, inventoryCounts, totalItems, compactCraftingLoot, craftedInventory, action, loot, consumables, materials, masteryProgress, finiteQueue, locationBadges, displayActionName }));
     syncHeaderActionBadges();
     syncQuickSkills();
     StatusRenderer.updateLive(AppState);

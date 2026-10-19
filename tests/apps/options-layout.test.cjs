@@ -29,7 +29,7 @@ test('Status always retains its full indicator group regardless of the legacy he
 test('compact options retain every control and explain cache lookups accurately',()=>{
   const h=setup();h.run('StatusRenderer.render(AppState)');
   const html=h.run('renderPreferences({prefs:[], automationOn:false, cacheLookupsOn:false, headerIcons:false, questSkills:[], challengePrefs:getChallengePrefs()})');
-  for(const attr of ['data-potion-type-add','data-automation-toggle','data-cache-lookups-toggle','data-challenge-region','data-challenge-skill','data-challenge-buy-toggle','data-challenge-buy-price','data-multiplayer-toggle','data-debug-toggle']) {
+  for(const attr of ['data-automation-toggle','data-cache-lookups-toggle','data-challenge-region','data-challenge-skill','data-challenge-buy-toggle','data-challenge-buy-price','data-multiplayer-toggle','data-debug-toggle']) {
     assert.equal(html.split(attr).length-1,1,attr);
   }
   assert.match(html,/aria-labelledby="iw-options-title"/);
@@ -56,74 +56,12 @@ test('multiplayer switch restores the native control without clicking it',()=>{
   h.context.installInterfaceControls(); assert.equal(visible,false);
 });
 
-test('potion selection preserves the legacy setting and supports an explicitly empty selection',()=>{
-  const h=harness();
-  assert.equal(h.run('JSON.stringify(getPotionTypes())'),'["Divine"]');
-  h.run("localStorage.setItem(SUPER_POTIONS_KEY,'true')");
-  assert.equal(h.run('JSON.stringify(getPotionTypes())'),'["Divine","Super"]');
-  h.run("localStorage.setItem(POTION_TYPES_KEY,'[]')");
-  assert.equal(h.run('JSON.stringify(getPotionTypes())'),'[]');
-});
-
-test('Divine XP potion defaults use game names despite legacy efficiency image filenames',()=>{
-  const h=setup();
-  h.run('StatusRenderer.render(AppState)');
-  const names=JSON.parse(h.run('JSON.stringify(AppState.derived.displayedPotions.map(item=>item.name))'));
-  assert.ok(names.includes('Divine Craft XP Potion'));
-  assert.ok(names.includes('Divine Combat XP Potion'));
-  assert.ok(!names.some(name=>/Efficiency/.test(name)));
-  h.run(`
-    CacheStore.set('inventory',{schema:1,items:[],allItems:[
-      {key:'potion-divine-craft-efficiency.png',name:'Divine Craft XP Potion',image:'/assets/items/potion-divine-craft-efficiency.png',amount:17},
-      {key:'potion-divine-combat-efficiency.png',name:'Divine Combat XP Potion',image:'/assets/items/potion-divine-combat-efficiency.png',amount:2891}
-    ]});
-    SourceAdapter.capture=()=>Object.assign(AppState.live,{action,loot:[],materials:[],masteryProgress:{},finiteQueue:queue,consumables:[
-      {name:'Divine Craft XP Potion',image:'/assets/items/potion-divine-craft-efficiency.png',amount:'25'}
-    ]});
-    StatusRenderer.render(AppState);
-  `);
-  const xpPotions=JSON.parse(h.run('JSON.stringify(AppState.derived.displayedPotions.filter(item=>/XP/.test(item.name)))'));
-  assert.equal(xpPotions.length,2);
-  assert.equal(xpPotions.find(item=>item.name==='Divine Craft XP Potion').stored,17);
-  assert.equal(xpPotions.find(item=>item.name==='Divine Craft XP Potion').equipped,25);
-  assert.equal(xpPotions.find(item=>item.name==='Divine Combat XP Potion').stored,2891);
-});
-
 test('action summary shows earned XP percentage, including zero after leveling up',()=>{
   const h=setup();
   for(const progress of [87,0,100]) {
     h.context.progress=progress;
     h.run('action.skillProgress=progress; action.levelRemaining=100-progress; AppState.ui.lastSignature=""; StatusRenderer.render(AppState)');
-    assert.match(h.run('AppState.ui.page.innerHTML'),new RegExp(`data-live-level-progress>${progress}% XP`));
+    assert.match(h.run('AppState.ui.page.innerHTML'),new RegExp(`data-live-xp-total>${progress}% XP`));
     assert.doesNotMatch(h.run('AppState.ui.page.innerHTML'),/data-live-level-remaining/);
   }
-});
-
-test('all potion tiers merge inventory and equipped counts, exclude other consumables, and respond to filtering',()=>{
-  const h=setup();
-  h.run(`
-    CacheStore.set('inventory',{schema:1,items:[],allItems:[
-      {key:'potion-gather-yield.png',name:'Gather Yield Potion',image:'/assets/items/potion-gather-yield.png',amount:12},
-      {key:'potion-super-combat-loot.png',name:'Super Combat Loot Potion',image:'/assets/items/potion-super-combat-loot.png',amount:7},
-      {key:'potion-super-craft-efficiency.png',name:'Super Craft Efficiency Potion',image:'/assets/items/potion-super-craft-efficiency.png',amount:0},
-      {key:'brew-mastery.png',name:'Mastery Brew',image:'/assets/items/brew-mastery.png',amount:40}
-    ]});
-    SourceAdapter.capture=()=>Object.assign(AppState.live,{action,loot:[],materials:[],masteryProgress:{},finiteQueue:queue,consumables:[
-      {name:'Super Combat Loot Potion',image:'/assets/items/potion-super-combat-loot.png',amount:'25'},
-      {name:'Regular Craft Efficiency Potion',image:'/assets/items/potion-regular-craft-efficiency.png',amount:'1.2K'}
-    ]});
-    localStorage.setItem(POTION_TYPES_KEY,JSON.stringify(POTION_TYPES));
-    StatusRenderer.render(AppState);
-  `);
-  const potions=JSON.parse(h.run('JSON.stringify(AppState.derived.displayedPotions)'));
-  assert.equal(potions.find(p=>p.name==='Gather Yield Potion').stored,12);
-  assert.equal(potions.find(p=>p.name==='Super Combat Loot Potion').equipped,25);
-  assert.equal(potions.find(p=>p.name==='Super Combat Loot Potion').stored,7);
-  assert.equal(potions.find(p=>p.name==='Regular Craft Efficiency Potion').equipped,1200);
-  assert.ok(!potions.some(p=>p.name==='Mastery Brew'||p.name==='Super Craft Efficiency Potion'));
-  h.run("localStorage.setItem(POTION_TYPES_KEY,'[\"Regular\"]'); StatusRenderer.render(AppState)");
-  assert.equal(h.run('AppState.derived.displayedPotions.length'),2);
-  assert.equal(h.run('AppState.derived.displayedPotions.every(p=>p.tier===\"Regular\")'),true);
-  h.run("localStorage.setItem(POTION_TYPES_KEY,'[]'); StatusRenderer.render(AppState)");
-  assert.equal(h.run('AppState.derived.displayedPotions.length'),0);
 });

@@ -2,6 +2,12 @@
 
 Tracked in [GitHub issue #1](https://github.com/Escles89/IRONWOOD_stats/issues/1). Implementation and live acceptance are complete; publication is a separate delivery step.
 
+## Current amendments — 19 October 2026
+
+The source now provides the same list on the `/skills` page and in the modal. It pins the current action first, excludes Taming, includes cached per-mode trophy ranks and adds manual Stop & Loot, which pauses recipe progression and leaves the character idle. New quantity prompts default to Always use max; confirming saves a per-recipe maximum recalculated at each manual Start. Existing fixed amounts and opt-outs remain respected. The compact plan summary sits below the active row, with full requirements below the skill list. Native inactive action pages show Skills only; Quick Loot requires the exact running skill/action. These amendments supersede the original all-skills, fixed-quantity and always-paired placement wording below.
+
+See [current player behavior](../user/quick-skills.md), [integration and validation](../technical/quick-skills.md), and the shared [interface style guide](../design/style-guide.md). Historical acceptance evidence below remains scoped to its recorded revision.
+
 ## Implementation status — 26 September 2026
 
 Implemented in the local working tree, with the generated userscript and user/technical documentation updated. These final decisions supersede conflicting wording in the original specification below. The player has confirmed that live acceptance passed. This repository change includes the implementation, tests and generated userscript; publication is separate.

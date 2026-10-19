@@ -110,7 +110,7 @@ test('guide navigation targets a chapter without changing game routes or invokin
 test('visual guide has matching navigation targets and no executable example claims', () => {
   const h=harness();
   const html=h.context.renderGuide();
-  for(const name of ['start','panels','icons','rows','data']) {
+  for(const name of ['start','panels','skills','icons','rows','data']) {
     assert.ok(html.includes(`data-guide-jump="${name}"`));
     assert.ok(html.includes(`id="iw-guide-${name}"`));
   }
@@ -118,4 +118,13 @@ test('visual guide has matching navigation targets and no executable example cla
   assert.match(html,/iw-guide-preview/);
   assert.match(html,/iw-guide-feature/);
   assert.doesNotMatch(html,/data-collect-|data-run-challenge|data-live-/);
+});
+
+test('guide badge examples cannot open mastery or expose a live recipe plan', () => {
+  const h = harness();
+  h.run(`renderRecipeRunnerBadge = () => '<button type="button" class="iw-recipe-runner-badge" data-recipe-open>Private active plan</button>'`);
+  const html = h.context.renderGuide();
+  assert.doesNotMatch(html, /data-mastery-open|data-recipe-open|Private active plan/);
+  assert.match(html, /iw-mastery-badge achieved/);
+  assert.match(html, /data-guide-jump="skills"/);
 });

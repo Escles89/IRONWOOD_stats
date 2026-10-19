@@ -34,7 +34,7 @@
       const opened = await runtime.zone.run(() => runtime.router.navigateByUrl(path, { skipLocationChange: true }));
       quickAssertOwner(owner, runtime);
       if (opened === false || location.pathname !== visiblePath) throw new Error('The native page changed. Plan kept.');
-      if (visiblePath === STATS_PATH) hideStatusRouteElements();
+      if (visiblePath === STATS_PATH || visiblePath === SKILLS_PATH) hideStatusRouteElements();
       await waitFor(document, selector);
       if (runtime.router.url !== path) throw new Error('Ironwood redirected this action. Open its native page to check access.');
       return await task(document, globalThis);
@@ -43,7 +43,7 @@
       // and collect work while we are only inspecting requirements.
       if (location.pathname === visiblePath && quickOwner(runtime) === owner && previous && runtime.router.url === path) {
         await runtime.zone.run(() => runtime.router.navigateByUrl(previous, { skipLocationChange: true }));
-        if (visiblePath === STATS_PATH) hideStatusRouteElements();
+        if (visiblePath === STATS_PATH || visiblePath === SKILLS_PATH) hideStatusRouteElements();
       }
     }
   }

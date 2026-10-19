@@ -11,3 +11,7 @@ Use the five default triage labels. Read `docs/agents/triage-labels.md` when app
 ### Domain docs
 
 Single-context layout: root `CONTEXT.md` and `docs/adr/`. Read `docs/agents/domain.md` before exploring the codebase.
+
+### Interface style
+
+Read `docs/design/style-guide.md` before adding or changing UI markup, controls, or CSS.

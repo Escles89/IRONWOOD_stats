@@ -66,17 +66,18 @@
     const trialSkill = clean(entry.activeName).replace(/\s+Trial$/i, '').toLowerCase();
     return Boolean(trialSkill && trialSkill === clean(skillName).toLowerCase());
   }
-  function guildTrialDetail(entry, now = Date.now()) {
+  function guildTrialDetail(entry, now = Date.now(), showCountdown = true) {
     const state = guildTrialState(entry, now);
     if (state === 'Unknown') return 'Open Guild → Trials to check participation';
     if (state === 'Active') {
       const remaining = Number(entry.stateEndsAt) - now;
+      if (!showCountdown && remaining > 0) return entry.activeName || 'Guild trial';
       const timer = remaining > 0 ? `${entry.approximateTimer ? 'About ' : ''}${formatDuration(remaining / 1000)} remaining` : 'Time remaining unknown';
       return `${entry.activeName || 'Guild trial'} · ${timer}`;
     }
     if (state === 'Expired') return `${entry.activeName || 'Trial'} · Participation ended`;
     const remaining = Number(entry.periodEndsAt) - now;
-    const reset = remaining > 0 ? ` · resets in ${formatDuration(remaining / 1000)}` : '';
+    const reset = showCountdown && remaining > 0 ? ` · resets in ${formatDuration(remaining / 1000)}` : '';
     if (state === 'ParticipationComplete') return `Participation complete${reset}`;
     if (state === 'Completed') return `All ${entry.total || ''} guild trials completed${reset}`;
     if (state === 'Available') return `${entry.available} trials available${reset}`;
@@ -130,6 +131,8 @@
       : cooldownText ? getCache().guildEvent?.eventName || 'Guild Event'
       : observedEventName || 'Guild Event';
     const eventRemainingText = clean(eventRow?.querySelector(':scope > .date')?.textContent);
+    const timing = clean(root.textContent).match(/Participate for up to (\d+) hours during the (\d+) hour event/i);
+    const previous = getCache().guildEvent;
     const eventXpRow = [...(eventCard?.querySelectorAll(':scope > .row') || [])]
       .find((row) => clean(row.querySelector(':scope > .name')?.textContent) === 'Guild Event XP');
     const eventXpMatch = rowValue(eventXpRow).match(/([\d,.]+)\s*\/\s*([\d,.]+)/);
@@ -165,6 +168,8 @@
       : Date.now() + (cooldown ? (timer || TTL.guildEvent) : Math.min(timer || 300000, 300000));
     setCache('guildEvent', {
       schema: 9,
+      participationDurationMs: timing ? Number(timing[1]) * 3600000 : previous?.participationDurationMs ?? null,
+      eventDurationMs: timing ? Number(timing[2]) * 3600000 : previous?.eventDurationMs ?? null,
       state: participating ? 'Participating' : completed ? 'Completed' : cooldown ? 'Cooldown' : 'Available', eventName,
       stateDetail: participating ? `${eventName} · Participating · ${formatNumber(personalXp || 0)} XP · ${readableTimer || 'In progress'}` : completed ? 'Contribution complete' : cooldown ? `Ready in ${readableTimer}` : 'Ready to participate',
       playerName: ownName || '', personalXp,
@@ -207,6 +212,7 @@
     const completedMatch = clean(summaryRow('Trials Completed')?.querySelector('.amount')?.textContent).match(/(\d+)\s*\/\s*(\d+)/);
     if (!completedMatch) return null;
     const endText = clean(summaryRow('End Date')?.querySelector('.date')?.textContent);
+    const participationHours = clean(root.textContent).match(/participate in for (\d+) hours during the trial/i);
     const trials = [];
     for (const card of trialCards) {
       let trial = null;
@@ -229,7 +235,7 @@
     const completedParticipation = ownName && trials.some(trial => trial.participants.some(person => person.name === ownName && person.completed));
     if (ownName && trials.some(trial => trial.participants.some(person => person.name === ownName && !person.completed && !person.remaining))) return null;
     const ownParticipation = activeTrial?.participants.find(person => person.name === ownName && durationMs(person.remaining) > 0);
-    return { completed, total, endText, completedParticipation: Boolean(completedParticipation), available: trials.filter(trial => !trial.complete && trial.joinable).length,
+    return { completed, total, endText, participationDurationMs: participationHours ? Number(participationHours[1]) * 3600000 : null, completedParticipation: Boolean(completedParticipation), available: trials.filter(trial => !trial.complete && trial.joinable).length,
       activeName: activeTrial?.name || '', remaining: ownParticipation?.remaining || '', identityKnown: Boolean(ownName) };
   }
   function collectGuildTrial(doc) {
@@ -246,6 +252,7 @@
     // Refresh active participation hourly, independently of the guild-wide trial period.
     const refreshAt = Math.min(stateEndsAt || Infinity, periodEndsAt || Infinity, now + (state === 'Active' || state === 'Unknown' ? 3600000 : TTL.guildTrial));
     const record = { schema: 5, state, activeName: data.activeName, remaining: data.remaining,
+      participationDurationMs: data.participationDurationMs || previous?.participationDurationMs || null,
       approximateTimer: Boolean(timer && !/\d\s*[ms]/i.test(data.remaining)),
       completed: data.completed, total: data.total, available: data.available,
       stateEndsAt, periodEndsAt, refreshAt, expiresAt: refreshAt };

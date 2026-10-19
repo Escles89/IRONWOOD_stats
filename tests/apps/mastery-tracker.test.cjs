@@ -480,21 +480,21 @@ test('the gear selects a followed skill and the header reports obtained masterie
 });
 
 
-test('requirement progress caps covered balances and leaves unknown balances indeterminate', () => {
+test('compact requirement summaries retain exact balances, coverage and unknown states', () => {
   const s = setup();
   let html = s.change('1');
   assert.match(html, /60 needed/);
-  assert.match(html, /aria-label="Coins requirement"[^>]*aria-valuenow="40"/);
+  assert.match(html, /aria-label="Coins: 40 of 100 · Insufficient · 60 needed"/);
   s.user.skills['1'].exp = 400;
   html = s.render();
-  assert.match(html, /aria-label="XP requirement"[^>]*aria-valuenow="100"/);
+  assert.match(html, /aria-label="XP: 400 of 200 · Covered"/);
   assert.match(html, /400 of 200 · Covered/);
   s.runtime.mastery.exp = 0;
-  assert.match(s.render(), /aria-label="XP requirement"[^>]*aria-valuenow="100"/);
+  assert.match(s.render(), /aria-label="XP: 400 of 0 · Covered"/);
   delete s.user.coins;
   html = s.render();
-  assert.match(html, /aria-label="Coins requirement"[^>]*Unknown/);
-  assert.doesNotMatch(html, /aria-label="Coins requirement"[^>]*aria-valuenow=/);
+  assert.match(html, /aria-label="Coins: Unknown of 100 · Unknown"/);
+  assert.doesNotMatch(html, /iw-mastery-progress|role="progressbar"/);
   assert.doesNotMatch(html, /NaN|Infinity/);
 });
 
@@ -608,12 +608,129 @@ test('Status labels partial loot coverage and drops retained loot rather than tr
 test('Current Loot updates the visible mastery bar without rewriting the dashboard', () => {
   const s = setup(); currentLoot(s);
   s.change('1'); s.escape();
-  assert.match(statusMasteryRow(s), /Woodcutting<span data-mastery-total>80%<\/span>/);
+  assert.match(statusMasteryRow(s), /<span data-mastery-total>80%<\/span>/);
   const writes = s.page.writes;
   s.runtime.action.actionLoot['101'].amount = 20; s.render();
   assert.match(statusMasteryRow(s), /20% contributed · 90% with inventory \+ loot/);
   assert.match(statusMasteryRow(s), /data-mastery-inventory style="width:70%"/);
-  assert.match(statusMasteryRow(s), /Woodcutting<span data-mastery-total>90%<\/span>/);
+  assert.match(statusMasteryRow(s), /<span data-mastery-total>90%<\/span>/);
   assert.equal(s.page.writes, writes);
   assert.deepEqual(s.calls, []);
+});
+
+
+function openCurrentMastery(s, surface) {
+  const markup = surface === 'contract'
+    ? s.h.run(`renderStatusConsumable({ masteryContract: true, storedOnly: true, name: 'Mastery Contract', stored: 100 }, { current: 20, cap: 120000 })`)
+    : s.h.run(`renderActionBadges({ action: { skillName: 'Mining' }, cache: {} })`);
+  const button = markup.match(/<button[^>]*data-mastery-open[^>]*>/)?.[0];
+  assert.ok(button, 'the rendered surface exposes a mastery control');
+  const target = { dataset: { masteryOpen: button.match(/data-mastery-open="([^"]*)"/)?.[1] || '' },
+    closest: selector => selector === '[data-mastery-open]' ? target : null, focus() {} };
+  return s.open(target);
+}
+
+for (const surface of ['contract', 'badge']) {
+  test(`${surface} opens the current skill without changing tracked mastery`, async () => {
+    const s = setup();
+    s.user.masteries.skills['2'].complete = false;
+    s.runtime.mastery.required = id => id === '2' ? 200 : 100;
+    s.change('1');
+    s.user.action = { skillId: '2', actionId: '20' };
+    let html = openCurrentMastery(s, surface);
+    assert.match(html, /<strong>Mining<\/strong>/);
+    assert.match(html, /data-label="Required">200/);
+    assert.match(statusMasteryRow(s), /Woodcutting/);
+    const saved = () => JSON.parse(s.storage.get('iw-status-mastery-v1:' + JSON.stringify(['Player', false])));
+    assert.equal(saved().selected, '1');
+    s.user.skills['2'].exp = 175;
+    html = await s.refresh();
+    assert.match(html, /<strong>Mining<\/strong>/);
+    assert.match(html, /<strong>175<\/strong>/);
+    assert.equal(saved().selected, '1');
+    s.escape();
+    assert.match(s.open(), /<strong>Woodcutting<\/strong>/);
+    assert.match(setup(new Map(s.storage)).render(), /<strong>Woodcutting<\/strong>/);
+  });
+}
+
+test('current mastery shortcuts can show a completed skill and fall back when idle', () => {
+  const s = setup();
+  s.change('1');
+  s.user.action = { skillId: '2', actionId: '20' };
+  let html = openCurrentMastery(s, 'badge');
+  assert.match(html, /<strong>Mining<\/strong>/);
+  assert.match(html, /Your selected mastery is complete/);
+  s.user.action = null;
+  html = openCurrentMastery(s, 'contract');
+  assert.match(html, /<strong>Woodcutting<\/strong>/);
+  s.user.action = { skillId: '99', actionId: '20' };
+  assert.match(openCurrentMastery(s, 'contract'), /<strong>Woodcutting<\/strong>/);
+});
+
+test('viewing current mastery works without a tracked selection and resets on character change', () => {
+  const s = setup();
+  s.user.action = { skillId: '1', actionId: '10' };
+  assert.match(openCurrentMastery(s, 'contract'), /<strong>Woodcutting<\/strong>/);
+  assert.match(statusMasteryRow(s), /Choose a mastery to follow/);
+  s.user.displayName = 'Other player';
+  assert.match(s.render(), /<strong>Choose a skill<\/strong>/);
+  assert.doesNotMatch(s.render(), /data-label="Owned">50/);
+});
+
+test('choosing a tracked mastery after viewing current skill returns to the chosen skill', () => {
+  const s = setup();
+  s.user.masteries.skills['2'].complete = false;
+  s.change('2');
+  s.user.action = { skillId: '1', actionId: '10' };
+  assert.match(openCurrentMastery(s, 'contract'), /<strong>Woodcutting<\/strong>/);
+  assert.match(s.change('2'), /<strong>Mining<\/strong>/);
+});
+
+function modalMaterialTotal(html) {
+  return html.match(/<div class="iw-mastery-total"[\s\S]*?(?=<\/div><p class="iw-mastery-completion")/)?.[0] || '';
+}
+
+test('modal total uses dashboard material coverage independently of XP and coins', () => {
+  const s = setup(); currentLoot(s);
+  s.user.skills['1'].exp = 0;
+  s.user.coins = 0;
+  let total = modalMaterialTotal(s.change('1'));
+  assert.match(total, /Total materials/);
+  assert.match(total, /20% contributed · 80% with inventory \+ loot/);
+  assert.match(total, /data-mastery-contributed style="width:20%"/);
+  assert.match(total, /data-mastery-inventory style="width:60%"/);
+  assert.match(total, /<span data-mastery-total>80%<\/span>/);
+  assert.match(statusMasteryRow(s), /20% contributed · 80% with inventory \+ loot/);
+  s.user.skills['1'].exp = 1000;
+  s.user.coins = 1000;
+  assert.equal(modalMaterialTotal(s.render()), total);
+  s.runtime.action.actionLoot['101'].amount = 30;
+  assert.match(modalMaterialTotal(s.render()), /<span data-mastery-total>100%<\/span>/);
+});
+
+test('modal total follows the displayed current skill while dashboard follows the tracked skill', () => {
+  const s = setup(); currentLoot(s);
+  s.user.masteries.skills['2'].complete = false;
+  s.user.masteries.skills['2'].items['101'] = 10;
+  s.runtime.mastery.required = id => id === '2' ? 200 : 100;
+  s.change('2');
+  const total = modalMaterialTotal(openCurrentMastery(s, 'contract'));
+  assert.match(total, /20% contributed · 80% with inventory \+ loot/);
+  assert.match(statusMasteryRow(s), /5% contributed · 35% with inventory \+ loot/);
+});
+
+test('modal total preserves partial loot and unknown inventory states', async () => {
+  const s = setup(); currentLoot(s, { '101': { amount: 10 }, '999': { amount: -1 } });
+  assert.match(modalMaterialTotal(s.change('1')), /<span data-mastery-total>≥80%<\/span>/);
+  assert.match(modalMaterialTotal(s.render()), /80% with inventory \+ known loot/);
+  s.user.masteries.skills['1'].items['101'] = 30;
+  let total = modalMaterialTotal(s.render());
+  assert.match(total, /30% contributed · Inventory needs refresh/);
+  assert.match(total, /data-mastery-inventory style="width:0%"/);
+  assert.match(total, /<span data-mastery-total>—<\/span>/);
+  await s.refresh();
+  assert.match(modalMaterialTotal(s.render()), /90% with inventory \+ known loot/);
+  delete s.runtime.state.user.inventory;
+  assert.match(modalMaterialTotal(s.render()), /Inventory coverage unknown/);
 });

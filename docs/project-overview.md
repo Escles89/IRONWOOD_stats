@@ -2,7 +2,7 @@
 
 Ironwood Status is a browser companion for Ironwood RPG. Its main job is to bring scattered game information into one dashboard, keep useful estimates moving between page visits, and optionally perform selected chores through the game's controls. It also adds combat feedback, collection recaps, interface refinements and a fictional news ticker.
 
-This walkthrough describes the repository as inspected on 26 September 2026. Start here for the overall picture; use the linked reference docs for individual behaviors.
+This walkthrough describes the current source as of 19 October 2026. Start here for the overall picture; use the linked reference docs for individual behaviors.
 
 For the underlying game, start with [How Ironwood RPG works](reference/ironwood-game.md). It explains the skill families, resource flow and parallel activities that the companion follows, with [dated source notes](reference/ironwood-sources.md) for game mechanics and changes.
 
@@ -13,11 +13,14 @@ For the underlying game, start with [How Ironwood RPG works](reference/ironwood-
 | What am I doing, and is it still running? | Current Action, combat, revival, finite queue and header indicators | [Status dashboard](user/status-dashboard.md), [combat](user/combat.md) |
 | What have I earned, and what supplies remain? | Pending loot, inventory counts, equipped/stored consumables, materials and collection recaps | [Status dashboard](user/status-dashboard.md), [automations](user/automations.md) |
 | What is happening across my other activities? | Quests, challenges, adventures, Taming, Attunement, guild events/trials and House production | [Status dashboard](user/status-dashboard.md) |
-| Which chores can the script handle? | Optional daily quests and map creation; requested claim workflows and challenge runs | [Automations](user/automations.md) |
+| Which chores can the script handle? | Optional daily quests, map creation and recipe progression; requested claim workflows and challenge runs | [Automations](user/automations.md) |
+| How do I switch activities or leave my character idle? | Skills page/modal, pinned current action, manual Start and Stop & Loot, reusable maximum quantities and leaderboard ranks | [Skills](user/quick-skills.md) |
+| What do I need to make an item? | Recipe Calc coverage/tree and a linked recipe plan, with manual steps and optional automatic progression | [Recipe Calc](user/shopping-list.md), [recipe plans](user/recipe-plan.md) |
+| Which progression needs attention? | Mastery shortfalls, Trait milestones/set claims and Attunement passive recommendations | [Status dashboard](user/status-dashboard.md) |
 | Why is a number missing or old? | Snapshot ages, native-page navigation, explicit refresh and Debug | [Cache and refresh](user/cache-and-refresh.md) |
 | What makes the dashboard feel alive? | Combat/quantity effects, reward recaps and contextual Ironwood Dispatch headlines | [Event effects](technical/event-effects.md), [Dispatch](news-ticker.md) |
 
-The product already covers many activities, and the player reports that the existing layout mostly supports their routine checks. The next question is which additional capability would improve that routine. The [feature ideas](player-feature-ideas.md) distinguish initial proposals from what the design discussion has established; the [glossary](../CONTEXT.md) records shared terminology.
+The [feature ideas](player-feature-ideas.md) retain the historical design discussions and distinguish implemented features from remaining proposals; the [glossary](../CONTEXT.md) records shared terminology.
 
 ## Follow one piece of information
 
@@ -56,6 +59,9 @@ Automation and fallback lookups are separate switches, both off by default.
 | Old but usable snapshot | Remains available; age alone does not schedule a lookup. |
 | Refresh icon | Explicitly reads cache sources even with fallback lookups off, without enabling the saved preference or running daily chores. |
 | Requested Status claim | Requires automation and follows the relevant native confirmation workflow. |
+| Skills rank cache expired | Reads through the native leaderboard service while Skills is open and visible; one-hour cache and five-minute failure backoff. Independent of fallback lookups. |
+| Enabled recipe run | Requires automation and a visible tab; confirms due work, collects, recalculates and starts ready steps. Manual blockers wait. |
+| Explicit Skills or Trait controls | Perform the requested start, stop, equip or set claim independently of daily automation. |
 | Pending daily quests/maps | Requires both switches; checks happen at lifecycle triggers and once per minute while visible, with retry limits. |
 
 Usability also includes known state boundaries: an ended guild event cannot describe the next event. That can make its record need a new observation even though ordinary snapshot age does not. See the [cache contract](technical/cache-contract.md).
@@ -96,4 +102,4 @@ Most game interactions use rendered native controls. Some adapters also inspect 
 5. [Testing](technical/testing.md): learn how behavior is checked before a release.
 6. [Player feature ideas](player-feature-ideas.md): choose a problem to explore next.
 
-The inspected working tree passed `npm run check`, including 256 tests, syntax checks, deterministic assembly and whitespace checks. This is a dated baseline, not live-browser acceptance or a claim that every native game layout is covered.
+Run `npm run build` and `npm run check` for the current source. Feature integration documents retain dated acceptance evidence; those historical test counts and browser checks describe their recorded revision, not every later change. See [testing](technical/testing.md) for current coverage and manual checks.

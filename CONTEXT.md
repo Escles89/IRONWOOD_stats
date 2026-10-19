@@ -139,7 +139,10 @@ A player-requested collection of the current action's pending loot followed by r
 _Avoid_: Using this term for switching skills or collecting rewards from unrelated activities.
 
 **Quick skill panel**:
-A panel listing all skills in the game's order, showing the last action for each skill with separate choices to resume it or open the skill's native page.
+The shared list of main-action skills on the Skills page and in its modal, with the current action first and the remaining skills in the game’s order. Each skill identifies its last action separately from navigation to its native page; Taming expeditions are outside this list.
+
+**Stop & Loot**:
+A player-requested stop of the current action and collection of its pending loot, leaving the character idle. It is distinct from Quick loot, which resumes the same action after collection.
 
 **Resume last action**:
 A request to start the remembered action for a chosen skill, identified by name before the player selects it.
@@ -151,6 +154,9 @@ The most recent activity the player actually ran for a particular skill, retaine
 **Configured amount**:
 The quantity the player saves for one specific finite activity or recipe, for that character and game mode. Opting into reuse for that activity skips its usual quantity prompt; an insufficient supply calls for a new choice rather than silently changing the saved amount.
 _Avoid_: Remaining queue, currently craftable amount.
+
+**Always use max**:
+A per-activity quantity preference to use the largest currently craftable quantity on each manual start. It is separate from a fixed configured amount, the remaining queue, and an automatic plan run.
 
 ### House production and script automation
 

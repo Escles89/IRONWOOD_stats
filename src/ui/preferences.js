@@ -1,4 +1,4 @@
-  function renderPreferences({ prefs, automationOn, cacheLookupsOn, potionTypes = getPotionTypes(), headerIcons, questSkills, challengePrefs }) {
+  function renderPreferences({ prefs, automationOn, cacheLookupsOn, headerIcons, questSkills, challengePrefs }) {
     const toggle = (label, description, attribute, enabled) => `<label class="iw-automation-toggle"><span><b>${label}</b><small>${description}</small></span><input type="checkbox" ${attribute} ${enabled ? 'checked' : ''}><i aria-hidden="true"></i></label>`;
     const warnings = getWarningPrefs();
     const warningInput = (label, key, unit) => `<label class="iw-warning-field"><span>${label}</span><div><input type="number" inputmode="numeric" min="0" max="1000000000" step="1" data-warning-pref="${key}" value="${warnings[key]}" aria-label="${label} (${unit})"><small>${unit}</small></div></label>`;
@@ -27,14 +27,6 @@
             </div>
             <p class="iw-options-help">Adventure RP: amber below nine map costs + 16,000 RP; red below 16,000 RP. Warnings use known cached balances.</p>
           </section>
-          <section class="iw-options-section iw-options-wide"><h3>Potions</h3>
-            <div class="iw-potion-options">
-              <label for="iw-potion-type-select">Types shown</label>
-              <select id="iw-potion-type-select" data-potion-type-add><option value="">Add a potion type…</option><option value="all">All types</option>${POTION_TYPES.filter(type => !potionTypes.includes(type)).map(type => `<option value="${type}">${type}</option>`).join('')}</select>
-              <div class="iw-potion-type-chips">${potionTypes.map(type => `<button type="button" data-potion-type-remove="${type}" aria-label="Remove ${type} potions">${type}<span aria-hidden="true">×</span></button>`).join('') || '<small>No types selected.</small>'}</div>
-              <small>Select types to add them; click a selected type to remove it. Counts use cached inventory and equipped potions.</small>
-            </div>
-          </section>
           <section class="iw-options-section iw-options-wide"><h3>Challenges</h3>
             <div class="iw-challenge-config">
               <label><span>Region</span><select data-challenge-region>${Object.keys(CHALLENGE_SKILLS).map(region => `<option ${region === challengePrefs.region ? 'selected' : ''}>${region}</option>`).join('')}</select></label>
@@ -60,6 +52,7 @@
 
   function openPreferences(trigger) {
     AppState.ui.shopping.selectedStep = null;
+    AppState.ui.consumableOverview = null;
     AppState.ui.mastery.open = false;
     AppState.ui.traits.open = false;
     AppState.ui.preferencesTrigger = trigger;
@@ -72,6 +65,7 @@
   }
   function closePreferences() {
     AppState.ui.shopping.selectedStep = null;
+    AppState.ui.consumableOverview = null;
     AppState.ui.mastery.open = false;
     AppState.ui.traits.open = false;
     AppState.ui.questModalOpen = false;
@@ -81,7 +75,7 @@
     AppState.ui.preferencesTrigger?.focus();
   }
   function handlePreferencesKey(event) {
-    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open && !AppState.ui.traits.open && !AppState.ui.shopping.selectedStep) return false;
+    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open && !AppState.ui.traits.open && !AppState.ui.shopping.selectedStep && !AppState.ui.consumableOverview) return false;
     if (event.key === 'Escape') { event.preventDefault(); closePreferences(); return true; }
     if (event.key !== 'Tab') return false;
     const dialog = document.querySelector('.iw-modal:not(.iw-modal-hidden) .iw-modal-panel');
@@ -95,7 +89,7 @@
   // Dialogs live outside the route content so they work on every native page.
   function renderGlobalDialog() {
     let host = document.querySelector('#iw-global-dialogs');
-    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open && !AppState.ui.traits.open && !AppState.ui.shopping.selectedStep) { host?.remove(); return; }
+    if (!AppState.ui.questModalOpen && !AppState.ui.guideOpen && !AppState.ui.mastery.open && !AppState.ui.traits.open && !AppState.ui.shopping.selectedStep && !AppState.ui.consumableOverview) { host?.remove(); return; }
     if (!host) {
       host = document.createElement('div');
       host.id = 'iw-global-dialogs';
@@ -103,7 +97,7 @@
     }
     if (AppState.ui.guideOpen && host._iwGuide) return;
     const cache = getCache();
-    const markup = AppState.ui.traits.open ? renderTraitsModal() : AppState.ui.shopping.selectedStep ? renderShoppingModal() : AppState.ui.mastery.open ? renderMasteryModal() : AppState.ui.guideOpen ? renderGuide() : renderPreferences({
+    const markup = AppState.ui.consumableOverview ? renderConsumableOverview() : AppState.ui.traits.open ? renderTraitsModal() : AppState.ui.shopping.selectedStep ? renderShoppingModal() : AppState.ui.mastery.open ? renderMasteryModal() : AppState.ui.guideOpen ? renderGuide() : renderPreferences({
       prefs: getPrefs(), automationOn: automationEnabled(), cacheLookupsOn: cacheLookupsEnabled(),
       headerIcons: headerIconsEnabled(), challengePrefs: getChallengePrefs(),
       questSkills: [...new Map((cache.quests?.quests || []).filter(quest => quest.skill)
@@ -121,6 +115,7 @@
 
   function openGuide(trigger) {
     AppState.ui.shopping.selectedStep = null;
+    AppState.ui.consumableOverview = null;
     AppState.ui.mastery.open = false;
     AppState.ui.traits.open = false;
     AppState.ui.preferencesTrigger = trigger;

@@ -1,6 +1,12 @@
 # Automations and preferences
 
-Open Settings using the sliders beside the main money bar. **Enable automation** controls game-changing Status actions and background automations. **Allow fallback lookups** controls background information retrieval independently. Both default to off; explicit preferences survive upgrades and cache repair.
+Open Settings using the sliders beside the main money bar. **Enable automation** controls Status loot claims, challenge runs, daily work and automatic recipe progression. **Allow fallback lookups** controls background information retrieval independently. Both default to off; explicit preferences survive upgrades and cache repair.
+
+Manual Skills **Start** and **Stop & Loot**, manual planner controls, Trait switches/set claims and native Craft All work independently of that toggle. Quick Loot requires automation. Read-only feature refreshes and the Status refresh icon work with fallback lookups off.
+
+## Recipe progression
+
+**Save & run plan** or **Resume automatic plan** enables the saved recipe run. It requires automation and a visible game tab, but not fallback lookups. It collects confirmed completed work before starting ready gathering/crafting steps and waits for manual requirements. **Pause automatic plan**, manual planner starts/collections and Skills **Stop & Loot** pause progression. See [Recipe plans](recipe-plan.md).
 
 ## Structure production
 
@@ -20,9 +26,9 @@ Native crafting dialogs include **Craft All**. It reads the current Craftable am
 
 The Challenges row shows available Challenge Scrolls, the selected region and reward skill. Remaining Ironwood auto-completes are tracked for the loop and reported in its recap. Its **Claim** button opens a temporary same-origin Challenges page, selects the configured region, starts the currently selected challenge tier, uses an available auto-complete, selects the configured reward skill, and claims the reward. It continues while usable scrolls or enabled paid entries and auto-completes remain, with a hard limit of 15 scroll starts plus six paid starts per run. The default is Mountain + Defense.
 
-The displayed `used / limit` Auto Challenge Completes value is converted to a remaining allowance with `limit - used`. No new challenge is started without an auto-complete allowance. The run is bounded and fails closed if no scroll or auto-complete remains, a native control does not appear, or the scroll reduction cannot be confirmed. Region and skill can be changed from **Dashboard options → Challenges**; only skills supported by the selected region are offered.
+The displayed `used / limit` Auto Challenge Completes value is converted to a remaining allowance with `limit - used`. No new challenge is started without an auto-complete allowance. The run is bounded and fails closed if no scroll or auto-complete remains, a native control does not appear, or the scroll reduction cannot be confirmed. Region and skill can be changed from **Settings → Challenges**; only skills supported by the selected region are offered.
 
-**Cancel blocked challenges** is an optional switch under **Dashboard options → Challenges**, off by default. A loaded challenge showing **Cannot Auto** or a disabled auto-complete control shows an orange warning instead of Claim while cancellation is off. Turning the switch on allows the next Claim run to use the native Steps trashcan and confirm **Abandon Challenge**, then continue with available scrolls. This also covers an unavailable Auto Limit control on an already active challenge. Cancellation does not refund the scroll or gold used to start the challenge. The run stops if abandonment is not confirmed, and every newly started scroll counts against the batch limit, including cancelled challenges.
+**Cancel blocked challenges** is an optional switch under **Settings → Challenges**, off by default. A loaded challenge showing **Cannot Auto** or a disabled auto-complete control shows an orange warning instead of Claim while cancellation is off. Turning the switch on allows the next Claim run to use the native Steps trashcan and confirm **Abandon Challenge**, then continue with available scrolls. This also covers an unavailable Auto Limit control on an already active challenge. Cancellation does not refund the scroll or gold used to start the challenge. The run stops if abandonment is not confirmed, and every newly started scroll counts against the batch limit, including cancelled challenges.
 
 Already active challenges are captured even when Ironwood hides Start requirements. Known inventory counts are preserved until the native page supplies fresh counts. Loading transitions alone never trigger cancellation.
 

@@ -193,3 +193,15 @@ test('an event end allows one fallback observation while an aging cooldown remai
   h.time(300000);
   assert.equal(h.run("needsLookup('guildEvent')"), false);
 });
+
+test('event countdown durations come from native information and survive partial information panels', () => {
+  const h = harness();
+  const doc = eventFixture();
+  doc.querySelector('guild-page').textContent = 'Participate for up to 24 hours during the 48 hour event';
+  h.storage.set('iw-stats-player-name-v2', 'Player');
+  assert.equal(h.context.collectGuildEvent(doc), true);
+  assert.equal(h.run("CacheStore.get('guildEvent').participationDurationMs"), 24 * 3600000);
+  assert.equal(h.run("CacheStore.get('guildEvent').eventDurationMs"), 48 * 3600000);
+  assert.equal(h.context.collectGuildEvent(eventFixture()), true);
+  assert.equal(h.run("CacheStore.get('guildEvent').eventDurationMs"), 48 * 3600000);
+});

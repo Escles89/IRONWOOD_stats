@@ -4,6 +4,8 @@ The user confirmed the consolidated design, finishing defaults and testing appro
 
 Tracked in [GitHub issue #1](https://github.com/Escles89/IRONWOOD_stats/issues/1).
 
+For the current page/modal, pinned action, Stop & Loot, rank cache and Always use max behavior, use the [current user guide](../user/quick-skills.md) and the October amendments in the specification. The original design below is historical; the shared [interface style guide](style-guide.md) governs current presentation.
+
 ## Purpose
 
 Help the maintainer and other experienced players resume familiar activities from any game page. The existing dashboard already covers their routine checks for ongoing activity, available resources and tasks. The new value is convenient skill switching.

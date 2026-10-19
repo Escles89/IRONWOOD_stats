@@ -1,6 +1,6 @@
 # Planned next action
 
-The Status card saves one action you want to do next. Choose **Skill**, optionally filter the action list, choose **Action**, and select **Save plan**. Every current main gathering, crafting and combat action is available, including actions you have never run and actions whose requirements you cannot yet meet. Combat skills remain separate even when they share an enemy. Taming, House production, Attunement and Adventures have separate workflows.
+The **Planned next action** card on Status, also available in **Skills → Recipe Calc & planner → Single action**, saves one action you want to do next. The Status card is hidden while a recipe plan is active. Choose **Skill**, optionally filter the action list, choose **Action**, and select **Save plan**. Every current main gathering, crafting and combat action is available, including actions you have never run and actions whose requirements you cannot yet meet. Combat skills remain separate even when they share an enemy. Taming, House production, Attunement and Adventures have separate workflows.
 
 For crafting, save the **Native quantity** used by Ironwood's amount control. It does not guarantee that many output items. If supplies cannot cover the saved quantity at Start, the quantity dialog asks for a new amount. Cancelling keeps the plan. A one-time shortage choice does not change Quick Skills' saved amounts or silently reduce the plan.
 
@@ -10,6 +10,6 @@ The native game checks equipment, access, materials and its other requirements. 
 
 A confirmed start from this card clears the plan and records the real start in Last action. Rejections, cancellations and unconfirmed outcomes keep the plan. Starting the target elsewhere does not clear it, and an already-running target cannot be restarted from this card. Confirmed collection rewards are shown even if starting fails; an unconfirmed start keeps the plan. A later synchronization or native display error does not undo a confirmed successful start.
 
-**Edit** changes the plan, and **Clear** removes it. The plan stays in this browser for the current character and game mode across reloads. Form controls support keyboard use and stack vertically on small screens. There are no automatic starts or completion notifications.
+**Edit** changes the plan, and **Clear** removes it. The plan stays in this browser for the current character and game mode across reloads. Form controls support keyboard use and stack vertically on small screens. A single-action plan never starts automatically. Automatic progression belongs to recipe plans.
 
 For several derived gathering and crafting steps, use [Recipe plans](recipe-plan.md). There is one active manual action or recipe plan per character and game mode. Activating a recipe plan replaces the manual plan; saving a manual action replaces the recipe plan. The Skills panel's **Start next** requires separate collection, while this original Status card retains the completed-batch Start workflow described above.

@@ -19,16 +19,19 @@ test('shared controls remain available on Status and native pages, including com
   }
 });
 
-test('first use learns actual running actions, keeps native order and navigates Taming without mutation', () => {
+test('first use learns actual running actions, keeps native order, omits Taming and opens a skill without mutation', () => {
   const f = setup();
   f.click('data-quick-skills');
   assert.match(f.panel(), /Copper Rock/);
-  assert.match(f.panel(), />Current<\/button>/);
+  assert.match(f.panel(), /data-quick-stop/);
   assert.match(f.panel(), /No last action yet/);
-  assert.ok(f.panel().indexOf('Taming') < f.panel().indexOf('Woodcutting'));
+  assert.doesNotMatch(f.panel(), /Taming|data-quick-page="15"/);
+  assert.equal((f.panel().match(/<li class="iw-quick-skill/g) || []).length, 16);
+  assert.ok(f.panel().indexOf('Mining') < f.panel().indexOf('Woodcutting'));
+  assert.ok(f.panel().indexOf('Woodcutting') < f.panel().indexOf('Smelting'));
   assert.ok(f.panel().indexOf('Exploring') < f.panel().indexOf('One-handed'));
-  f.click('data-quick-page', '15');
-  assert.deepEqual(f.calls, [['navigate', '15']]);
+  f.click('data-quick-page', '1');
+  assert.deepEqual(f.calls, [['navigate', '1']]);
   assert.equal(f.saved().last['15'], undefined);
   assert.equal(f.saved().last['2'].actionId, '101');
 });
@@ -355,7 +358,7 @@ test('Skills keeps its grid icon and every regional skill has an inline region, 
     assert.match(row(name), new RegExp(`aria-label="${region}"`));
     assert.doesNotMatch(row(name), /<small class="iw-quick-region"/);
   }
-  assert.doesNotMatch(row('Taming'), /iw-region-icon/);
+  assert.equal(row('Taming'), undefined);
   for (const region of ['Forest', 'Mountain', 'Ocean']) assert.match(row('Defense'), new RegExp(`aria-label="${region}"`));
   f.main.regionCatalog = { 3: { name: 'Ocean' } };
   f.main.state.user.equipment = { weapon: 'ocean-weapon' };
@@ -422,7 +425,7 @@ test('native-style quantity choices show owned and native time, and submit Craft
     f.click('data-quick-skills'); f.click('data-quick-resume', '4');
     await f.until(() => f.panel().includes('data-quick-amount-form'));
     assert.match(f.panel(), /data-quick-owned>7</);
-    assert.match(f.panel(), /data-quick-time>10s</);
+    assert.match(f.panel(), /data-quick-time>200s</);
     assert.match(f.panel(), /Craft All/);
     f.submit(entered, { mode });
     await f.until(() => !f.busy());

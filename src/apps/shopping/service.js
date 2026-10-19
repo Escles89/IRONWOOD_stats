@@ -175,6 +175,7 @@
   }
 
   function shoppingOpenStep(control) {
+    AppState.ui.consumableOverview = null;
     AppState.ui.traits.open = false;
     const ui = shoppingObserve(), key = control.dataset.shoppingStepLink;
     if (!ui.owner || key !== 'defaults' && !ui.snapshot?.nodes.some(node => node.key === key)) return;

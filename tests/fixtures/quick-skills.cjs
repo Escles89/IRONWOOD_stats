@@ -191,9 +191,9 @@ function setup(options = {}) {
   async function until(predicate) { for (let i = 0; i < 500; i++) { if (predicate()) return; await Promise.resolve(); } assert.fail('Workflow did not reach expected state: ' + JSON.stringify({calls, subscriptions, now, message:h.run('AppState.ui.quickSkills.message'), sync:h.run('AppState.ui.nativeSync')})); }
   const busy = () => h.run('AppState.ui.quickSkills.busy');
   const lastToast = () => h.run('AppState.ui.actionToasts.at(-1)');
-  function submit(amount, { reuse = false, save = false, mode = 'craft' } = {}) {
+  function submit(amount, { reuse = false, save = false, max = false, mode = 'craft' } = {}) {
     assert.match(panel(), /data-quick-amount-form/);
-    const form = { elements: { amount: { value: String(amount) }, reuse: { checked: reuse }, save: { checked: save } }, matches: selector => selector === '[data-quick-amount-form]', querySelector: () => ({}) };
+    const form = { elements: { amount: { value: String(amount) }, reuse: { checked: reuse }, save: { checked: save }, max: { checked: max } }, matches: selector => selector === '[data-quick-amount-form]', querySelector: () => ({}) };
     if (mode === 'craft') for (const handler of listeners.submit) handler({ target: form, preventDefault() {} });
     else {
       const target = { dataset: { quickAmountChoice: mode }, closest: selector => selector === 'form' ? form : selector === '[data-quick-amount-choice]' ? target : null };

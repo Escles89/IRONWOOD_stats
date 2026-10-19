@@ -38,9 +38,9 @@
         data.last[skillId] = { skillId, actionId: target.actionId, name: target.name, finite: target.finite === true && quickCraftingSkill(skillId, runtime) };
       }
       for (const [key, value] of Object.entries(saved.amounts || {})) {
-        if (!/^[a-zA-Z0-9_-]{1,80}:[a-zA-Z0-9_-]{1,80}$/.test(key) || !quickAmount(value?.amount) || typeof value.reuse !== 'boolean') continue;
+        if (!/^[a-zA-Z0-9_-]{1,80}:[a-zA-Z0-9_-]{1,80}$/.test(key) || (!quickAmount(value?.amount) && value?.max !== true) || typeof value.reuse !== 'boolean') continue;
         if (!quickCraftingSkill(key.split(':')[0], runtime)) continue;
-        data.amounts[key] = { amount: value.amount, reuse: value.reuse };
+        data.amounts[key] = value.max === true ? { max: true, reuse: true } : { amount: value.amount, reuse: value.reuse };
       }
     } catch {}
     return data;
@@ -125,23 +125,24 @@
     skill.button.click();
   }
 
-  async function quickResume(skillId, { edit = false, loot = false, planned = null } = {}) {
+  async function quickResume(skillId, { edit = false, loot = false, stopOnly = false, planned = null } = {}) {
     if (quickBusy() || (loot && !automationEnabled())) return;
     const runtime = quickObserve(), ui = AppState.ui.quickSkills, owner = ui.owner;
-    const target = planned?.target || (loot ? quickRunningTarget(runtime) : ui.data?.last[skillId]);
+    const target = planned?.target || (loot || stopOnly ? quickRunningTarget(runtime) : ui.data?.last[skillId]);
     if (!target || !owner || target.skillId === '15') return;
     if (planned && plannedCurrentBlockReason(runtime)) return;
     if (edit && !target.finite) return;
-    if (!planned && !loot && quickSameAction(runtime.state.user.action, target) && !edit) return;
+    if (!planned && !loot && !stopOnly && quickSameAction(runtime.state.user.action, target) && !edit) return;
+    if (stopOnly) recipeRunnerPause('Paused because you stopped the current action.');
     ui.busy = true;
     const request = { cancelled: false, attempted: false };
     const transition = planned ? { visiblePath: location.pathname, source: plannedActionIdentity(runtime.state.user.action), requirements: plannedRequirementsKey(runtime), stableRequirements: plannedRequirementsKey(runtime, true), collected: () => false } : null;
     ui.request = request;
-    ui.message = loot ? 'Collecting and continuing…' : edit ? 'Checking amount…' : `Preparing ${target.name}…`;
+    ui.message = stopOnly ? 'Stopping and collecting loot…' : loot ? 'Collecting and continuing…' : edit ? 'Checking amount…' : `Preparing ${target.name}…`;
     if (loot) AppState.ui.collectingLoot = true;
     syncQuickSkills();
     if (planned) render();
-    let attempted = false, started = false, collected = false, detailsKnown = false, rewards = [], error = '', syncError = '';
+    let attempted = false, started = false, stopped = false, collected = false, detailsKnown = false, rewards = [], error = '', syncError = '';
     try {
       await (planned ? withPlannedPage : withPage)(`/skill/${target.skillId}/action/${target.actionId}`, 'skill-page', async (doc, frameWindow) => {
         if (request.cancelled) return;
@@ -154,47 +155,58 @@
           if (reason) throw new Error(reason);
         }
         const same = quickSameAction(native.runtime.state.user.action, target);
-        if (loot && !same) throw new Error('The current action changed before collection. Open Quick Loot again.');
-        if (same && !planned && !loot && !edit) { ui.message = `${target.name} is already Current.`; return; }
+        if ((loot || stopOnly) && !same) throw new Error('The current action changed before collection. Open Skills again.');
+        if (same && !planned && !loot && !stopOnly && !edit) { ui.message = `${target.name} is already Current.`; return; }
         const preference = planned ? { amount: planned.plan.amount, reuse: true } : ui.data.amounts[quickActionKey(target)];
         let amount = loot && target.finite ? quickRemainingAmount(native.runtime, target) : preference?.amount;
+        let autoMax = !planned && !loot && !stopOnly && preference?.max === true;
         let choice = null;
-        if (target.finite) {
+        if (target.finite && !stopOnly) {
           const limit = native.limit();
+          if (autoMax) amount = limit;
+          if (autoMax && !edit && !quickAmount(amount)) throw new Error('No craftable supply is available for this recipe.');
           if (planned?.plan.recipe && (!quickAmount(amount) || amount > limit)) throw new Error('Native quantity or supplies changed. Adjust the quantity in the planner before starting.');
           if (edit || (!loot && !preference?.reuse) || !quickAmount(amount) || amount > limit) {
             choice = await quickPromptAmount(target, preference, limit, { edit, planned: !!planned, shortage: quickAmount(amount) && amount > limit, quantityInfo: native.quantityInfo });
             if (!choice) { ui.message = ''; return; }
             quickAssertOwner(owner, native.runtime);
             amount = choice.amount;
+            autoMax = !planned && !loot && choice.max === true;
             if (choice.save && !planned) {
-              ui.data.amounts[quickActionKey(target)] = { amount, reuse: choice.reuse };
+              ui.data.amounts[quickActionKey(target)] = choice.max ? { max: true, reuse: true } : { amount, reuse: choice.reuse };
               quickPersist(owner, ui.data);
             }
             if (edit) { ui.message = `Amount saved for ${target.name}.`; return; }
           }
         }
         if (edit) return;
-        // A prompt can remain open while materials change. Reopen, never clamp.
-        while (target.finite && amount > native.limit()) {
+        // Only an explicit max preference may adapt to changed supplies.
+        if (autoMax) amount = native.limit();
+        if (autoMax && !quickAmount(amount)) throw new Error('No craftable supply is available for this recipe.');
+        // A fixed-amount prompt can remain open while materials change. Reopen, never clamp.
+        while (target.finite && !stopOnly && amount > native.limit()) {
           if (planned?.plan.runnerAuth) throw new Error('Supplies changed during automatic preparation. Check the plan, then Resume.');
           choice = await quickPromptAmount(target, planned ? preference : ui.data.amounts[quickActionKey(target)], native.limit(), { planned: !!planned, shortage: true, quantityInfo: native.quantityInfo });
           if (!choice) { ui.message = ''; return; }
           quickAssertOwner(owner, native.runtime);
           amount = choice.amount;
+          autoMax = !planned && !loot && choice.max === true;
           if (choice.save && !planned) {
-            ui.data.amounts[quickActionKey(target)] = { amount, reuse: choice.reuse };
+            ui.data.amounts[quickActionKey(target)] = choice.max ? { max: true, reuse: true } : { amount, reuse: choice.reuse };
             quickPersist(owner, ui.data);
           }
         }
         quickAssertOwner(owner, native.runtime);
-        const observation = quickObserveRequests(native.runtime, target, () => quickAssertOwner(owner, native.runtime), planned ? async args => {
+        const observation = quickObserveRequests(native.runtime, target, () => quickAssertOwner(owner, native.runtime), stopOnly ? () => { throw new Error('Stop & Loot must not start another action.'); } : planned ? async args => {
           await plannedReadCurrent(owner, transition.collected() ? 'idle' : transition.source, target, amount);
           plannedAssertStart(owner, planned.plan, native, amount, transition);
           if (plannedNativeValue(plannedNativePage(native.runtime)?.canStart$) !== true
             || plannedNativeValue(plannedNativePage(native.runtime)?.uniqueCraftable$) !== true) throw new Error('Native requirements changed. Plan kept.');
           if (target.finite && args[2] !== amount) throw new Error('The native quantity changed.');
-        } : null, planned ? async () => {
+        } : null, stopOnly ? () => {
+          quickAssertOwner(owner, native.runtime);
+          if (request.cancelled || !quickSameAction(native.runtime.state.user.action, target) || !quickSameAction(quickRuntime()?.state.user?.action, target)) throw new Error('The current action changed. Nothing was stopped.');
+        } : planned ? async () => {
           await plannedReadCurrent(owner, transition.source, target, amount);
           plannedAssertStart(owner, planned.plan, native, amount, transition, true);
           if (plannedCurrentState(native.runtime, true).kind !== 'completed') throw new Error('Only a confirmed completed batch can be collected by this start.');
@@ -210,24 +222,33 @@
         });
         const hadAction = !!native.runtime.state.user.action;
         try {
-          if (loot) {
+          if (loot || stopOnly) {
             const stop = native.stopButton();
             if (!stop || stop.disabled) throw new Error('The current action cannot be collected here.');
             attempted = true;
             request.attempted = true;
             stop.click();
             await quickWaitUntil(() => receipt.confirmed() && !native.runtime.state.user.action, observation, 10000);
+            if (stopOnly) { stopped = true; return; }
           }
           let control = await native.startControl(amount);
           if (request.cancelled) return;
-          while (target.finite && amount > native.limit()) {
+          while (target.finite && (amount > native.limit() || (autoMax && amount !== native.limit()))) {
+            if (autoMax) {
+              amount = native.limit();
+              if (!quickAmount(amount)) throw new Error('No craftable supply is available for this recipe.');
+              control = await native.startControl(amount);
+              if (request.cancelled) return;
+              continue;
+            }
             if (planned?.plan.runnerAuth) throw new Error('Supplies changed during automatic preparation. Check the plan, then Resume.');
             choice = await quickPromptAmount(target, planned ? preference : ui.data.amounts[quickActionKey(target)], native.limit(), { planned: !!planned, shortage: true, quantityInfo: native.quantityInfo });
             if (!choice) { ui.message = ''; return; }
             quickAssertOwner(owner, native.runtime);
             amount = choice.amount;
+            autoMax = !planned && !loot && choice.max === true;
             if (choice.save && !planned) {
-              ui.data.amounts[quickActionKey(target)] = { amount, reuse: choice.reuse };
+              ui.data.amounts[quickActionKey(target)] = choice.max ? { max: true, reuse: true } : { amount, reuse: choice.reuse };
               quickPersist(owner, ui.data);
             }
             control = await native.startControl(amount);
@@ -278,12 +299,12 @@
       if (loot) AppState.ui.collectingLoot = false;
       ui.prompt?.resolve(null);
       ui.prompt = null;
-      if (started && !planned?.plan.runnerAuth) quickClose();
+      if ((started || stopped) && !planned?.plan.runnerAuth) quickClose();
       if (attempted || error) {
         ui.message = error;
-        showActionToast({ title: started ? loot ? 'Loot collected — action continued' : `Started ${target.name}` : collected ? 'Loot collected — action did not start' : 'Action not confirmed',
+        showActionToast({ title: stopped ? `Stopped ${target.name} — loot collected` : started ? loot ? 'Loot collected — action continued' : `Started ${target.name}` : collected ? 'Loot collected — action did not start' : 'Action not confirmed',
           summary: quickSkills(runtime).find(skill => skill.id === target.skillId)?.name || target.skillId,
-          kind: error || syncError || !started ? 'warning' : 'success',
+          kind: error || syncError || (!started && !stopped) ? 'warning' : 'success',
           metrics: rewards.map(reward => ({ label: reward.name, image: reward.image, icon: reward.icon, value: formatNumber(reward.amount) })),
           detail: [error, collected && !detailsKnown ? 'Collection confirmed. Reward details unavailable.' : collected && !rewards.length ? 'Collection confirmed. No rewards.' : ''].filter(Boolean).join(' '), warning: syncError });
       }
@@ -291,5 +312,5 @@
       syncQuickSkills();
       render();
     }
-    return { started, attempted, error, syncError };
+    return { started, stopped, attempted, error, syncError };
   }

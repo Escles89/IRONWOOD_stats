@@ -13,14 +13,14 @@ Status prefers information already available in the game, then reliable local ca
 | Fallback read | Missing or incompatible snapshots | Allowed only when fallback lookups are enabled. |
 | Explicit refresh | The Status panel's refresh icon | Reads all cache sources even with fallback lookups off, without changing that preference or running daily chores. |
 
-**Age alone does not schedule a lookup.** Usable old snapshots remain visible. There is no routine hourly Inventory or four-hourly Attunement refresh. A known timer can expire locally, but expiration alone does not prove a new game state; open the corresponding page to confirm it.
+**For dashboard snapshots, age alone does not schedule a lookup.** Usable old snapshots remain visible. There is no routine hourly Inventory or four-hourly Attunement refresh. A known timer can expire locally, but expiration alone does not prove a new game state; open the corresponding page to confirm it.
 
 ## Where to update each panel
 
 | Panel | Native page |
 | --- | --- |
-| Inventory and stored potions | Inventory |
-| Equipped supplies | Current skill or Equipment |
+| Inventory and stored consumable reserves | Inventory or current native inventory state |
+| Equipped supplies and usage estimates | Current skill or Equipment → Consumables |
 | Daily quests | Quests |
 | Adventure, RP and maps | Adventure, including the running map details |
 | Challenges and auto-complete allowance | Challenges |
@@ -31,6 +31,14 @@ Status prefers information already available in the game, then reliable local ca
 | Trial participation | Guild → Trials |
 
 Daily quests and map creation are a separate scheduled workflow. With **both** switches enabled, pending daily work can open its native page, while completed work waits for the next reset. Failed or incomplete attempts wait at least 15 minutes before retrying. RP/storage shortages wait for a new native observation or daily reset. See [automations](automations.md).
+
+## Explicit feature reads
+
+Mastery, Trait and plan **Refresh** controls use read-only native synchronization independently of automation and fallback lookups. A mastery contribution change leaves combined shortfalls incomplete until that synchronization confirms contributions and inventory together.
+
+Skills leaderboard ranks use a separate character/game-mode cache. Opening the Skills page or modal checks for a rank observation less than one hour old; eligible refreshes run only while Skills is open, visible and shared work is idle. Failures retain labelled cached ranks and wait five minutes before retrying. This does not enable routine polling for Inventory or other dashboard snapshots.
+
+Consumable duration estimates use equipped charges and known item modifiers. Food/key estimates need recent observed use; refills, changed actions/equipment and observation gaps reset them. Stored reserves do not extend these timers.
 
 ## Accuracy and synchronization
 

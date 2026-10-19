@@ -1,3 +1,4 @@
+  const restoreSkillsAtStartup = location.pathname === SKILLS_PATH;
   const restoreStatusAtStartup = shouldRestoreStatusOnLoad();
   function initialise() {
     installNativeQuantityPrecision();
@@ -10,13 +11,14 @@
     installEventDelegation();
     syncQuickSkills();
     syncAttunementProgression();
+    syncEquipmentConsumables();
     checkScriptUpdate();
-    window.addEventListener('popstate', () => location.pathname === STATS_PATH ? showStats({ push: false }) : hideStats());
+    window.addEventListener('popstate', restorePortalRoute, true);
     new MutationObserver((records) => {
       // Dashboard updates are output, not new native data to capture.
       if (records.every(record => {
         const target = record.target.nodeType === 3 ? record.target.parentElement : record.target;
-        return AppState.ui.page?.contains(record.target) || target?.closest?.('#iw-quick-controls, #iw-quick-skills-panel, #iw-attunement-progression') || document.querySelector('#iw-global-dialogs')?.contains(record.target) || document.querySelector('#iw-action-toasts')?.contains(record.target);
+        return AppState.ui.page?.contains(record.target) || target?.closest?.('#iw-quick-controls, #iw-quick-skills-panel, #iw-skills-page, #iw-attunement-progression') || document.querySelector('#iw-global-dialogs')?.contains(record.target) || document.querySelector('#iw-action-toasts')?.contains(record.target);
       })) return;
       installNativeQuantityPrecision();
       installNavButton(); installInterfaceControls(); createPage(); captureVisibleCaches();
@@ -26,7 +28,8 @@
       syncQuickSkills();
     })
       .observe(document.body, { childList: true, characterData: true, subtree: true });
-    if (restoreStatusAtStartup) restoreStatusOnLoad();
+    if (restoreSkillsAtStartup) restoreSkillsOnLoad();
+    else if (restoreStatusAtStartup) restoreStatusOnLoad();
     setTimeout(captureVisibleCaches, 1500);
     AppState.ui.startupSyncAt = Date.now() + 2500;
     setTimeout(() => { AppState.ui.startupSyncAt = null; syncStale(false); }, 2500);

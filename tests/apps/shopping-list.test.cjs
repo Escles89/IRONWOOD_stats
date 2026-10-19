@@ -478,9 +478,9 @@ test('the icon tree shows dependencies and propagates an insufficient leaf to it
 test('the shopping list is the last card on Status', () => {
   const s = setup();
   const html = s.save();
-  const cards = [...html.matchAll(/<section class="([^"]+)"/g)].map(match => match[1]);
+  const cards = [...html.matchAll(/<section class="(iw-card\b[^"]*)"/g)].map(match => match[1]);
   assert.equal(cards.at(-1), 'iw-card iw-shopping-card');
-  assert.ok(html.indexOf('iw-shopping-card') > html.indexOf('iw-potion-card'));
+  assert.doesNotMatch(html, /iw-potion-card/);
 });
 
 test('native recipe links navigate through the game router without starting production', async () => {
@@ -875,14 +875,14 @@ test('Recipe Calc keeps Inputs in Edit and preserves expanded recipe details dur
   assert.doesNotMatch(s.modal(), /data-shopping-recipe-details[^>]* open/);
 });
 
-test('Can make now counts additional output independently of target and observes inventory changes', () => {
+test('Craftable counts additional output independently of target and observes inventory changes', () => {
   const s = setup();
   s.save('101', '31');
-  assert.match(s.render(), /Can make now<\/dt><dd>6<\/dd>/);
+  assert.match(s.render(), /Craftable<\/dt><dd>6<\/dd>/);
   s.save('101', '1000');
-  assert.match(s.render(), /Can make now<\/dt><dd>6<\/dd>/);
+  assert.match(s.render(), /Craftable<\/dt><dd>6<\/dd>/);
   s.user.charcoal = 100;
-  assert.match(s.render(), /Can make now<\/dt><dd>25<\/dd>/);
+  assert.match(s.render(), /Craftable<\/dt><dd>25<\/dd>/);
   assert.deepEqual(s.calls, []);
 });
 
@@ -895,12 +895,12 @@ test('capacity includes saved conversions and reserves shared wood for the full 
   s.save('101', '1');
   s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
   s.emit('change', '[data-shopping-conversion]', '104', null, { shoppingResource: 'potionMix' });
-  assert.match(s.render(), /Can make now<\/dt><dd>2<\/dd>/);
+  assert.match(s.render(), /Craftable<\/dt><dd>2<\/dd>/);
   const wood = setup(new Map(), woodFixture);
   wood.save('101', '10');
-  assert.match(wood.render(), /Can make now<\/dt><dd>1<\/dd>/);
+  assert.match(wood.render(), /Craftable<\/dt><dd>1<\/dd>/);
   wood.user.inventory['107'].amount = 0;
-  assert.match(wood.render(), /Can make now<\/dt><dd>0<\/dd>/);
+  assert.match(wood.render(), /Craftable<\/dt><dd>0<\/dd>/);
 });
 
 test('capacity exposes uncertain limits and preserves a proven lower bound from owned intermediates', () => {
@@ -912,10 +912,10 @@ test('capacity exposes uncertain limits and preserves a proven lower bound from 
   });
   s.save('101', '1');
   s.emit('change', '[data-shopping-conversion]', '103', null, { shoppingResource: 'metalParts' });
-  assert.match(s.render(), /Can make now<\/dt><dd>≥ 1<\/dd>/);
+  assert.match(s.render(), /Craftable<\/dt><dd>≥ 1<\/dd>/);
   assert.match(s.render(), /Exact capacity unknown/);
   s.runtime.actionCatalog['30'].drops[0].amount = 2;
-  assert.match(s.render(), /Can make now<\/dt><dd>Unknown<\/dd>/);
+  assert.match(s.render(), /Craftable<\/dt><dd>Unknown<\/dd>/);
 });
 
 test('covered resource balances hide conversion chains and restore them when stock falls short', () => {
@@ -1016,14 +1016,14 @@ for (const resource of ['charcoal', 'arcanePowder']) {
   });
 }
 
-test('Cannot make yet shows the uncovered target remainder without inventing uncertain capacity', () => {
+test('Still needed shows the uncovered target remainder without inventing uncertain capacity', () => {
   const s = setup();
   s.save('101', '100');
-  assert.match(s.render(), /Can’t make yet<\/dt><dd>64<\/dd>/);
+  assert.match(s.render(), /Still needed<\/dt><dd>64<\/dd>/);
   s.save('101', '31');
-  assert.match(s.render(), /Can’t make yet<\/dt><dd>0<\/dd>/);
+  assert.match(s.render(), /Still needed<\/dt><dd>0<\/dd>/);
   s.runtime.actionCatalog['30'].drops[0].amount = 2;
-  assert.match(s.render(), /Can’t make yet<\/dt><dd>Unknown<\/dd>/);
+  assert.match(s.render(), /Still needed<\/dt><dd>Unknown<\/dd>/);
   s.save('101', '20');
-  assert.match(s.render(), /Can’t make yet<\/dt><dd>0<\/dd>/);
+  assert.match(s.render(), /Still needed<\/dt><dd>0<\/dd>/);
 });

@@ -20,7 +20,8 @@ test('idle dashboard renders empty action and remaining panels without a cache r
   vm.runInContext(source.replace("  if (document.readyState === 'loading')", setup + "\n  if (document.readyState === 'loading')"), context);
   assert.deepEqual(errors, []);
   assert.match(panel.innerHTML, /No action in progress/);
-  for (const title of ['Current Loot', 'Daily quests', 'Divine Potions', 'Automations']) assert.ok(panel.innerHTML.includes(title), title);
+  for (const title of ['Current Loot', 'Daily quests', 'Automations']) assert.ok(panel.innerHTML.includes(title), title);
+  assert.doesNotMatch(panel.innerHTML, /iw-potion-card/);
   assert.doesNotMatch(panel.innerHTML, /Status could not render|Repair cached data/);
   assert.match(panel.innerHTML, /data-traits-summary data-traits-open aria-haspopup="dialog"/);
   assert.doesNotMatch(panel.innerHTML, /iw-traits-card|data-traits-panel|Region priority/);

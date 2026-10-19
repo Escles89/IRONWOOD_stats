@@ -16,7 +16,7 @@
     return `<div class="iw-recipe-runner-controls" role="status"><strong>Automatic plan · ${recipeRunnerLabel(info.status)}</strong><p>${escapeHtml(info.reason)}</p><button type="button" class="iw-small-button" data-recipe-run-toggle ${!info.enabled && quickBusy() ? 'disabled' : ''}>${info.enabled ? 'Pause automatic plan' : 'Resume automatic plan'}</button></div>`;
   }
 
-  function renderRecipeSummary(inPlanner = false) {
+  function renderRecipeSummary(inPlanner = false, compact = false) {
     const ui = plannedObserve(), plan = ui.plan;
     const automatic = plan?.kind === 'recipe' && recipeRunnerInfo().enabled;
     const snapshot = plan?.kind === 'recipe' ? recipeObservation(plan) : null;
@@ -24,6 +24,11 @@
     const reason = snapshot ? recipeStartReason(snapshot) : !plan ? '' : plannedCurrentState().kind === 'completed' ? 'Collect completed work before starting next.' : plannedCurrentBlockReason() || plannedKnownReason(quickRuntime(), target);
     const showReason = reason && !(automatic && reason === 'Stop continuous work manually before starting the plan.');
     const pending = snapshot?.running ? shoppingNumber(quickRuntime()?.action?.actionLoot?.[snapshot.running.id]?.amount ?? (shoppingRecord(quickRuntime()?.action?.actionLoot) ? 0 : null)) : null;
+    if (compact) {
+      const state = snapshot ? recipeRunnerLabel(recipeRunnerInfo().status) : plan ? 'Manual plan' : 'No active plan';
+      const next = snapshot?.shortfall === 0 ? 'Target satisfied' : target ? `Next · ${target.skillName} · ${target.name}` : snapshot ? 'No ready action' : 'Choose a recipe or single action';
+      return `<section class="iw-skills-plan-summary" aria-label="Compact plan summary"><div><span class="iw-skills-plan-state">Planner · ${escapeHtml(state)}</span><span class="iw-skills-plan-next">${escapeHtml(next)}</span>${showReason ? `<small title="${escapeHtml(reason)}">${escapeHtml(reason)}</small>` : ''}</div><div class="iw-skills-plan-actions">${target ? `<button type="button" class="iw-small-button" ${snapshot ? `data-recipe-start="${escapeHtml(recipeStepToken(ui.owner, plan, snapshot.next))}"` : 'data-planned-start'} aria-label="Start next" ${reason || quickBusy() ? 'disabled' : ''}>Start next</button>` : ''}<button type="button" class="iw-small-button" data-recipe-open aria-label="Open Recipe Calc and planner">Planner</button></div></section>`;
+    }
     return `<section class="iw-recipe-summary" aria-label="Plan summary">
       ${!inPlanner ? '<button type="button" class="iw-small-button" data-recipe-open aria-label="Open Recipe Calc and planner">Recipe Calc & planner</button>' : '<span class="iw-recipe-eyebrow">Next action</span>'}
       ${snapshot ? renderRecipeRunnerControls() : ''}
@@ -34,6 +39,17 @@
       ${snapshot?.next?.capped ? '<p class="iw-recipe-note">Saved batch reduced to the remaining requirement.</p>' : ''}
       ${showReason ? `<p class="iw-recipe-note">${escapeHtml(reason)}</p>` : ''}${ui.message ? `<p role="status">${escapeHtml(ui.message)}</p>` : ''}
       <div class="iw-recipe-tools"><button type="button" class="iw-small-button" data-recipe-refresh ${quickBusy() || !ui.owner ? 'disabled' : ''}>Refresh plan</button>${plan ? `<button type="button" class="iw-small-button" data-planned-clear ${quickBusy() ? 'disabled' : ''}>Clear active plan</button>` : ''}</div></section>`;
+  }
+
+  function renderSkillsPlannerPanel() {
+    const plan = plannedObserve().plan;
+    const snapshot = plan?.kind === 'recipe' ? recipeObservation(plan) : null;
+    return `<section class="iw-card iw-skills-planner-panel" aria-label="Planner details"><div class="iw-card-header"><span>Recipe planner</span><button type="button" class="iw-small-button" data-recipe-open>${plan ? 'Edit plan' : 'Open planner'}</button></div>
+      ${plan ? renderRecipeSummary(true) : '<p class="iw-muted">No active plan. Open the planner to choose a recipe or single action.</p>'}
+      ${snapshot ? `<div class="iw-subheader">${escapeHtml(snapshot.name)} · Target ${recipeAmount(plan.target.quantity)}</div><p class="iw-skills-plan-totals">${recipeAmount(snapshot.shortfall)} still to acquire · ${snapshot.steps.length} remaining requirements</p><div class="iw-skills-plan-requirements">${snapshot.steps.map(step => {
+        const state = snapshot.running?.key === step.key ? 'In progress' : !step.target ? 'Manual' : step.ready ? snapshot.next?.key === step.key ? 'Next' : 'Ready' : 'Blocked';
+        return `<div class="iw-skills-plan-requirement">${renderShoppingIcon(step)}<div><strong>${escapeHtml(step.name)}</strong><small>${escapeHtml(step.target?.skillName || 'Manual acquisition')} · ${state}</small>${step.reason ? `<small>${escapeHtml(step.reason)}</small>` : ''}</div><div class="iw-skills-plan-amounts"><span>${recipeAmount(step.owned)} / ${recipeAmount(step.required)} owned</span><small>${recipeAmount(step.missing)} missing</small></div></div>`;
+      }).join('')}</div>` : ''}</section>`;
   }
 
   function renderRecipeSteps(plan, snapshot, active) {
@@ -95,7 +111,7 @@
     const snapshot = recipeObservation(plan);
     if (!snapshot) return '';
     const next = snapshot.next, steps = next ? [next, ...snapshot.steps.filter(step => step !== next)] : snapshot.steps;
-    return `<aside class="iw-shopping-planned" aria-label="Planned overview"><div class="iw-shopping-planned-heading"><strong>Planned</strong><span>${snapshot.steps.length} remaining requirements</span></div>
+    return `<aside class="iw-shopping-planned" aria-label="Planned overview"><div class="iw-shopping-planned-heading iw-shopping-section-heading"><strong>Planned</strong><span>${snapshot.steps.length} remaining requirements</span></div>
       ${plan.target.itemId !== AppState.ui.shopping.plan?.itemId || plan.target.quantity !== AppState.ui.shopping.plan?.quantity ? `<p>${escapeHtml(snapshot.name)} · Target ${recipeAmount(plan.target.quantity)}</p>` : ''}
       ${snapshot.shortfall === 0 ? '<p>Target satisfied</p>' : `<ol>${steps.slice(0, 3).map(step => `<li><span class="iw-shopping-planned-state">${snapshot.running?.key === step.key ? 'In progress' : step === next ? 'Next' : !step.target ? 'Manual' : step.ready ? 'Ready' : 'Waiting'}</span><span>${recipeAmount(step.missing)} ${escapeHtml(step.name)}</span></li>`).join('')}</ol>`}
       ${steps.length > 3 ? `<small>+${steps.length - 3} more in the Skills planner</small>` : ''}${snapshot.unavailable ? '<small>Last observation · balances unavailable</small>' : ''}</aside>`;

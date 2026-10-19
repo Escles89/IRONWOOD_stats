@@ -20,6 +20,15 @@ function element(name, attributes = {}, children = [], styles = {}) {
 }
 const text = nodeValue => ({ nodeType: 3, nodeName: '#text', nodeValue, replaceWith(value) { this.replacement = value; } });
 
+test('panel refresh leaves action fill updates to the live cycle reset handler', () => {
+  const h = harness();
+  const current = element('SPAN', { 'data-live-progress': '', style: '' }, [], { height: '98%', transition: 'none' });
+  const next = element('SPAN', { 'data-live-progress': '', style: '' }, [], { height: '2%' });
+  h.context.patchStatusSection(current, next);
+  assert.equal(current.style.getPropertyValue('height'), '98%');
+  assert.equal(current.style.getPropertyValue('transition'), 'none');
+});
+
 test('combat effects update in place without replacing fighter images or quantity animations', () => {
   const h = harness();
   const image = element('IMG', { src: '/treant.png' });

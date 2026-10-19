@@ -10,6 +10,16 @@
     return `Training toward level ${model.target.level} across all regions.`;
   }
 
+  function renderTraitProgress(row, target, compact = false) {
+    const percent = row.percent;
+    const name = row.trait?.name || 'Empty training slot';
+    const label = percent === null ? `${name}: no training progress` : `${name}: ${percent.toFixed(1)}% toward level ${target.level}`;
+    return `<span class="iw-progress-bar iw-traits-progress" ${compact ? '' : `role="progressbar" aria-label="${escapeHtml(name)} progress toward level ${target.level}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"`} title="${escapeHtml(label)}">
+      <span class="iw-progress-fill" style="width:${percent ?? 0}%"></span>
+      ${compact ? `<span>${percent === null ? '—' : `${Math.floor(percent)}%`}</span>` : `<span>Lv. ${formatNumber(row.trait.level)}<span class="iw-queue-slash"> / </span>${target.level}</span><span>${TRAIT_XP_FORMAT.format(Math.max(0, Math.ceil(target.xp - row.trait.xp)))} XP left</span>`}
+    </span>`;
+  }
+
   function renderTraitsContent() {
     const ui = AppState.ui.traits, model = ui.model || buildTraitTracking(null);
     const disabled = quickBusy() || !traitControlsAvailable() || ui.needsRefresh || model.stale;
@@ -18,13 +28,14 @@
     return `<div class="iw-traits-body"><label class="iw-traits-preference">Region priority<select data-traits-region ${ui.busy || !ui.owner ? 'disabled' : ''} aria-label="Trait region priority">${[['', 'All regions'], ['Forest', 'Forest first'], ['Mountain', 'Mountain first'], ['Ocean', 'Ocean first']].map(([value, name]) => `<option value="${value}" ${ui.preference === value ? 'selected' : ''}>${name}</option>`).join('')}</select></label>
       <p class="iw-traits-note">${escapeHtml(traitTrainingLabel(model))}</p>
       ${model.warning ? `<p class="iw-traits-warning" role="status">${escapeHtml(model.warning)}</p>` : ''}
-      ${model.rows.map(row => `<div class="iw-traits-slot"><div class="iw-traits-name">${row.trait?.image ? `<img src="${escapeHtml(row.trait.image)}" alt="">` : ''}<span><strong>${escapeHtml(row.trait?.name || 'Empty training slot')}</strong><small>${row.trait ? `Level ${formatNumber(row.trait.level)}${model.target ? ` → ${model.target.level} · ${TRAIT_XP_FORMAT.format(Math.max(0, Math.ceil(model.target.xp - row.trait.xp)))} XP left` : ''}` : 'Equip a trait to train it.'}</small></span></div>
-        ${row.percent !== null ? `<progress max="100" value="${row.percent}" aria-label="${escapeHtml(row.trait.name)} progress toward level ${model.target.level}"></progress>` : ''}
+      <div class="iw-traits-section-heading">Equipped traits${model.target ? `<span>Target · Lv. ${model.target.level}</span>` : ''}</div>
+      ${model.rows.map(row => `<div class="iw-traits-slot"><div class="iw-traits-name">${row.trait?.image ? `<img src="${escapeHtml(row.trait.image)}" alt="">` : ''}<span><strong>${escapeHtml(row.trait?.name || 'Empty training slot')}</strong>${row.percent === null ? `<small>${row.trait ? `Level ${formatNumber(row.trait.level)}` : 'Equip a trait to train it.'}</small>` : ''}</span></div>
+        ${row.percent !== null ? renderTraitProgress(row, model.target) : ''}
         ${row.replacement ? `<button type="button" class="iw-small-button iw-traits-switch" data-traits-from="${escapeHtml(row.trait?.id || '')}" data-traits-to="${escapeHtml(row.replacement.id)}" ${disabled ? 'disabled' : ''}>${row.trait ? 'Switch to' : 'Equip'} ${escapeHtml(row.replacement.name)} <small>· Level ${formatNumber(row.replacement.level)}</small></button>` : row.trait && model.target && row.trait.xp >= model.target.xp ? '<small class="iw-traits-note">Milestone reached — no unlocked replacement</small>' : ''}</div>`).join('')}
       ${model.locked ? `<p class="iw-traits-note">${model.locked} trait${model.locked === 1 ? ' still needs' : 's still need'} unlocking to complete this milestone.</p>` : ''}
       ${retryTrait ? `<button type="button" class="iw-small-button" data-traits-retry ${disabled ? 'disabled' : ''}>Retry equip: ${escapeHtml(retryTrait.name)}</button>` : ''}
       ${ui.message ? `<p class="iw-traits-message" role="status">${escapeHtml(ui.message)}</p>` : ''}
-      ${model.available ? `<div class="iw-traits-sets" role="table" aria-label="Trait set progress"><div class="iw-traits-set-row" role="row"><span role="columnheader">Set</span>${[100, 115, 130].map(level => `<span role="columnheader">Lv. ${level}</span>`).join('')}</div>${['Forest', 'Mountain', 'Ocean', 'All'].map(region => `<div class="iw-traits-set-row" role="row"><strong role="rowheader">${region}</strong>${[100, 115, 130].map(level => {
+      ${model.available ? `<div class="iw-traits-section-heading iw-traits-sets-heading">Set bonuses<span>Traits at each milestone</span></div><div class="iw-traits-sets" role="table" aria-label="Trait set progress"><div class="iw-traits-set-row" role="row"><span role="columnheader">Set</span>${[100, 115, 130].map(level => `<span role="columnheader">Lv. ${level}</span>`).join('')}</div>${['Forest', 'Mountain', 'Ocean', 'All'].map(region => `<div class="iw-traits-set-row" role="row"><strong role="rowheader">${region}</strong>${[100, 115, 130].map(level => {
         const set = model.sets.find(set => set.region === region && set.level === level);
         return `<span role="cell" class="${set.claimed ? 'iw-traits-claimed' : ''}" title="${escapeHtml(`${set.name}: ${set.description}`)}">${set.claimed ? '✓ Claimed' : set.ready ? `<button type="button" class="iw-small-button" data-traits-claim="${escapeHtml(set.id)}" aria-label="Claim ${escapeHtml(set.name)}" ${disabled ? 'disabled' : ''}>Claim</button><small>Ready to claim</small>` : `${set.reached}/${set.traitIds.length}`}</span>`;
       }).join('')}</div>`).join('')}</div>` : ''}
@@ -32,6 +43,7 @@
   }
 
   function openTraits(trigger) {
+    AppState.ui.consumableOverview = null;
     traitsObserve();
     AppState.ui.preferencesTrigger = trigger;
     AppState.ui.shopping.selectedStep = null;
@@ -46,7 +58,7 @@
   function renderTraitsModal() {
     const ui = AppState.ui.traits;
     return `<div class="iw-modal" data-modal-backdrop><section class="iw-modal-panel iw-traits-modal" role="dialog" aria-modal="true" aria-labelledby="iw-traits-title">
-      <div class="iw-options-heading"><h2 id="iw-traits-title"><img src="/assets/misc/traits.png" alt="">Trait training</h2><div class="iw-traits-tools"><button type="button" class="iw-small-button" data-traits-refresh ${quickBusy() || !ui.owner ? 'disabled' : ''}>Refresh</button><button type="button" class="iw-small-button iw-traits-close" data-modal-close aria-label="Close Trait training">×</button></div></div>
+      <div class="iw-options-heading"><h2 id="iw-traits-title"><img src="/assets/misc/traits.png" alt="">Trait training</h2><div class="iw-traits-tools"><button type="button" class="iw-small-button" data-traits-refresh ${quickBusy() || !ui.owner ? 'disabled' : ''}>Refresh</button><button type="button" class="iw-modal-close iw-traits-close" data-modal-close aria-label="Close Trait training"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div></div>
       ${renderTraitsContent()}
       <footer><button type="button" class="iw-small-button" data-traits-native>Open Traits</button><button type="button" class="iw-small-button iw-options-done" data-modal-close>Done</button></footer>
     </section></div>`;
@@ -61,8 +73,8 @@
       : actionable ? [changes ? `Switch ${changes}` : '', claims ? `Claim ${claims}` : ''].filter(Boolean).join(' · ')
       : !model.target ? 'Complete' : ['idle', 'sigil'].includes(model.training) ? 'Paused' : model.training === 'unknown' ? 'Check training' : 'Training';
     const detail = model.target ? `Lv. ${model.target.level} · ${model.target.reached}/${model.target.traitIds.length}` : '';
-    const bars = model.target ? `<span class="iw-traits-mini-bars" aria-hidden="true">${model.rows.map(row => `<span title="${escapeHtml(row.trait?.name || 'Empty slot')}"><i style="width:${row.percent ?? 0}%"></i></span>`).join('')}</span>` : '';
-    return `<img src="/assets/misc/traits.png" alt=""><span class="iw-traits-summary-main"><span class="iw-traits-summary-heading"><b>Traits</b>${detail ? `<small>${detail}</small>` : ''}</span>${bars}</span><span class="iw-traits-state${actionable ? ' iw-traits-warning' : ''}" role="status">${status}</span><span class="iw-traits-chevron" aria-hidden="true">›</span>`;
+    const bars = model.rows.length ? `<span class="iw-traits-mini-bars">${model.rows.map(row => `<span class="iw-traits-selected"><span class="iw-traits-selected-name">${row.trait?.image ? `<img src="${escapeHtml(row.trait.image)}" alt="">` : ''}<span>${escapeHtml(row.trait?.name || 'Empty training slot')}</span></span>${model.target ? renderTraitProgress(row, model.target, true) : `<span class="iw-traits-selected-level">${row.trait ? `Lv. ${formatNumber(row.trait.level)}` : 'Not equipped'}</span>`}</span>`).join('')}</span>` : '';
+    return `<img src="/assets/misc/traits.png" alt=""><span class="iw-traits-summary-main"><span class="iw-traits-summary-heading"><b>Traits</b>${detail ? `<small>${detail}</small>` : ''}</span></span><span class="iw-traits-state${actionable ? ' iw-traits-warning' : ''}" role="status">${status}</span><span class="iw-traits-chevron" aria-hidden="true">›</span>${bars}`;
   }
 
   function updateTraitsViews() {

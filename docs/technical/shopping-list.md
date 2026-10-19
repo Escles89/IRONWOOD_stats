@@ -1,5 +1,7 @@
 # Finished-item shopping list
 
+Current behavior is described in the feature sections below; dated validation entries are a chronological implementation record and may describe earlier layouts or capabilities. Use the [player guide](../user/README.md) for current controls and placement.
+
 Implements issues [#4](https://github.com/Escles89/IRONWOOD_stats/issues/4) and [#5](https://github.com/Escles89/IRONWOOD_stats/issues/5), from direct ingredients through the complete recursive recipe chain.
 
 `apps/shopping/native.js` discovers recipes only through the six current native main crafting skill action lists. Global catalog entries outside those lists and House production are excluded. Native item IDs identify targets and ingredients; recipe keys contain skill and action IDs. Nested and failure outputs remain selectable with uncertain output. Incomplete skill/action catalogs cannot prove an item noncraftable.
@@ -129,6 +131,8 @@ Connection semantics: green means the requirement is covered by owned stock; blu
 “Can’t make yet” adds the remaining target gap after owned stock and additional crafting capacity, floored at zero. Uncertain capacity leaves this metric Unknown unless the proven lower bound already covers the target. The summary uses four desktop columns and a two-by-two mobile grid. Live validation matched the user's example: 15,000 target − 3,837 owned − 10,212 craftable = 951. Mobile overview width and scroll width both measured 344px with two equal columns. All 354 tests and both reviews pass.
 
 ## Responsive recipe tree (2026-09-29)
+
+Current dashboard placement: Recipe Calc uses one grid column alongside the other panels, rather than spanning both. The dashboard's existing single-column breakpoint gives it full width on narrow screens; internal layout still responds to the card's own width.
 
 Recipe Calc responds to its own card and tree widths, including narrow dashboard columns on wide screens. Below 640 px of card space, its calculation and tree stack. The original icon diagram remains: branch spacing contracts proportionally to available tree space while icon sizes and detail controls stay unchanged. A minimum spacing unit retains usable icons for unusually broad trees, which can still scroll horizontally. SVG connectors stretch to both dimensions of their compact viewport, keeping line endpoints aligned with the icons instead of letterboxing horizontally when the connector height shrinks.
 
